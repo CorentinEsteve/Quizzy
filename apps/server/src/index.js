@@ -33,8 +33,87 @@ function generateCode() {
   return code;
 }
 
+function getCustomQuiz(quizId) {
+  const row = db
+    .prepare("SELECT quiz_json FROM room_quizzes WHERE quiz_id = ?")
+    .get(quizId);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.quiz_json);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function getAllCustomQuizzes() {
+  const rows = db.prepare("SELECT quiz_json FROM room_quizzes").all();
+  return rows
+    .map((row) => {
+      try {
+        return JSON.parse(row.quiz_json);
+      } catch (_err) {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 function getQuiz(quizId) {
-  return quizzes.find((quiz) => quiz.id === quizId);
+  return getCustomQuiz(quizId) || quizzes.find((quiz) => quiz.id === quizId);
+}
+
+function saveCustomQuiz(quiz) {
+  db.prepare(
+    "INSERT INTO room_quizzes (quiz_id, quiz_json, created_at) VALUES (?, ?, ?)"
+  ).run(quiz.id, JSON.stringify(quiz), nowIso());
+}
+
+function shuffle(items) {
+  const list = [...items];
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+function getCategoryMeta(categoryId) {
+  if (categoryId === "all") {
+    return {
+      id: "all",
+      label: "All Categories",
+      accent: "#5E7CFF"
+    };
+  }
+  const quiz = quizzes.find((item) => item.categoryId === categoryId);
+  return quiz
+    ? { id: quiz.categoryId, label: quiz.categoryLabel, accent: quiz.accent }
+    : null;
+}
+
+function buildCategoryQuiz(categoryId, questionCount) {
+  const pool =
+    categoryId === "all"
+      ? quizzes.flatMap((quiz) => quiz.questions)
+      : quizzes
+          .filter((quiz) => quiz.categoryId === categoryId)
+          .flatMap((quiz) => quiz.questions);
+  if (pool.length === 0) return null;
+  if (questionCount > pool.length) return null;
+
+  const meta = getCategoryMeta(categoryId);
+  if (!meta) return null;
+  const selected = shuffle(pool).slice(0, questionCount);
+  return {
+    id: `custom_${categoryId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    categoryId: meta.id,
+    categoryLabel: meta.label,
+    title: meta.label,
+    subtitle: `${questionCount} questions`,
+    rounds: questionCount,
+    accent: meta.accent,
+    questions: selected
+  };
 }
 
 function sanitizeQuiz(quiz) {
@@ -91,7 +170,7 @@ function computeLeaderboard(scope, country) {
   const answers = getAllAnswers();
 
   const answerMap = new Map();
-  for (const quiz of quizzes) {
+  for (const quiz of [...quizzes, ...getAllCustomQuizzes()]) {
     for (const question of quiz.questions) {
       answerMap.set(question.id, question.answer);
     }
@@ -138,6 +217,27 @@ function computeScore(quiz, answers, userId) {
     if (!record) return acc;
     return acc + (record.answer_index === question.answer ? 1 : 0);
   }, 0);
+}
+
+function computeAnswerStats(quiz, answers) {
+  const correctByQuestion = new Map();
+  quiz.questions.forEach((question) => {
+    correctByQuestion.set(question.id, question.answer);
+  });
+
+  return answers.reduce((acc, answer) => {
+    const correctIndex = correctByQuestion.get(answer.question_id);
+    if (correctIndex === undefined) return acc;
+    if (!acc[answer.user_id]) {
+      acc[answer.user_id] = { correctCount: 0, wrongCount: 0 };
+    }
+    if (answer.answer_index === correctIndex) {
+      acc[answer.user_id].correctCount += 1;
+    } else {
+      acc[answer.user_id].wrongCount += 1;
+    }
+    return acc;
+  }, {});
 }
 
 function getBadges() {
@@ -199,9 +299,15 @@ function roomState(room) {
   const players = getRoomPlayers(room.id);
   const answers = getRoomAnswers(room.id);
   const rematch = getRoomRematch(room.id);
+  const statsByUser = computeAnswerStats(quiz, answers);
   const progress = players.map((player) => {
     const answeredCount = answers.filter((item) => item.user_id === player.id).length;
-    return { userId: player.id, answeredCount };
+    return {
+      userId: player.id,
+      answeredCount,
+      correctCount: statsByUser[player.id]?.correctCount ?? 0,
+      wrongCount: statsByUser[player.id]?.wrongCount ?? 0
+    };
   });
 
   return {
@@ -342,12 +448,19 @@ app.get("/badges", authMiddleware, (req, res) => {
 });
 
 app.post("/rooms", authMiddleware, (req, res) => {
-  const { quizId } = req.body;
-  const quiz = getQuiz(quizId);
-  if (!quiz) {
-    return res.status(400).json({ error: "Invalid room configuration" });
+  const { quizId, categoryId, questionCount, mode: requestedMode } = req.body;
+  let quiz = null;
+  if (quizId) {
+    quiz = getQuiz(quizId);
+  } else if (categoryId) {
+    const count = Number(questionCount);
+    if (Number.isInteger(count) && count > 0) {
+      quiz = buildCategoryQuiz(categoryId, count);
+    }
+    if (quiz) saveCustomQuiz(quiz);
   }
-  const mode = "async";
+  if (!quiz) return res.status(400).json({ error: "Invalid room configuration" });
+  const mode = requestedMode === "sync" ? "sync" : "async";
   let code = generateCode();
   while (getRoomByCode(code)) {
     code = generateCode();
@@ -357,7 +470,7 @@ app.post("/rooms", authMiddleware, (req, res) => {
       `INSERT INTO rooms (code, mode, quiz_id, status, host_user_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(code, mode, quizId, "lobby", req.user.id, nowIso());
+    .run(code, mode, quiz.id, "lobby", req.user.id, nowIso());
   db.prepare(
     `INSERT INTO room_players (room_id, user_id, role, joined_at)
      VALUES (?, ?, ?, ?)`
@@ -587,11 +700,16 @@ io.on("connection", (socket) => {
     const rematch = getRoomRematch(room.id);
 
     if (rematch.length >= players.length) {
+      const currentQuiz = getQuiz(room.quiz_id);
+      const nextQuiz = currentQuiz
+        ? buildCategoryQuiz(currentQuiz.categoryId || "all", currentQuiz.questions.length)
+        : null;
+      if (nextQuiz) saveCustomQuiz(nextQuiz);
       db.prepare("DELETE FROM room_answers WHERE room_id = ?").run(room.id);
       db.prepare("DELETE FROM room_rematch WHERE room_id = ?").run(room.id);
       db.prepare(
-        "UPDATE rooms SET status = ?, current_index = 0, started_at = ?, completed_at = NULL WHERE id = ?"
-      ).run("active", nowIso(), room.id);
+        "UPDATE rooms SET status = ?, current_index = 0, started_at = ?, completed_at = NULL, quiz_id = ? WHERE id = ?"
+      ).run("active", nowIso(), nextQuiz ? nextQuiz.id : room.quiz_id, room.id);
     }
 
     const updated = getRoomByCode(code);

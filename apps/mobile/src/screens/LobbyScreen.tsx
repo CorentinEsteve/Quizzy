@@ -22,7 +22,7 @@ import { QuizSummary, StatsResponse } from "../data/types";
 
 type Props = {
   quizzes: QuizSummary[];
-  onCreateRoom: (quizId: string) => void;
+  onCreateRoom: (categoryId: string, questionCount: number, mode: "sync" | "async") => void;
   onJoinRoom: (code: string) => void;
   onOpenAccount: () => void;
   onOpenPersonalLeaderboard: () => void;
@@ -68,10 +68,11 @@ export function LobbyScreen({
   const { height } = useWindowDimensions();
   const [code, setCode] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
+  const [selectedMode, setSelectedMode] = useState<"sync" | "async">("async");
   const [dialogStep, setDialogStep] = useState<"menu" | "pick" | "join">("menu");
-  const [pickStep, setPickStep] = useState<"category" | "deck">("category");
+  const [pickStep, setPickStep] = useState<"category" | "count" | "mode">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
   const continuePulse = useRef(new Animated.Value(0)).current;
@@ -79,44 +80,81 @@ export function LobbyScreen({
     height - insets.top - insets.bottom - theme.spacing.xl * 2,
     height * 0.88
   );
-  const dialogListMaxHeight = Math.max(220, dialogMaxHeight - 240);
+  const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
 
   const categories = useMemo(() => {
-    const map = new Map<string, { id: string; label: string; accent: string }>();
+    const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
     quizzes.forEach((quiz) => {
       if (!map.has(quiz.categoryId)) {
         map.set(quiz.categoryId, {
           id: quiz.categoryId,
           label: quiz.categoryLabel,
-          accent: quiz.accent
+          accent: quiz.accent,
+          questionCount: quiz.questionCount ?? quiz.rounds ?? 0
         });
+      } else {
+        const existing = map.get(quiz.categoryId);
+        if (existing) {
+          existing.questionCount += quiz.questionCount ?? quiz.rounds ?? 0;
+        }
       }
     });
+    const totalQuestions = Array.from(map.values()).reduce(
+      (sum, category) => sum + category.questionCount,
+      0
+    );
     return [
       {
         id: ALL_CATEGORY_ID,
         label: t(locale, "allCategories"),
-        accent: theme.colors.primary
+        accent: theme.colors.primary,
+        questionCount: totalQuestions
       },
       ...Array.from(map.values())
     ];
   }, [locale, quizzes]);
 
-  const filteredQuizzes = useMemo(() => {
-    if (!selectedCategoryId || selectedCategoryId === ALL_CATEGORY_ID) return quizzes;
-    return quizzes.filter((quiz) => quiz.categoryId === selectedCategoryId);
-  }, [quizzes, selectedCategoryId]);
-
-  const selectedQuiz = useMemo(
-    () => quizzes.find((quiz) => quiz.id === selectedQuizId) || null,
-    [quizzes, selectedQuizId]
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === selectedCategoryId) || null,
+    [categories, selectedCategoryId]
   );
+  const poolCount = selectedCategory?.questionCount ?? 0;
+  const lengthOptions = useMemo(() => {
+    const base = [
+      {
+        key: "quick",
+        count: 10,
+        label: t(locale, "matchQuick"),
+        description: t(locale, "matchQuickBody")
+      },
+      {
+        key: "standard",
+        count: 20,
+        label: t(locale, "matchStandard"),
+        description: t(locale, "matchStandardBody")
+      },
+      {
+        key: "deep",
+        count: 30,
+        label: t(locale, "matchDeep"),
+        description: t(locale, "matchDeepBody")
+      }
+    ];
+    const available = base
+      .map((option) => ({ ...option, count: Math.min(option.count, poolCount) }))
+      .filter((option) => option.count > 0);
+    if (available.length === 0) return [];
+    const unique = new Map(available.map((option) => [option.count, option]));
+    return Array.from(unique.values());
+  }, [locale, poolCount]);
 
   useEffect(() => {
     if (!isDialogOpen) return;
     if (!selectedCategoryId && categories.length > 0) {
       setSelectedCategoryId(ALL_CATEGORY_ID);
     }
+    setSelectedQuestionCount(null);
+    setSelectedMode("async");
     dialogOpacity.setValue(0);
     dialogScale.setValue(0.96);
     Animated.parallel([
@@ -132,11 +170,11 @@ export function LobbyScreen({
 
   useEffect(() => {
     if (!selectedCategoryId) return;
-    if (filteredQuizzes.length === 0) return;
-    if (!selectedQuizId || !filteredQuizzes.some((quiz) => quiz.id === selectedQuizId)) {
-      setSelectedQuizId(filteredQuizzes[0].id);
+    if (lengthOptions.length === 0) return;
+    if (!selectedQuestionCount || !lengthOptions.some((item) => item.count === selectedQuestionCount)) {
+      setSelectedQuestionCount(lengthOptions[0].count);
     }
-  }, [filteredQuizzes, selectedCategoryId, selectedQuizId]);
+  }, [lengthOptions, selectedCategoryId, selectedQuestionCount]);
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -287,10 +325,14 @@ export function LobbyScreen({
                 const opponentProgress = opponent
                   ? session.progress?.[String(opponent.id)] ?? 0
                   : 0;
+                const isAsyncDual = session.mode === "async" && session.players.length > 1;
                 const isWaitingForOpponent =
-                  session.mode === "sync" &&
-                  myProgress > opponentProgress &&
-                  myProgress < totalQuestions;
+                  (session.mode === "sync" &&
+                    myProgress > opponentProgress &&
+                    myProgress < totalQuestions) ||
+                  (isAsyncDual &&
+                    myProgress >= totalQuestions &&
+                    opponentProgress < totalQuestions);
                 const canContinue =
                   session.mode === "sync"
                     ? !isWaitingForOpponent && myProgress < totalQuestions
@@ -315,6 +357,10 @@ export function LobbyScreen({
                         <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
                         <Text style={styles.sessionSubtitle}>
                           {t(locale, "withOpponent")} {opponent?.displayName ?? "-"}
+                        </Text>
+                        <Text style={styles.sessionMetaSubtle}>
+                          {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
+                          {totalQuestions} {t(locale, "questionsLabel")}
                         </Text>
                       </View>
                     </View>
@@ -465,6 +511,11 @@ export function LobbyScreen({
                           <Text style={styles.sessionSubtitle}>
                             {t(locale, "withOpponent")} {opponent?.displayName ?? "-"}
                           </Text>
+                          <Text style={styles.sessionMetaSubtle}>
+                            {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
+                            {myScore !== undefined ? `${myScore}/${totalQuestions}` : `0 / ${totalQuestions}`}{" "}
+                            {t(locale, "questionsLabel")}
+                          </Text>
                         </View>
                         {resultLabel ? (
                           <View style={styles.badgeRow}>
@@ -480,11 +531,6 @@ export function LobbyScreen({
                           </View>
                         ) : null}
                       </View>
-                      {myScore !== undefined ? (
-                        <Text style={styles.sessionMeta}>
-                          {myScore} / {totalQuestions}
-                        </Text>
-                      ) : null}
                       <View style={styles.sessionFooter}>
                         <Text style={styles.sessionMeta}>{t(locale, "reviewMatch")}</Text>
                         <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
@@ -602,42 +648,55 @@ export function LobbyScreen({
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.categoryGrid}>
-                      {categories.map((category) => {
-                        const isSelected = selectedCategoryId === category.id;
-                        return (
-                          <Pressable
-                            key={category.id}
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              setSelectedCategoryId(category.id);
-                            }}
-                          >
-                            <View
-                              style={[
-                                styles.categoryChip,
-                                isSelected && styles.categoryChipSelected
-                              ]}
+                    <ScrollView
+                      showsVerticalScrollIndicator={false}
+                      style={[styles.dialogScroll, { maxHeight: dialogListMaxHeight }]}
+                      contentContainerStyle={styles.dialogScrollContent}
+                    >
+                      <View style={styles.categoryGrid}>
+                        {categories.map((category) => {
+                          const isSelected = selectedCategoryId === category.id;
+                          return (
+                            <Pressable
+                              key={category.id}
+                              onPress={() => {
+                                Haptics.selectionAsync();
+                                setSelectedCategoryId(category.id);
+                              }}
                             >
                               <View
                                 style={[
-                                  styles.categoryDot,
-                                  { backgroundColor: category.accent }
-                                ]}
-                              />
-                              <Text
-                                style={[
-                                  styles.categoryLabel,
-                                  isSelected && styles.categoryLabelSelected
+                                  styles.categoryChip,
+                                  isSelected && styles.categoryChipSelected
                                 ]}
                               >
-                                {category.label}
-                              </Text>
-                            </View>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                                <View
+                                  style={[
+                                    styles.categoryDot,
+                                    { backgroundColor: category.accent }
+                                  ]}
+                                />
+                                <Text
+                                  style={[
+                                    styles.categoryLabel,
+                                    isSelected && styles.categoryLabelSelected
+                                  ]}
+                                >
+                                  {category.label}
+                                </Text>
+                                <View style={styles.categoryChevron}>
+                                  <FontAwesome
+                                    name="angle-right"
+                                    size={14}
+                                    color={theme.colors.muted}
+                                  />
+                                </View>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
                     <View style={styles.dialogFooter}>
                       <PrimaryButton
                         label={t(locale, "continue")}
@@ -646,7 +705,7 @@ export function LobbyScreen({
                         onPress={() => {
                           if (!selectedCategoryId) return;
                           Haptics.selectionAsync();
-                          setPickStep("deck");
+                          setPickStep("count");
                         }}
                         style={!selectedCategoryId ? styles.buttonDisabled : undefined}
                       />
@@ -662,73 +721,83 @@ export function LobbyScreen({
                       />
                     </View>
                   </View>
-                ) : pickStep === "deck" ? (
+                ) : pickStep === "count" ? (
                   <View style={styles.dialogSection}>
                   <View style={styles.dialogSectionHeader}>
                     <View style={styles.stepBadge}>
                       <Text style={styles.stepBadgeText}>2</Text>
                     </View>
                     <View style={styles.dialogSectionText}>
-                      <Text style={styles.dialogSectionTitle}>{t(locale, "chooseDeck")}</Text>
-                      <Text style={styles.dialogSectionBody}>{t(locale, "chooseDeckBody")}</Text>
+                      <Text style={styles.dialogSectionTitle}>
+                        {t(locale, "chooseMatchLength")}
+                      </Text>
+                      <Text style={styles.dialogSectionBody}>
+                        {t(locale, "chooseMatchLengthBody")}
+                      </Text>
                     </View>
                   </View>
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    style={[styles.dialogScroll, { maxHeight: dialogListMaxHeight }]}
-                    contentContainerStyle={styles.dialogScrollContent}
-                  >
-                    <View style={styles.dialogGrid}>
-                      {filteredQuizzes.map((quiz) => {
-                        const isSelected = selectedQuiz?.id === quiz.id;
-                        const questionCount = quiz.questionCount ?? 0;
-                        const meta = `${quiz.subtitle} - ${questionCount} ${t(locale, "questionsLabel")}`;
-                        return (
-                          <Pressable
-                            key={quiz.id}
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              setSelectedQuizId(quiz.id);
-                            }}
+                  <View style={styles.lengthGrid}>
+                    {lengthOptions.map((option) => {
+                      const isSelected = selectedQuestionCount === option.count;
+                      return (
+                        <Pressable
+                          key={option.key}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setSelectedQuestionCount(option.count);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.lengthCard,
+                              isSelected && styles.lengthCardSelected
+                            ]}
                           >
-                            <GlassCard
-                              accent={isSelected ? quiz.accent : undefined}
-                              style={[styles.card, styles.deckCard, isSelected && styles.cardSelected]}
-                            >
-                              <View style={styles.cardHeaderRow}>
-                                <Text style={styles.deckCardTitle}>{quiz.title}</Text>
-                                <View
-                                  style={[
-                                    styles.selectedPill,
-                                    !isSelected && styles.selectedPillHidden
-                                  ]}
-                                >
-                                  {isSelected ? (
-                                    <FontAwesome name="check" size={10} color={theme.colors.ink} />
-                                  ) : null}
-                                </View>
+                            <View style={styles.lengthHeader}>
+                              <Text
+                                style={[
+                                  styles.lengthTitle,
+                                  isSelected && styles.lengthTitleSelected
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                              <View
+                                style={[
+                                  styles.selectedPill,
+                                  !isSelected && styles.selectedPillHidden
+                                ]}
+                              >
+                                {isSelected ? (
+                                  <FontAwesome
+                                    name="check"
+                                    size={10}
+                                    color={theme.colors.ink}
+                                  />
+                                ) : null}
                               </View>
-                              <Text style={styles.deckCardMeta}>{meta}</Text>
-                            </GlassCard>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </ScrollView>
+                            </View>
+                            <Text style={styles.lengthBody}>{option.description}</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                   <View style={styles.dialogFooter}>
                     <PrimaryButton
-                      label={t(locale, "createRoom")}
-                      icon="plus"
+                      label={t(locale, "continue")}
+                      icon="arrow-right"
                       iconPosition="right"
                       onPress={() => {
-                        if (!selectedQuiz) return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        onCreateRoom(selectedQuiz.id);
-                        setIsDialogOpen(false);
-                        setDialogStep("menu");
-                        setPickStep("category");
+                        if (!selectedCategoryId || !selectedQuestionCount) return;
+                        Haptics.selectionAsync();
+                        setPickStep("mode");
                       }}
-                      style={!selectedQuiz ? styles.buttonDisabled : undefined}
+                      style={
+                        !selectedCategoryId || !selectedQuestionCount
+                          ? styles.buttonDisabled
+                          : undefined
+                      }
                     />
                     <PrimaryButton
                       label={t(locale, "back")}
@@ -741,6 +810,105 @@ export function LobbyScreen({
                     />
                   </View>
                 </View>
+                ) : pickStep === "mode" ? (
+                  <View style={styles.dialogSection}>
+                    <View style={styles.dialogSectionHeader}>
+                      <View style={styles.stepBadge}>
+                        <Text style={styles.stepBadgeText}>3</Text>
+                      </View>
+                      <View style={styles.dialogSectionText}>
+                        <Text style={styles.dialogSectionTitle}>{t(locale, "duelFormat")}</Text>
+                        <Text style={styles.dialogSectionBody}>{t(locale, "duelFormatBody")}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.modeGrid}>
+                      <Pressable
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setSelectedMode("async");
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.modeCard,
+                            selectedMode === "async" && styles.modeCardSelected
+                          ]}
+                        >
+                          <View style={styles.modeHeader}>
+                            <Text style={styles.modeTitle}>{t(locale, "asyncDuel")}</Text>
+                            <View
+                              style={[
+                                styles.selectedPill,
+                                selectedMode !== "async" && styles.selectedPillHidden
+                              ]}
+                            >
+                              {selectedMode === "async" ? (
+                                <FontAwesome name="check" size={10} color={theme.colors.ink} />
+                              ) : null}
+                            </View>
+                          </View>
+                          <Text style={styles.modeBody}>{t(locale, "asyncDuelBody")}</Text>
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setSelectedMode("sync");
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.modeCard,
+                            selectedMode === "sync" && styles.modeCardSelected
+                          ]}
+                        >
+                          <View style={styles.modeHeader}>
+                            <Text style={styles.modeTitle}>{t(locale, "syncDuel")}</Text>
+                            <View
+                              style={[
+                                styles.selectedPill,
+                                selectedMode !== "sync" && styles.selectedPillHidden
+                              ]}
+                            >
+                              {selectedMode === "sync" ? (
+                                <FontAwesome name="check" size={10} color={theme.colors.ink} />
+                              ) : null}
+                            </View>
+                          </View>
+                          <Text style={styles.modeBody}>{t(locale, "syncDuelBody")}</Text>
+                        </View>
+                      </Pressable>
+                    </View>
+                    <View style={styles.dialogFooter}>
+                      <PrimaryButton
+                        label={t(locale, "createRoom")}
+                        icon="plus"
+                        iconPosition="right"
+                        onPress={() => {
+                          if (!selectedCategoryId || !selectedQuestionCount) return;
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          onCreateRoom(selectedCategoryId, selectedQuestionCount, selectedMode);
+                          setIsDialogOpen(false);
+                          setDialogStep("menu");
+                          setPickStep("category");
+                        }}
+                        style={
+                          !selectedCategoryId || !selectedQuestionCount
+                            ? styles.buttonDisabled
+                            : undefined
+                        }
+                      />
+                      <PrimaryButton
+                        label={t(locale, "back")}
+                        variant="ghost"
+                        icon="arrow-left"
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setPickStep("count");
+                        }}
+                      />
+                    </View>
+                  </View>
                 ) : null}
               </>
             ) : (
@@ -968,66 +1136,20 @@ const styles = StyleSheet.create({
   recapChipTie: {
     borderLeftColor: "rgba(243, 183, 78, 0.9)"
   },
-  card: {
-    gap: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)"
-  },
-  cardSelected: {
-    borderColor: "rgba(11, 14, 20, 0.35)",
-    backgroundColor: "rgba(11, 14, 20, 0.03)"
-  },
-  cardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.sm
-  },
-  selectedPill: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.08)"
-  },
-  selectedPillHidden: {
-    opacity: 0
-  },
-  deckCard: {
-    paddingVertical: theme.spacing.sm
-  },
-  deckCardTitle: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "600"
-  },
-  deckCardSubtitle: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
-  deckCardMeta: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
   categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.spacing.sm
   },
   categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
+    gap: theme.spacing.sm,
+    width: "100%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: "rgba(11, 14, 20, 0.12)",
-    backgroundColor: "rgba(255, 255, 255, 0.8)"
+    backgroundColor: "rgba(255, 255, 255, 0.9)"
   },
   categoryChipSelected: {
     borderColor: "rgba(11, 14, 20, 0.35)",
@@ -1046,6 +1168,89 @@ const styles = StyleSheet.create({
   },
   categoryLabelSelected: {
     color: theme.colors.ink
+  },
+  selectedPill: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(11, 14, 20, 0.08)"
+  },
+  selectedPillHidden: {
+    opacity: 0
+  },
+  categoryChevron: {
+    marginLeft: "auto"
+  },
+  lengthGrid: {
+    gap: theme.spacing.sm
+  },
+  lengthCard: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    width: "100%",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)"
+  },
+  lengthCardSelected: {
+    borderColor: "rgba(11, 14, 20, 0.35)",
+    backgroundColor: "rgba(11, 14, 20, 0.04)"
+  },
+  lengthHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  lengthTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  lengthBody: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    marginTop: 4
+  },
+  lengthTitleSelected: {
+    color: theme.colors.ink
+  },
+  modeGrid: {
+    gap: theme.spacing.sm
+  },
+  modeCard: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    width: "100%",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)"
+  },
+  modeCardSelected: {
+    borderColor: "rgba(11, 14, 20, 0.35)",
+    backgroundColor: "rgba(11, 14, 20, 0.04)"
+  },
+  modeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  modeTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  modeBody: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    marginTop: 4
   },
   cardTitle: {
     color: theme.colors.ink,
@@ -1071,7 +1276,7 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   sessionSubtitle: {
-    color: theme.colors.muted,
+    color: "rgba(11, 14, 20, 0.58)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -1264,6 +1469,13 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
+  sessionMetaSubtle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    opacity: 0.85,
+    marginTop: 2
+  },
   sessionMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1415,9 +1627,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
-  },
-  dialogGrid: {
-    gap: theme.spacing.sm
   },
   dialogScroll: {
     flexGrow: 0

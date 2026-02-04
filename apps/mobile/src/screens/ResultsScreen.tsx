@@ -177,7 +177,7 @@ export function ResultsScreen({
 
     let pulseLoop: Animated.CompositeAnimation | null = null;
     let waitingLoop: Animated.CompositeAnimation | null = null;
-    if (resultState === "tie" || resultState === "win") {
+    if (resultState === "tie" || resultState === "win" || resultState === "loss") {
       pulseLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -308,6 +308,22 @@ export function ResultsScreen({
                     ]}
                   />
                 </Animated.View>
+
+                {resultState === "win" || resultState === "loss" ? (
+                  <View style={styles.ringLayer}>
+                    <Animated.View
+                      style={[
+                        styles.ring,
+                        styles.ringPulse,
+                        {
+                          borderColor: resultTone?.accent ?? theme.colors.primary,
+                          opacity: ringOpacity,
+                          transform: [{ scale: ringScale }]
+                        }
+                      ]}
+                    />
+                  </View>
+                ) : null}
 
                 {resultState === "win" ? (
                   <View style={styles.sparkleLayer}>
@@ -661,7 +677,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 2,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    zIndex: 2
   },
   heroDot: {
     width: 18,
@@ -708,7 +725,8 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    zIndex: 1
   },
   ring: {
     position: "absolute",
@@ -716,6 +734,11 @@ const styles = StyleSheet.create({
     height: 68,
     borderRadius: 34,
     borderWidth: 2
+  },
+  ringPulse: {
+    width: 64,
+    height: 64,
+    borderRadius: 32
   },
   ringInner: {
     width: 52,

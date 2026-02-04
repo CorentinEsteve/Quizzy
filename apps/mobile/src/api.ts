@@ -49,14 +49,22 @@ export async function fetchQuizzes(): Promise<QuizSummary[]> {
   return response.json();
 }
 
-export async function createRoom(token: string, quizId: string) {
+export async function createRoom(
+  token: string,
+  payload: {
+    quizId?: string;
+    categoryId?: string;
+    questionCount?: number;
+    mode?: "sync" | "async";
+  }
+) {
   const response = await fetch(`${API_BASE_URL}/rooms`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ quizId })
+    body: JSON.stringify(payload)
   });
   if (!response.ok) {
     const message = await response.json().catch(() => ({}));

@@ -1,7 +1,7 @@
 # Quizz App (Clean Edition)
 
 A clean, Apple-like take on a DualQuizz-style experience built with React Native (Expo) and Node.js.
-Includes JWT authentication and real-time multiplayer (async) via Socket.io.
+Includes JWT authentication and real-time multiplayer (sync + async) via Socket.io.
 
 ## Structure
 - `apps/mobile` – React Native (Expo) app
@@ -28,5 +28,6 @@ The mobile app expects the API at `http://localhost:3001` by default. Update `ap
 ## Features
 - JWT auth (register/login)
 - Create/join rooms with short codes
+- Synchronous duels (shared question index)
 - Asynchronous duels (play at your pace)
 - Live room updates with Socket.io

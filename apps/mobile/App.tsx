@@ -716,12 +716,16 @@ export default function App() {
     }
   }
 
-  async function handleCreateRoom(quizId: string) {
+  async function handleCreateRoom(
+    categoryId: string,
+    questionCount: number,
+    mode: "sync" | "async"
+  ) {
     if (!token) return;
     setRoomError(null);
     setLoading(true);
     try {
-      const state = await createRoom(token, quizId);
+      const state = await createRoom(token, { categoryId, questionCount, mode });
       setRoom(state);
       setSelectedAnswers({});
       closedRoomCodesRef.current.delete(state.code);

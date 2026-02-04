@@ -65,6 +65,12 @@ export function migrate() {
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS room_quizzes (
+      quiz_id TEXT PRIMARY KEY,
+      quiz_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS badges (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
