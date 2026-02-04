@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  UIManager,
+  View
+} from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,8 +46,16 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerProgress = useRef(new Animated.Value(1)).current;
+  const cardFade = useRef(new Animated.Value(1)).current;
+  const cardLift = useRef(new Animated.Value(0)).current;
   const footerInset = theme.spacing.lg + insets.bottom + 96;
   const containerStyle = [styles.container, { paddingBottom: footerInset }];
+
+  useEffect(() => {
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
 
   let questionIndex = room.currentIndex;
   if (room.mode === "async") {
@@ -163,7 +180,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
           }
           feedbackTimeoutRef.current = setTimeout(() => {
             onAnswer(question.id, -1);
-            setFeedback(null);
           }, feedbackDurationMs);
         } else {
           onAnswer(question.id, -1);
@@ -190,7 +206,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         }
         feedbackTimeoutRef.current = setTimeout(() => {
           onAnswer(question.id, -1);
-          setFeedback(null);
         }, feedbackDurationMs);
       } else {
         onAnswer(question.id, -1);
@@ -239,6 +254,32 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
       clearTimerForQuestion(question.id);
     }
   }, [question?.id, hasAnsweredCurrent]);
+
+  useEffect(() => {
+    if (question?.id) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+  }, [question?.id]);
+
+  useEffect(() => {
+    if (!question?.id) return;
+    cardFade.stopAnimation();
+    cardFade.setValue(0.5);
+    cardLift.stopAnimation();
+    cardLift.setValue(6);
+    Animated.parallel([
+      Animated.timing(cardFade, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true
+      }),
+      Animated.timing(cardLift, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true
+      })
+    ]).start();
+  }, [question?.id, cardFade, cardLift]);
 
   if (isAsyncDone) {
     return (
@@ -445,11 +486,14 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         </View>
       </View>
 
-      {!hasAnsweredCurrent && !feedbackActive ? (
-        <View
-          style={styles.timerTrack}
-          onLayout={(event) => setTimerWidth(event.nativeEvent.layout.width)}
-        >
+      <View
+        style={[
+          styles.timerTrack,
+          !hasAnsweredCurrent && !feedbackActive ? null : styles.timerTrackInactive
+        ]}
+        onLayout={(event) => setTimerWidth(event.nativeEvent.layout.width)}
+      >
+        {!hasAnsweredCurrent && !feedbackActive ? (
           <Animated.View
             style={[
               styles.timerFill,
@@ -473,63 +517,72 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
               }
             ]}
           />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
 
-      <GlassCard accent={quiz.accent} style={styles.card}>
-        <Text style={styles.prompt}>{prompt}</Text>
-        <View style={styles.options}>
-          {options.map((option, index) => {
-            const isFeedbackSelected = feedbackActive && feedback?.selectedIndex === index;
-            const showFeedback = feedbackActive && isFeedbackSelected;
-            const isReveal = showFeedback && feedback?.mode === "reveal";
-            const isCorrect = showFeedback ? feedback?.isCorrect === true : false;
-            const isIncorrect = showFeedback ? feedback?.isCorrect === false : false;
-            return (
-              <PrimaryButton
-                key={`${question.id}-${index}`}
-                label={option}
-                onPress={() => {
-                  if (hasAnsweredCurrent || feedbackActive) return;
-                  sentRef.current.add(question.id);
-                  Haptics.selectionAsync();
-                  const correctIndex =
-                    typeof question.answer === "number" ? question.answer : null;
-                  const isAnswerCorrect =
-                    correctIndex === null ? null : correctIndex === index;
-                  if (isAnswerCorrect === true) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  } else if (isAnswerCorrect === false) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                  }
-                  setFeedback({
-                    questionId: question.id,
-                    selectedIndex: index,
-                    isCorrect: isAnswerCorrect,
-                    mode: "answer"
-                  });
-                  clearTimerForQuestion(question.id);
-                  if (feedbackTimeoutRef.current) {
-                    clearTimeout(feedbackTimeoutRef.current);
-                  }
-                  feedbackTimeoutRef.current = setTimeout(() => {
-                    onAnswer(question.id, index);
-                    setFeedback(null);
-                  }, feedbackDurationMs);
-                }}
-                variant="ghost"
-                style={[
-                  styles.optionButton,
-                  showFeedback && styles.optionFeedback,
-                  showFeedback && isReveal && styles.optionReveal,
-                  showFeedback && isCorrect && styles.optionCorrect,
-                  showFeedback && isIncorrect && styles.optionIncorrect
-                ]}
-              />
-            );
-          })}
-        </View>
-      </GlassCard>
+      <Animated.View
+        style={[
+          styles.cardFade,
+          {
+            opacity: cardFade,
+            transform: [{ translateY: cardLift }]
+          }
+        ]}
+      >
+        <GlassCard accent={quiz.accent} style={styles.card}>
+          <Text style={styles.prompt}>{prompt}</Text>
+          <View style={styles.options}>
+            {options.map((option, index) => {
+              const isFeedbackSelected = feedbackActive && feedback?.selectedIndex === index;
+              const showFeedback = feedbackActive && isFeedbackSelected;
+              const isReveal = showFeedback && feedback?.mode === "reveal";
+              const isCorrect = showFeedback ? feedback?.isCorrect === true : false;
+              const isIncorrect = showFeedback ? feedback?.isCorrect === false : false;
+              return (
+                <PrimaryButton
+                  key={`${question.id}-${index}`}
+                  label={option}
+                  onPress={() => {
+                    if (hasAnsweredCurrent || feedbackActive) return;
+                    sentRef.current.add(question.id);
+                    Haptics.selectionAsync();
+                    const correctIndex =
+                      typeof question.answer === "number" ? question.answer : null;
+                    const isAnswerCorrect =
+                      correctIndex === null ? null : correctIndex === index;
+                    if (isAnswerCorrect === true) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } else if (isAnswerCorrect === false) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    }
+                    setFeedback({
+                      questionId: question.id,
+                      selectedIndex: index,
+                      isCorrect: isAnswerCorrect,
+                      mode: "answer"
+                    });
+                    clearTimerForQuestion(question.id);
+                    if (feedbackTimeoutRef.current) {
+                      clearTimeout(feedbackTimeoutRef.current);
+                    }
+                    feedbackTimeoutRef.current = setTimeout(() => {
+                      onAnswer(question.id, index);
+                    }, feedbackDurationMs);
+                  }}
+                  variant="ghost"
+                  style={[
+                    styles.optionButton,
+                    showFeedback && styles.optionFeedback,
+                    showFeedback && isReveal && styles.optionReveal,
+                    showFeedback && isCorrect && styles.optionCorrect,
+                    showFeedback && isIncorrect && styles.optionIncorrect
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </GlassCard>
+      </Animated.View>
 
       <GlassCard style={styles.statusCard}>
         <View style={styles.statusHeader}>
@@ -629,6 +682,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: theme.spacing.md
   },
+  timerTrackInactive: {
+    opacity: 0.35
+  },
   timerFill: {
     height: "100%",
     borderRadius: 999
@@ -646,6 +702,9 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: theme.spacing.lg
+  },
+  cardFade: {
+    width: "100%"
   },
   prompt: {
     color: theme.colors.ink,

@@ -513,7 +513,7 @@ export function LobbyScreen({
                           </Text>
                           <Text style={styles.sessionMetaSubtle}>
                             {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
-                            {myScore !== undefined ? `${myScore}/${totalQuestions}` : `0 / ${totalQuestions}`}{" "}
+                            {myScore !== undefined ? `${myScore} / ${totalQuestions}` : `0 / ${totalQuestions}`}{" "}
                             {t(locale, "questionsLabel")}
                           </Text>
                         </View>
@@ -710,11 +710,11 @@ export function LobbyScreen({
                         style={!selectedCategoryId ? styles.buttonDisabled : undefined}
                       />
                       <PrimaryButton
-                        label={t(locale, "close")}
+                        label={t(locale, "back")}
                         variant="ghost"
-                        icon="times"
+                        icon="arrow-left"
                         onPress={() => {
-                          setIsDialogOpen(false);
+                          Haptics.selectionAsync();
                           setDialogStep("menu");
                           setPickStep("category");
                         }}
