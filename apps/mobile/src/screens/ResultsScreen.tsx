@@ -7,7 +7,8 @@ import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
-import { ScoreEntry } from "../data/types";
+import { FontAwesome } from "@expo/vector-icons";
+import { ScoreEntry, SummaryQuestion } from "../data/types";
 import { getRewardForResults } from "../data/rewards";
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
   rematchReadyCount?: number;
   rematchTotal?: number;
   rematchReady?: number[];
+  questions?: SummaryQuestion[];
 };
 
 export function ResultsScreen({
@@ -31,7 +33,8 @@ export function ResultsScreen({
   userId,
   rematchReadyCount,
   rematchTotal,
-  rematchReady
+  rematchReady,
+  questions
 }: Props) {
   const insets = useSafeAreaInsets();
   const sorted = [...scores].sort((a, b) => b.score - a.score);
@@ -75,6 +78,37 @@ export function ResultsScreen({
     () => (rematchStatus ? rematchStatus.split("") : []),
     [rematchStatus]
   );
+  const reviewItems = useMemo(() => {
+    if (!questions?.length) return [];
+    return questions.map((question) => {
+      const prompt = question.prompt?.[locale] ?? question.prompt?.en ?? "";
+      const options = question.options?.[locale] ?? question.options?.en ?? [];
+      const correctIndex = typeof question.answer === "number" ? question.answer : null;
+      const correctText =
+        correctIndex !== null
+          ? options[correctIndex] ?? t(locale, "noAnswer")
+          : t(locale, "noAnswer");
+      const wrongResponses = (question.responses ?? []).filter((response) =>
+        correctIndex === null ? true : response.answerIndex !== correctIndex
+      );
+      const wrongLabels = wrongResponses.map((response) => {
+        const answerText =
+          response.answerIndex === -1
+            ? t(locale, "noAnswer")
+            : options[response.answerIndex] ?? t(locale, "noAnswer");
+        return {
+          key: `${question.id}-${response.userId}`,
+          label: `${response.displayName} · ${answerText}`
+        };
+      });
+      return {
+        id: question.id,
+        prompt,
+        correctText,
+        wrongLabels
+      };
+    });
+  }, [questions, locale]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.96)).current;
   const heroAnim = useRef(new Animated.Value(0)).current;
@@ -394,17 +428,127 @@ export function ResultsScreen({
           ) : null}
 
           <GlassCard style={styles.card}>
-            {sorted.map((entry, index) => (
-              <View key={entry.userId} style={styles.row}>
-                <Text style={styles.name}>
-                  {index + 1}. {entry.displayName}
-                </Text>
-                <Text style={styles.score}>
-                  {entry.score} / {total}
-                </Text>
-              </View>
-            ))}
+            {sorted.map((entry, index) => {
+              const isTop = index === 0;
+              const isTie = (topCount ?? 0) > 1 && entry.score === topScore;
+              const isSecond = index === 1;
+              const badgeLabel = isTie ? t(locale, "tieLabel") : t(locale, "winnerLabel");
+              const winnerScale = heroAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.98, 1]
+              });
+              const rowIsWinner = isTop && !isTie;
+              const showBadge = isTie || rowIsWinner;
+              return (
+                <Animated.View
+                  key={entry.userId}
+                  style={[
+                    styles.rankRow,
+                    rowIsWinner ? styles.rankRowWinner : null,
+                    isTie ? styles.rankRowTie : null,
+                    isSecond ? styles.rankRowRunner : null,
+                    showBadge
+                      ? {
+                          opacity: heroOpacity,
+                          transform: [{ scale: winnerScale }]
+                        }
+                      : null
+                  ]}
+                >
+                  <View style={styles.rankNameGroup}>
+                    <Text
+                      style={[
+                        styles.rankIndex,
+                        rowIsWinner ? styles.rankIndexWinner : null,
+                        isTie ? styles.rankIndexTie : null
+                      ]}
+                    >
+                      {index + 1}.
+                    </Text>
+                    <View style={styles.rankNameBlock}>
+                      <View style={styles.rankNameLine}>
+                        <Text
+                          style={[
+                            styles.name,
+                            rowIsWinner ? styles.nameWinner : null,
+                            isTie ? styles.nameTie : null
+                          ]}
+                        >
+                          {entry.displayName}
+                        </Text>
+                        {showBadge ? (
+                          <View style={[styles.rankBadge, isTie ? styles.rankBadgeTie : null]}>
+                            <FontAwesome
+                              name="trophy"
+                              size={12}
+                              color={isTie ? theme.colors.primary : theme.colors.success}
+                              style={styles.rankBadgeIcon}
+                            />
+                            <Text
+                              style={[
+                                styles.rankBadgeText,
+                                isTie ? styles.rankBadgeTextTie : null
+                              ]}
+                            >
+                              {badgeLabel}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                  <Text
+                    style={[
+                      styles.score,
+                      rowIsWinner ? styles.scoreWinner : null,
+                      isTie ? styles.scoreTie : null
+                    ]}
+                  >
+                    {entry.score} / {total}
+                  </Text>
+                </Animated.View>
+              );
+            })}
           </GlassCard>
+
+          {reviewItems.length ? (
+            <GlassCard style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <Text style={styles.reviewTitle}>{t(locale, "answerReviewTitle")}</Text>
+                <Text style={styles.reviewSubtitle}>{t(locale, "answerReviewSubtitle")}</Text>
+              </View>
+              <View style={styles.reviewList}>
+                {reviewItems.map((item, index) => (
+                  <View key={item.id} style={styles.questionItem}>
+                    <View style={styles.questionHeader}>
+                      <Text style={styles.questionIndex}>{index + 1}.</Text>
+                      <Text style={styles.questionPrompt}>{item.prompt}</Text>
+                    </View>
+                    <View style={styles.answerRow}>
+                      <Text style={styles.answerLabel}>{t(locale, "correctAnswer")}</Text>
+                      <View style={styles.correctPill}>
+                        <Text style={styles.correctPillText}>{item.correctText}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.answerRow}>
+                      <Text style={styles.answerLabel}>{t(locale, "wrongAnswers")}</Text>
+                      <View style={styles.wrongWrap}>
+                        {item.wrongLabels.length ? (
+                          item.wrongLabels.map((wrong) => (
+                            <View key={wrong.key} style={styles.wrongPill}>
+                              <Text style={styles.wrongPillText}>{wrong.label}</Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.answerEmpty}>{t(locale, "noWrongAnswers")}</Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </GlassCard>
+          ) : null}
         </View>
       </ScrollView>
       <View
@@ -483,7 +627,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm
   },
   rewardEmoji: {
-    fontSize: 28
+    fontSize: 24
   },
   rewardCopy: {
     flex: 1,
@@ -492,7 +636,7 @@ const styles = StyleSheet.create({
   rewardTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
+    fontSize: 20,
     fontWeight: "600"
   },
   rewardBody: {
@@ -609,10 +753,195 @@ const styles = StyleSheet.create({
   card: {
     gap: theme.spacing.sm
   },
+  reviewCard: {
+    gap: theme.spacing.md
+  },
+  reviewHeader: {
+    gap: 2
+  },
+  reviewTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600"
+  },
+  reviewSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  reviewList: {
+    gap: theme.spacing.md
+  },
+  questionItem: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(245, 247, 251, 0.9)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    gap: theme.spacing.sm
+  },
+  questionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
+  },
+  questionIndex: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  questionPrompt: {
+    flex: 1,
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  answerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
+  },
+  answerLabel: {
+    width: 110,
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  correctPill: {
+    backgroundColor: "rgba(43, 158, 102, 0.14)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(43, 158, 102, 0.3)",
+    flexShrink: 1
+  },
+  correctPillText: {
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  wrongWrap: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+    alignItems: "center"
+  },
+  wrongPill: {
+    backgroundColor: "rgba(235, 87, 87, 0.12)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(235, 87, 87, 0.28)"
+  },
+  wrongPillText: {
+    color: theme.colors.danger,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  answerEmpty: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center"
+  },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.06)"
+  },
+  rankRowWinner: {
+    backgroundColor: "rgba(43, 158, 102, 0.12)",
+    borderColor: "rgba(43, 158, 102, 0.3)"
+  },
+  rankRowTie: {
+    backgroundColor: "rgba(11, 14, 20, 0.03)",
+    borderColor: "rgba(15, 23, 42, 0.12)"
+  },
+  rankRowRunner: {
+    backgroundColor: "rgba(15, 23, 42, 0.03)",
+    opacity: 0.9
+  },
+  rankNameGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    flex: 1
+  },
+  rankIndex: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  rankIndexWinner: {
+    color: theme.colors.success
+  },
+  rankIndexTie: {
+    color: theme.colors.primary
+  },
+  rankNameBlock: {
+    flex: 1,
+    gap: 2
+  },
+  rankNameLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    flexWrap: "wrap"
+  },
+  nameWinner: {
+    color: theme.colors.success
+  },
+  nameTie: {
+    color: theme.colors.ink
+  },
+  rankBadge: {
+    backgroundColor: "rgba(43, 158, 102, 0.16)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  rankBadgeTie: {
+    backgroundColor: "rgba(94, 124, 255, 0.12)"
+  },
+  rankBadgeText: {
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  rankBadgeTextTie: {
+    color: theme.colors.primary
+  },
+  rankBadgeIcon: {
+    marginRight: 4
+  },
+  scoreWinner: {
+    color: theme.colors.success,
+    fontWeight: "600"
+  },
+  scoreTie: {
+    color: theme.colors.primary,
+    fontWeight: "600"
   },
   name: {
     color: theme.colors.ink,

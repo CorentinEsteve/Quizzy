@@ -4,6 +4,7 @@ import {
   LeaderboardResponse,
   QuizSummary,
   RoomState,
+  RoomSummary,
   RoomsResponse,
   StatsResponse,
   User
@@ -90,7 +91,7 @@ export async function fetchRoom(token: string, code: string) {
   return response.json() as Promise<RoomState>;
 }
 
-export async function fetchSummary(token: string, code: string) {
+export async function fetchSummary(token: string, code: string): Promise<RoomSummary> {
   const response = await fetch(`${API_BASE_URL}/rooms/${code}/summary`, {
     headers: { Authorization: `Bearer ${token}` }
   });

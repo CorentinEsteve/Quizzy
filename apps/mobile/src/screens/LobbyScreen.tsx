@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
@@ -34,6 +43,8 @@ type Props = {
   recapStats: StatsResponse | null;
 };
 
+const ALL_CATEGORY_ID = "all";
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
   return parts.map((part) => part[0]?.toUpperCase()).join("");
@@ -54,6 +65,7 @@ export function LobbyScreen({
   recapStats
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const [code, setCode] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
@@ -62,6 +74,12 @@ export function LobbyScreen({
   const [pickStep, setPickStep] = useState<"category" | "deck">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
+  const continuePulse = useRef(new Animated.Value(0)).current;
+  const dialogMaxHeight = Math.min(
+    height - insets.top - insets.bottom - theme.spacing.xl * 2,
+    height * 0.88
+  );
+  const dialogListMaxHeight = Math.max(220, dialogMaxHeight - 240);
 
   const categories = useMemo(() => {
     const map = new Map<string, { id: string; label: string; accent: string }>();
@@ -74,11 +92,18 @@ export function LobbyScreen({
         });
       }
     });
-    return Array.from(map.values());
-  }, [quizzes]);
+    return [
+      {
+        id: ALL_CATEGORY_ID,
+        label: t(locale, "allCategories"),
+        accent: theme.colors.primary
+      },
+      ...Array.from(map.values())
+    ];
+  }, [locale, quizzes]);
 
   const filteredQuizzes = useMemo(() => {
-    if (!selectedCategoryId) return quizzes;
+    if (!selectedCategoryId || selectedCategoryId === ALL_CATEGORY_ID) return quizzes;
     return quizzes.filter((quiz) => quiz.categoryId === selectedCategoryId);
   }, [quizzes, selectedCategoryId]);
 
@@ -90,7 +115,7 @@ export function LobbyScreen({
   useEffect(() => {
     if (!isDialogOpen) return;
     if (!selectedCategoryId && categories.length > 0) {
-      setSelectedCategoryId(categories[0].id);
+      setSelectedCategoryId(ALL_CATEGORY_ID);
     }
     dialogOpacity.setValue(0);
     dialogScale.setValue(0.96);
@@ -112,6 +137,25 @@ export function LobbyScreen({
       setSelectedQuizId(filteredQuizzes[0].id);
     }
   }, [filteredQuizzes, selectedCategoryId, selectedQuizId]);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(continuePulse, {
+          toValue: 1,
+          duration: 1400,
+          useNativeDriver: true
+        }),
+        Animated.timing(continuePulse, {
+          toValue: 0,
+          duration: 1400,
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [continuePulse]);
 
   return (
     <View style={styles.page}>
@@ -286,10 +330,29 @@ export function LobbyScreen({
                         </Text>
                       )}
                       {canContinue ? (
-                        <View style={[styles.ctaPill, styles.ctaPrimary]}>
+                        <Animated.View
+                          style={[
+                            styles.ctaPill,
+                            styles.ctaPrimary,
+                            {
+                              transform: [
+                                {
+                                  scale: continuePulse.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [1, 1.03]
+                                  })
+                                }
+                              ],
+                              opacity: continuePulse.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [1, 0.92]
+                              })
+                            }
+                          ]}
+                        >
                           <Text style={styles.ctaText}>{t(locale, "continueMatch")}</Text>
                           <FontAwesome name="arrow-right" size={12} color={theme.colors.ink} />
-                        </View>
+                        </Animated.View>
                       ) : null}
                     </View>
                   </View>
@@ -478,7 +541,11 @@ export function LobbyScreen({
               style={[
                 styles.dialog,
                 styles.dialogGlow,
-                { opacity: dialogOpacity, transform: [{ scale: dialogScale }] }
+                {
+                  opacity: dialogOpacity,
+                  transform: [{ scale: dialogScale }],
+                  maxHeight: dialogMaxHeight
+                }
               ]}
             >
             {dialogStep === "menu" ? (
@@ -606,40 +673,48 @@ export function LobbyScreen({
                       <Text style={styles.dialogSectionBody}>{t(locale, "chooseDeckBody")}</Text>
                     </View>
                   </View>
-                  <View style={styles.dialogGrid}>
-                    {filteredQuizzes.map((quiz) => {
-                      const isSelected = selectedQuiz?.id === quiz.id;
-                      return (
-                        <Pressable
-                          key={quiz.id}
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            setSelectedQuizId(quiz.id);
-                          }}
-                        >
-                          <GlassCard
-                            accent={isSelected ? quiz.accent : undefined}
-                            style={[styles.card, styles.deckCard, isSelected && styles.cardSelected]}
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    style={[styles.dialogScroll, { maxHeight: dialogListMaxHeight }]}
+                    contentContainerStyle={styles.dialogScrollContent}
+                  >
+                    <View style={styles.dialogGrid}>
+                      {filteredQuizzes.map((quiz) => {
+                        const isSelected = selectedQuiz?.id === quiz.id;
+                        const questionCount = quiz.questionCount ?? 0;
+                        const meta = `${quiz.subtitle} - ${questionCount} ${t(locale, "questionsLabel")}`;
+                        return (
+                          <Pressable
+                            key={quiz.id}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setSelectedQuizId(quiz.id);
+                            }}
                           >
-                            <View style={styles.cardHeaderRow}>
-                              <Text style={styles.deckCardTitle}>{quiz.title}</Text>
-                              <View
-                                style={[
-                                  styles.selectedPill,
-                                  !isSelected && styles.selectedPillHidden
-                                ]}
-                              >
-                                {isSelected ? (
-                                  <FontAwesome name="check" size={10} color={theme.colors.ink} />
-                                ) : null}
+                            <GlassCard
+                              accent={isSelected ? quiz.accent : undefined}
+                              style={[styles.card, styles.deckCard, isSelected && styles.cardSelected]}
+                            >
+                              <View style={styles.cardHeaderRow}>
+                                <Text style={styles.deckCardTitle}>{quiz.title}</Text>
+                                <View
+                                  style={[
+                                    styles.selectedPill,
+                                    !isSelected && styles.selectedPillHidden
+                                  ]}
+                                >
+                                  {isSelected ? (
+                                    <FontAwesome name="check" size={10} color={theme.colors.ink} />
+                                  ) : null}
+                                </View>
                               </View>
-                            </View>
-                            <Text style={styles.deckCardSubtitle}>{quiz.subtitle}</Text>
-                          </GlassCard>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                              <Text style={styles.deckCardMeta}>{meta}</Text>
+                            </GlassCard>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
                   <View style={styles.dialogFooter}>
                     <PrimaryButton
                       label={t(locale, "createRoom")}
@@ -865,32 +940,33 @@ const styles = StyleSheet.create({
     gap: 8
   },
   recapCard: {
-    backgroundColor: "rgba(94, 124, 255, 0.06)",
-    borderColor: "rgba(94, 124, 255, 0.18)",
-    shadowColor: "rgba(94, 124, 255, 0.3)"
+    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    borderColor: "rgba(94, 124, 255, 0.28)",
+    shadowColor: "rgba(94, 124, 255, 0.32)",
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 6
   },
   cardPressed: {
     opacity: 0.9
   },
   recapChip: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderRadius: theme.radius.md,
     padding: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.06)"
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    borderLeftWidth: 3
   },
   recapChipWin: {
-    backgroundColor: "rgba(43, 158, 102, 0.08)",
-    borderColor: "rgba(43, 158, 102, 0.18)"
+    borderLeftColor: "rgba(43, 158, 102, 0.9)"
   },
   recapChipLoss: {
-    backgroundColor: "rgba(235, 87, 87, 0.08)",
-    borderColor: "rgba(235, 87, 87, 0.18)"
+    borderLeftColor: "rgba(235, 87, 87, 0.9)"
   },
   recapChipTie: {
-    backgroundColor: "rgba(243, 183, 78, 0.1)",
-    borderColor: "rgba(243, 183, 78, 0.22)"
+    borderLeftColor: "rgba(243, 183, 78, 0.9)"
   },
   card: {
     gap: theme.spacing.sm,
@@ -919,7 +995,7 @@ const styles = StyleSheet.create({
     opacity: 0
   },
   deckCard: {
-    paddingVertical: theme.spacing.md
+    paddingVertical: theme.spacing.sm
   },
   deckCardTitle: {
     color: theme.colors.ink,
@@ -928,6 +1004,11 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   deckCardSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  deckCardMeta: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
@@ -1230,7 +1311,8 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
     borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.7)"
+    borderColor: "rgba(229, 231, 236, 0.7)",
+    width: "100%"
   },
   dialogClose: {
     position: "absolute",
@@ -1292,7 +1374,8 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.xs
   },
   dialogSection: {
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    flexShrink: 1
   },
   dialogSectionHeader: {
     flexDirection: "row",
@@ -1334,7 +1417,13 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   dialogGrid: {
-    gap: theme.spacing.md
+    gap: theme.spacing.sm
+  },
+  dialogScroll: {
+    flexGrow: 0
+  },
+  dialogScrollContent: {
+    paddingBottom: theme.spacing.xs
   },
   dialogFooter: {
     gap: theme.spacing.sm,

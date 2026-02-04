@@ -513,7 +513,26 @@ app.get("/rooms/:code/summary", authMiddleware, (req, res) => {
     displayName: player.displayName,
     score: computeScore(quiz, answers, player.id)
   }));
-  res.json({ scores, total: quiz.questions.length });
+  const playerNames = new Map(players.map((player) => [player.id, player.displayName]));
+  const answersByQuestion = new Map();
+  answers.forEach((answer) => {
+    if (!answersByQuestion.has(answer.question_id)) {
+      answersByQuestion.set(answer.question_id, []);
+    }
+    answersByQuestion.get(answer.question_id).push({
+      userId: answer.user_id,
+      displayName: playerNames.get(answer.user_id) || "Player",
+      answerIndex: answer.answer_index
+    });
+  });
+  const questions = quiz.questions.map((question) => ({
+    id: question.id,
+    prompt: question.prompt,
+    options: question.options,
+    answer: typeof question.answer === "number" ? question.answer : null,
+    responses: answersByQuestion.get(question.id) || []
+  }));
+  res.json({ scores, total: quiz.questions.length, questions });
 });
 
 io.on("connection", (socket) => {

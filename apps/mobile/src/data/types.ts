@@ -76,6 +76,26 @@ export type ScoreEntry = {
   score: number;
 };
 
+export type SummaryAnswer = {
+  userId: number;
+  displayName: string;
+  answerIndex: number;
+};
+
+export type SummaryQuestion = {
+  id: string;
+  prompt: LocalizedText;
+  options: LocalizedOptions;
+  answer: number | null;
+  responses: SummaryAnswer[];
+};
+
+export type RoomSummary = {
+  scores: ScoreEntry[];
+  total: number;
+  questions: SummaryQuestion[];
+};
+
 export type Badge = {
   id: string;
   title: string;

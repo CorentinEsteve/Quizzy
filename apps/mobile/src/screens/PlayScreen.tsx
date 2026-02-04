@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
@@ -80,6 +79,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const myProgressRatio = Math.min(myProgress / totalQuestions, 1);
   const otherProgressRatio = Math.min(otherProgress / totalQuestions, 1);
 
+
   useEffect(() => {
     if (room.mode !== "sync") return;
     setTimeLeft(syncSeconds);
@@ -140,7 +140,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   if (isAsyncDone) {
     return (
       <View style={containerStyle}>
-        <LinearGradient colors={["#FFFFFF", "#F1F3F8"]} style={StyleSheet.absoluteFill} />
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{quiz.title}</Text>
@@ -164,7 +163,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   if (isSyncDone) {
     return (
       <View style={containerStyle}>
-        <LinearGradient colors={["#FFFFFF", "#F1F3F8"]} style={StyleSheet.absoluteFill} />
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{quiz.title}</Text>
@@ -222,7 +220,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   if (room.mode === "sync" && hasAnsweredCurrent) {
     return (
       <View style={containerStyle}>
-        <LinearGradient colors={["#FFFFFF", "#F1F3F8"]} style={StyleSheet.absoluteFill} />
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{quiz.title}</Text>
@@ -291,7 +288,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
 
   return (
     <View style={containerStyle}>
-      <LinearGradient colors={["#FFFFFF", "#F1F3F8"]} style={StyleSheet.absoluteFill} />
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{quiz.title}</Text>
@@ -416,7 +412,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg
+    paddingBottom: theme.spacing.lg,
+    backgroundColor: "transparent"
   },
   header: {
     flexDirection: "row",

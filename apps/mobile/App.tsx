@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -12,6 +12,7 @@ import {
   useWindowDimensions
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { io, Socket } from "socket.io-client";
 import * as Notifications from "expo-notifications";
@@ -42,6 +43,7 @@ import {
   fetchStats,
   fetchQuizzes,
   fetchLeaderboard,
+  fetchBadges,
   fetchRoom,
   fetchSummary,
   joinRoom,
@@ -49,7 +51,17 @@ import {
   registerUser,
   updateProfile
 } from "./src/api";
-import { LeaderboardResponse, QuizSummary, RoomListItem, RoomState, ScoreEntry, StatsResponse, User } from "./src/data/types";
+import { getRewardForResults } from "./src/data/rewards";
+import {
+  BadgesResponse,
+  LeaderboardResponse,
+  QuizSummary,
+  RoomListItem,
+  RoomState,
+  RoomSummary,
+  StatsResponse,
+  User
+} from "./src/data/types";
 
 const MAIN_PANELS = ["lobby", "account"] as const;
 
@@ -135,14 +147,16 @@ export default function App() {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
-  const [summary, setSummary] = useState<{ scores: ScoreEntry[]; total: number } | null>(null);
+  const [summary, setSummary] = useState<RoomSummary | null>(null);
   const [myRooms, setMyRooms] = useState<RoomListItem[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [recapRoom, setRecapRoom] = useState<RoomState | null>(null);
-  const [recapSummary, setRecapSummary] = useState<{ scores: ScoreEntry[]; total: number } | null>(null);
+  const [recapSummary, setRecapSummary] = useState<RoomSummary | null>(null);
   const [leaderboardGlobal, setLeaderboardGlobal] = useState<LeaderboardResponse | null>(null);
   const [leaderboardLocal, setLeaderboardLocal] = useState<LeaderboardResponse | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [badges, setBadges] = useState<BadgesResponse | null>(null);
+  const [badgesLoading, setBadgesLoading] = useState(false);
   const [notificationQueue, setNotificationQueue] = useState<InAppNotification[]>([]);
   const [activeNotification, setActiveNotification] = useState<InAppNotification | null>(null);
 
@@ -647,6 +661,7 @@ export default function App() {
   useEffect(() => {
     if (!token || !user || panel !== "leaderboard") return;
     setLeaderboardLoading(true);
+    setBadgesLoading(true);
     Promise.all([fetchLeaderboard(token, "global"), fetchLeaderboard(token, "country", user.country)])
       .then(([globalData, localData]) => {
         setLeaderboardGlobal(globalData);
@@ -654,7 +669,16 @@ export default function App() {
       })
       .catch(() => null)
       .finally(() => setLeaderboardLoading(false));
+    fetchBadges(token)
+      .then(setBadges)
+      .catch(() => null)
+      .finally(() => setBadgesLoading(false));
   }, [token, user, panel]);
+
+  const recentReward = useMemo(() => {
+    if (!recapSummary || !user) return null;
+    return getRewardForResults({ scores: recapSummary.scores, total: recapSummary.total, userId: user.id });
+  }, [recapSummary, user]);
 
   useEffect(() => {
     AsyncStorage.setItem("dq_notifications", notificationsEnabled ? "on" : "off").catch(() => null);
@@ -929,6 +953,10 @@ export default function App() {
               global={leaderboardGlobal}
               local={leaderboardLocal}
               loading={leaderboardLoading}
+              recapStats={stats}
+              badges={badges}
+              badgesLoading={badgesLoading}
+              recentReward={recentReward}
               onBack={() => goToLobby(true)}
             />
           </EdgeSwipeBack>
@@ -943,6 +971,7 @@ export default function App() {
           <ResultsScreen
             scores={recapSummary.scores}
             total={recapSummary.total}
+            questions={recapSummary.questions}
             onBack={handleCloseRecap}
             onRematch={handleRematch}
             locale={locale}
@@ -969,14 +998,29 @@ export default function App() {
 
       {!loading && token && room && room.status === "active" && (
         <EdgeSwipeBack enabled onBack={handleLeaveRoom}>
-          <PlayScreen
-            room={room}
-            userId={user?.id ?? 0}
-            selectedAnswers={selectedAnswers}
-            onAnswer={handleAnswer}
-            onExit={handleLeaveRoom}
-            locale={locale}
-          />
+          <View style={styles.gameBackground}>
+            <LinearGradient
+              colors={["#EDF2FA", "#F9FBFF", "#FFFFFF"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <LinearGradient
+              colors={["rgba(94, 124, 255, 0.24)", "rgba(94, 124, 255, 0)"]}
+              start={{ x: 0.0, y: 0.0 }}
+              end={{ x: 0.7, y: 0.7 }}
+              style={styles.gameSweep}
+            />
+            <View style={styles.gameOrb} pointerEvents="none" />
+            <View style={styles.gameOrbAccent} pointerEvents="none" />
+            <View style={styles.gameFog} pointerEvents="none" />
+            <PlayScreen
+              room={room}
+              userId={user?.id ?? 0}
+              selectedAnswers={selectedAnswers}
+              onAnswer={handleAnswer}
+              onExit={handleLeaveRoom}
+              locale={locale}
+            />
+          </View>
         </EdgeSwipeBack>
       )}
 
@@ -985,6 +1029,7 @@ export default function App() {
           <ResultsScreen
             scores={summary.scores}
             total={summary.total}
+            questions={summary.questions}
             onBack={handleLeaveRoom}
             onRematch={room ? handleRematch : undefined}
             locale={locale}
@@ -1029,6 +1074,40 @@ const styles = StyleSheet.create({
   panelRow: {
     flex: 1,
     flexDirection: "row"
+  },
+  gameBackground: {
+    flex: 1,
+    position: "relative"
+  },
+  gameSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  gameOrb: {
+    position: "absolute",
+    top: -220,
+    right: -180,
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: "rgba(94, 124, 255, 0.16)"
+  },
+  gameOrbAccent: {
+    position: "absolute",
+    bottom: -240,
+    left: -200,
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: "rgba(46, 196, 182, 0.12)"
+  },
+  gameFog: {
+    position: "absolute",
+    top: "36%",
+    alignSelf: "center",
+    width: 480,
+    height: 480,
+    borderRadius: 240,
+    backgroundColor: "rgba(255, 255, 255, 0.55)"
   },
   panelPage: {
     flex: 1
