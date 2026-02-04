@@ -1,4 +1,4 @@
-# DualQuizz (Clean Edition)
+# Quizz App (Clean Edition)
 
 A clean, Apple-like take on a DualQuizz-style experience built with React Native (Expo) and Node.js.
 Includes JWT authentication and real-time multiplayer (async) via Socket.io.
