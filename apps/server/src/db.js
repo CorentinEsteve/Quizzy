@@ -94,6 +94,40 @@ export function migrate() {
     db.exec("UPDATE users SET country = 'US' WHERE country IS NULL");
   }
 
+  const hasEmailVerified = userColumns.some((column) => column.name === "email_verified");
+  if (!hasEmailVerified) {
+    db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
+  }
+
+  const hasVerificationToken = userColumns.some((column) => column.name === "verification_token");
+  if (!hasVerificationToken) {
+    db.exec("ALTER TABLE users ADD COLUMN verification_token TEXT");
+  }
+
+  const hasVerificationExpires = userColumns.some(
+    (column) => column.name === "verification_token_expires"
+  );
+  if (!hasVerificationExpires) {
+    db.exec("ALTER TABLE users ADD COLUMN verification_token_expires TEXT");
+  }
+
+  const hasResetToken = userColumns.some((column) => column.name === "password_reset_token");
+  if (!hasResetToken) {
+    db.exec("ALTER TABLE users ADD COLUMN password_reset_token TEXT");
+  }
+
+  const hasResetExpires = userColumns.some(
+    (column) => column.name === "password_reset_expires"
+  );
+  if (!hasResetExpires) {
+    db.exec("ALTER TABLE users ADD COLUMN password_reset_expires TEXT");
+  }
+
+  const hasDeletedAt = userColumns.some((column) => column.name === "deleted_at");
+  if (!hasDeletedAt) {
+    db.exec("ALTER TABLE users ADD COLUMN deleted_at TEXT");
+  }
+
   const badgeCount = db.prepare("SELECT COUNT(*) as count FROM badges").get();
   if (badgeCount.count === 0) {
     const insert = db.prepare("INSERT INTO badges (id, title, description) VALUES (?, ?, ?)");

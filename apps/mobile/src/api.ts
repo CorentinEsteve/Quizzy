@@ -43,6 +43,45 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
   return response.json();
 }
 
+export async function requestEmailVerification(email: string) {
+  const response = await fetch(`${API_BASE_URL}/auth/request-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to send verification");
+  }
+  return response.json();
+}
+
+export async function requestPasswordReset(email: string) {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to request reset");
+  }
+  return response.json();
+}
+
+export async function confirmPasswordReset(payload: { token: string; newPassword: string }) {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to reset password");
+  }
+  return response.json();
+}
+
 export async function fetchQuizzes(): Promise<QuizSummary[]> {
   const response = await fetch(`${API_BASE_URL}/quizzes`);
   if (!response.ok) throw new Error("Unable to load quizzes");
@@ -138,6 +177,17 @@ export async function fetchBadges(token: string) {
   return response.json() as Promise<BadgesResponse>;
 }
 
+export async function fetchMe(token: string) {
+  const response = await fetch(`${API_BASE_URL}/me`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to load profile");
+  }
+  return response.json() as Promise<{ user: User }>;
+}
+
 export async function fetchMyRooms(token: string) {
   const response = await fetch(`${API_BASE_URL}/rooms/mine`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -175,6 +225,81 @@ export async function updateProfile(
   if (!response.ok) {
     const message = await response.json().catch(() => ({}));
     throw new Error(message.error || "Unable to update profile");
+  }
+  return response.json();
+}
+
+export async function deleteAccount(token: string) {
+  const response = await fetch(`${API_BASE_URL}/me`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to delete account");
+  }
+  return response.json();
+}
+
+export async function updatePassword(
+  token: string,
+  payload: { currentPassword: string; newPassword: string }
+) {
+  const response = await fetch(`${API_BASE_URL}/me/password`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to update password");
+  }
+  return response.json();
+}
+
+export async function updateEmail(
+  token: string,
+  payload: { newEmail: string; currentPassword: string }
+) {
+  const response = await fetch(`${API_BASE_URL}/me/email`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to update email");
+  }
+  return response.json();
+}
+
+export async function exportAccountData(token: string) {
+  const response = await fetch(`${API_BASE_URL}/me/export`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to export data");
+  }
+  return response.json();
+}
+
+export async function deactivateAccount(token: string) {
+  const response = await fetch(`${API_BASE_URL}/me/deactivate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to deactivate account");
   }
   return response.json();
 }

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -6,22 +7,59 @@ import bcrypt from "bcryptjs";
 import { db, migrate } from "./db.js";
 import { authMiddleware, signToken, verifyToken } from "./auth.js";
 import { quizzes } from "./quizzes.js";
+import { Resend } from "resend";
 
 migrate();
 
 const app = express();
 const httpServer = createServer(app);
+const corsOrigin = process.env.CORS_ORIGIN || "*";
 const io = new SocketServer(httpServer, {
-  cors: { origin: "*" }
+  cors: { origin: corsOrigin }
 });
 
 const port = process.env.PORT || 3001;
+const APP_NAME = process.env.APP_NAME || "Quiz App";
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@example.com";
+const SUPPORT_URL = process.env.SUPPORT_URL || "";
+const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${port}`;
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || SUPPORT_EMAIL;
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const RESEND_FROM = process.env.RESEND_FROM || EMAIL_FROM;
+const resendClient = EMAIL_PROVIDER === "resend" && RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-app.use(cors());
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
+
+const rateBuckets = new Map();
+function rateLimit({ windowMs, max }) {
+  return (req, res, next) => {
+    const key = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const now = Date.now();
+    const bucket = rateBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+    if (now > bucket.resetAt) {
+      bucket.count = 0;
+      bucket.resetAt = now + windowMs;
+    }
+    bucket.count += 1;
+    rateBuckets.set(key, bucket);
+    if (bucket.count > max) {
+      return res.status(429).json({ error: "Too many requests" });
+    }
+    return next();
+  };
+}
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isValidEmail(value) {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
 }
 
 function generateCode() {
@@ -136,6 +174,15 @@ function getRoomPlayers(roomId) {
        WHERE room_players.room_id = ?`
     )
     .all(roomId);
+}
+
+function isRoomMember(roomId, userId) {
+  const row = db
+    .prepare(
+      `SELECT 1 FROM room_players WHERE room_id = ? AND user_id = ? LIMIT 1`
+    )
+    .get(roomId, userId);
+  return Boolean(row);
 }
 
 function getRoomAnswers(roomId) {
@@ -326,6 +373,124 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+function renderLegalPage(title, bodyHtml) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${title} - ${APP_NAME}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f5f6f8; color: #111827; }
+      main { max-width: 760px; margin: 32px auto; background: #fff; padding: 32px; border-radius: 16px; box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08); }
+      h1 { margin-top: 0; font-size: 28px; }
+      h2 { margin-top: 24px; font-size: 18px; }
+      p, li { line-height: 1.6; color: #374151; }
+      ul { padding-left: 20px; }
+      small { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      ${bodyHtml}
+      <p><small>Last updated: ${new Date().toISOString().slice(0, 10)}</small></p>
+    </main>
+  </body>
+</html>`;
+}
+
+function renderSimplePage(title, bodyHtml) {
+  return renderLegalPage(title, bodyHtml);
+}
+
+function createToken() {
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+}
+
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function sendEmail({ to, subject, html }) {
+  if (!EMAIL_PROVIDER) {
+    throw new Error("EMAIL_PROVIDER not configured");
+  }
+  if (EMAIL_PROVIDER === "resend") {
+    if (!resendClient) {
+      throw new Error("RESEND_API_KEY not configured");
+    }
+    return resendClient.emails.send({
+      from: RESEND_FROM,
+      to,
+      subject,
+      html
+    });
+  }
+  throw new Error("Unsupported email provider");
+}
+app.get("/legal/privacy", (req, res) => {
+  const supportLine = SUPPORT_URL
+    ? `<p>Contact: ${SUPPORT_URL}</p>`
+    : `<p>Contact: ${SUPPORT_EMAIL}</p>`;
+  const html = renderLegalPage(
+    "Privacy Policy",
+    `
+      <p>${APP_NAME} collects the minimum information needed to create your account and run multiplayer matches.</p>
+      <h2>Information we collect</h2>
+      <ul>
+        <li>Email address and display name</li>
+        <li>Country (for leaderboard filtering)</li>
+        <li>Gameplay data such as quiz answers and match results</li>
+        <li>Device notification token if you enable notifications</li>
+      </ul>
+      <h2>How we use data</h2>
+      <ul>
+        <li>Authenticate your account and secure multiplayer rooms</li>
+        <li>Show stats, badges, and leaderboards</li>
+        <li>Send match notifications (optional)</li>
+      </ul>
+      <h2>Your choices</h2>
+      <ul>
+        <li>You can update your profile from the app</li>
+        <li>You can request account deletion from the app</li>
+      </ul>
+      <h2>Contact</h2>
+      ${supportLine}
+    `
+  );
+  res.type("html").send(html);
+});
+
+app.get("/legal/terms", (req, res) => {
+  const supportLine = SUPPORT_URL
+    ? `<p>Contact: ${SUPPORT_URL}</p>`
+    : `<p>Contact: ${SUPPORT_EMAIL}</p>`;
+  const html = renderLegalPage(
+    "Terms of Service",
+    `
+      <p>By using ${APP_NAME}, you agree to play fairly and respect other players.</p>
+      <h2>Accounts</h2>
+      <ul>
+        <li>You are responsible for keeping your login credentials secure.</li>
+        <li>We may suspend accounts that abuse the service.</li>
+      </ul>
+      <h2>Content</h2>
+      <ul>
+        <li>Quiz content is provided for entertainment and education.</li>
+        <li>You may not copy or redistribute content without permission.</li>
+      </ul>
+      <h2>Availability</h2>
+      <ul>
+        <li>We work to keep the service available but do not guarantee uptime.</li>
+      </ul>
+      <h2>Contact</h2>
+      ${supportLine}
+    `
+  );
+  res.type("html").send(html);
+});
+
 app.get("/quizzes", (req, res) => {
   res.json(
     quizzes.map(({ questions, ...rest }) => ({
@@ -335,10 +500,19 @@ app.get("/quizzes", (req, res) => {
   );
 });
 
-app.post("/auth/register", (req, res) => {
+app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) => {
   const { email, password, displayName, country } = req.body;
   if (!email || !password || !displayName) {
     return res.status(400).json({ error: "Missing fields" });
+  }
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  if (String(password).length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
+  if (String(displayName).trim().length < 2) {
+    return res.status(400).json({ error: "Display name is too short" });
   }
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) {
@@ -346,31 +520,67 @@ app.post("/auth/register", (req, res) => {
   }
   const passwordHash = bcrypt.hashSync(password, 10);
   const normalizedCountry = (country || "US").toUpperCase();
+  const verificationToken = createToken();
+  const verificationExpires = addMinutes(new Date(), 60).toISOString();
   const result = db
     .prepare(
-      "INSERT INTO users (email, display_name, password_hash, created_at, country) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO users (email, display_name, password_hash, created_at, country, email_verified, verification_token, verification_token_expires) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(email, displayName, passwordHash, nowIso(), normalizedCountry);
+    .run(
+      email,
+      displayName,
+      passwordHash,
+      nowIso(),
+      normalizedCountry,
+      0,
+      verificationToken,
+      verificationExpires
+    );
   const user = {
     id: result.lastInsertRowid,
     email,
     display_name: displayName,
-    country: normalizedCountry
+    country: normalizedCountry,
+    email_verified: 0
   };
   const token = signToken(user);
-  res.json({ token, user: { id: user.id, email, displayName, country: normalizedCountry } });
+  try {
+    const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
+    sendEmail({
+      to: email,
+      subject: `${APP_NAME} - Verify your email`,
+      html: `<p>Verify your email by opening this link:</p><p>${verifyUrl}</p>`
+    });
+  } catch (err) {
+    // If email is not configured, continue without blocking registration.
+  }
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email,
+      displayName,
+      country: normalizedCountry,
+      emailVerified: false
+    }
+  });
 });
 
-app.post("/auth/login", (req, res) => {
+app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Missing fields" });
   }
   const user = db
-    .prepare("SELECT id, email, display_name, password_hash, country FROM users WHERE email = ?")
+    .prepare(
+      "SELECT id, email, display_name, password_hash, country, email_verified, deleted_at FROM users WHERE email = ?"
+    )
     .get(email);
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
+  if (user.deleted_at) {
+    return res.status(403).json({ error: "Account deactivated" });
   }
   const isValid = bcrypt.compareSync(password, user.password_hash);
   if (!isValid) {
@@ -383,21 +593,227 @@ app.post("/auth/login", (req, res) => {
       id: user.id,
       email: user.email,
       displayName: user.display_name,
-      country: user.country || "US"
+      country: user.country || "US",
+      emailVerified: user.email_verified === 1
     }
   });
 });
 
-app.get("/me", authMiddleware, (req, res) => {
-  res.json({ user: req.user });
+app.post("/auth/reactivate", rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  const user = db
+    .prepare(
+      "SELECT id, email, display_name, password_hash, country, email_verified, deleted_at FROM users WHERE email = ?"
+    )
+    .get(email);
+  if (!user || !user.deleted_at) {
+    return res.status(404).json({ error: "Account not found" });
+  }
+  const isValid = bcrypt.compareSync(password, user.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  db.prepare("UPDATE users SET deleted_at = NULL WHERE id = ?").run(user.id);
+  const token = signToken({ ...user, deleted_at: null });
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      country: user.country || "US",
+      emailVerified: user.email_verified === 1
+    }
+  });
 });
 
-app.patch("/me", authMiddleware, (req, res) => {
+app.post("/auth/request-verify", rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+  const { email } = req.body;
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  const user = db
+    .prepare("SELECT id, email_verified FROM users WHERE email = ?")
+    .get(email);
+  if (!user) {
+    return res.json({ ok: true });
+  }
+  if (user.email_verified === 1) {
+    return res.json({ ok: true });
+  }
+  const verificationToken = createToken();
+  const verificationExpires = addMinutes(new Date(), 60).toISOString();
+  db.prepare(
+    "UPDATE users SET verification_token = ?, verification_token_expires = ? WHERE id = ?"
+  ).run(verificationToken, verificationExpires, user.id);
+  try {
+    const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
+    sendEmail({
+      to: email,
+      subject: `${APP_NAME} - Verify your email`,
+      html: `<p>Verify your email by opening this link:</p><p>${verifyUrl}</p>`
+    });
+  } catch (err) {
+    return res.status(501).json({ error: "Email provider not configured" });
+  }
+  return res.json({ ok: true });
+});
+
+app.get("/auth/verify", (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    return res.status(400).send("Invalid token");
+  }
+  const user = db
+    .prepare(
+      "SELECT id, verification_token_expires FROM users WHERE verification_token = ?"
+    )
+    .get(token);
+  if (!user) {
+    return res.status(404).send("Token not found");
+  }
+  if (user.verification_token_expires) {
+    const expires = new Date(user.verification_token_expires);
+    if (expires.getTime() < Date.now()) {
+      return res.status(410).send("Token expired");
+    }
+  }
+  db.prepare(
+    "UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?"
+  ).run(user.id);
+  const html = renderSimplePage(
+    "Email verified",
+    "<p>Your email has been verified. You can return to the app.</p>"
+  );
+  return res.type("html").send(html);
+});
+
+app.post("/auth/password-reset/request", rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+  const { email } = req.body;
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  if (!user) {
+    return res.json({ ok: true });
+  }
+  const resetToken = createToken();
+  const resetExpires = addMinutes(new Date(), 30).toISOString();
+  db.prepare(
+    "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?"
+  ).run(resetToken, resetExpires, user.id);
+  try {
+    const resetUrl = `${APP_BASE_URL}/auth/reset?token=${resetToken}`;
+    sendEmail({
+      to: email,
+      subject: `${APP_NAME} - Reset your password`,
+      html: `<p>Reset your password by opening this link:</p><p>${resetUrl}</p>`
+    });
+  } catch (err) {
+    return res.status(501).json({ error: "Email provider not configured" });
+  }
+  return res.json({ ok: true });
+});
+
+app.get("/auth/reset", (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    return res.status(400).send("Invalid token");
+  }
+  const html = renderSimplePage(
+    "Reset password",
+    `
+      <form method="POST" action="/auth/reset">
+        <input type="hidden" name="token" value="${token}" />
+        <label>New password</label>
+        <input type="password" name="newPassword" minlength="8" required />
+        <button type="submit">Reset</button>
+      </form>
+    `
+  );
+  return res.type("html").send(html);
+});
+
+app.post("/auth/reset", express.urlencoded({ extended: true }), (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword || String(newPassword).length < 8) {
+    return res.status(400).send("Invalid request");
+  }
+  const user = db
+    .prepare(
+      "SELECT id, password_reset_expires FROM users WHERE password_reset_token = ?"
+    )
+    .get(token);
+  if (!user) {
+    return res.status(404).send("Token not found");
+  }
+  if (user.password_reset_expires) {
+    const expires = new Date(user.password_reset_expires);
+    if (expires.getTime() < Date.now()) {
+      return res.status(410).send("Token expired");
+    }
+  }
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  db.prepare(
+    "UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?"
+  ).run(passwordHash, user.id);
+  const html = renderSimplePage(
+    "Password updated",
+    "<p>Your password has been updated. You can return to the app.</p>"
+  );
+  return res.type("html").send(html);
+});
+
+app.post("/auth/password-reset/confirm", rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword || String(newPassword).length < 8) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  const user = db
+    .prepare(
+      "SELECT id, password_reset_expires FROM users WHERE password_reset_token = ?"
+    )
+    .get(token);
+  if (!user) {
+    return res.status(404).json({ error: "Token not found" });
+  }
+  if (user.password_reset_expires) {
+    const expires = new Date(user.password_reset_expires);
+    if (expires.getTime() < Date.now()) {
+      return res.status(410).json({ error: "Token expired" });
+    }
+  }
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  db.prepare(
+    "UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?"
+  ).run(passwordHash, user.id);
+  return res.json({ ok: true });
+});
+
+app.get("/me", authMiddleware, (req, res) => {
+  const user = db
+    .prepare(
+      "SELECT id, email, display_name as displayName, country, email_verified as emailVerified FROM users WHERE id = ?"
+    )
+    .get(req.user.id);
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+  res.json({ user: { ...user, country: user.country || "US", emailVerified: user.emailVerified === 1 } });
+});
+
+app.patch("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 30 }), (req, res) => {
   const { displayName, country } = req.body;
   const updates = [];
   const params = [];
 
   if (typeof displayName === "string" && displayName.trim()) {
+    if (displayName.trim().length < 2) {
+      return res.status(400).json({ error: "Display name is too short" });
+    }
     updates.push("display_name = ?");
     params.push(displayName.trim());
   }
@@ -420,9 +836,150 @@ app.patch("/me", authMiddleware, (req, res) => {
       id: updated.id,
       email: updated.email,
       displayName: updated.display_name,
-      country: updated.country || "US"
+      country: updated.country || "US",
+      emailVerified: updated.email_verified === 1
     }
   });
+});
+
+app.patch("/me/email", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+  const { newEmail, currentPassword } = req.body;
+  if (!isValidEmail(newEmail) || !currentPassword) {
+    return res.status(400).json({ error: "Invalid email or password" });
+  }
+  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(newEmail.trim());
+  if (existing && existing.id !== req.user.id) {
+    return res.status(409).json({ error: "Email already registered" });
+  }
+  const user = db
+    .prepare("SELECT id, password_hash FROM users WHERE id = ?")
+    .get(req.user.id);
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+  const isValid = bcrypt.compareSync(currentPassword, user.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const verificationToken = createToken();
+  const verificationExpires = addMinutes(new Date(), 60).toISOString();
+  db.prepare(
+    "UPDATE users SET email = ?, email_verified = 0, verification_token = ?, verification_token_expires = ? WHERE id = ?"
+  ).run(newEmail.trim(), verificationToken, verificationExpires, req.user.id);
+  try {
+    const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
+    sendEmail({
+      to: newEmail.trim(),
+      subject: `${APP_NAME} - Verify your email`,
+      html: `<p>Verify your email by opening this link:</p><p>${verifyUrl}</p>`
+    });
+  } catch (err) {
+    // If email is not configured, continue without blocking update.
+  }
+  res.json({ ok: true, email: newEmail.trim(), emailVerified: false });
+});
+
+app.patch("/me/password", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
+
+  const user = db
+    .prepare("SELECT id, password_hash FROM users WHERE id = ?")
+    .get(req.user.id);
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+  const isValid = bcrypt.compareSync(currentPassword, user.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, req.user.id);
+  res.json({ ok: true });
+});
+
+app.get("/me/export", authMiddleware, (req, res) => {
+  const userId = req.user.id;
+  const user = db
+    .prepare(
+      "SELECT id, email, display_name as displayName, country, created_at as createdAt, email_verified as emailVerified, deleted_at as deletedAt FROM users WHERE id = ?"
+    )
+    .get(userId);
+  if (!user) {
+    return res.status(404).json({ error: "User not found" });
+  }
+  const rooms = db
+    .prepare(
+      `SELECT rooms.* FROM rooms
+       JOIN room_players ON room_players.room_id = rooms.id
+       WHERE room_players.user_id = ?
+       ORDER BY rooms.created_at DESC`
+    )
+    .all(userId)
+    .map((room) => ({
+      code: room.code,
+      mode: room.mode,
+      status: room.status,
+      quizId: room.quiz_id,
+      createdAt: room.created_at,
+      startedAt: room.started_at,
+      completedAt: room.completed_at
+    }));
+  const answers = db
+    .prepare(
+      `SELECT question_id as questionId, answer_index as answerIndex, answered_at as answeredAt
+       FROM room_answers WHERE user_id = ?`
+    )
+    .all(userId);
+  const badges = db
+    .prepare(
+      `SELECT badge_id as badgeId, earned_at as earnedAt FROM user_badges WHERE user_id = ?`
+    )
+    .all(userId);
+
+  res.json({
+    user,
+    rooms,
+    answers,
+    badges,
+    exportedAt: nowIso()
+  });
+});
+
+app.delete("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+  const userId = req.user.id;
+  const hostedRooms = db
+    .prepare("SELECT id FROM rooms WHERE host_user_id = ?")
+    .all(userId)
+    .map((row) => row.id);
+
+  const deleteRoomData = db.transaction(() => {
+    if (hostedRooms.length > 0) {
+      const ids = hostedRooms.map(() => "?").join(", ");
+      db.prepare(`DELETE FROM room_answers WHERE room_id IN (${ids})`).run(...hostedRooms);
+      db.prepare(`DELETE FROM room_players WHERE room_id IN (${ids})`).run(...hostedRooms);
+      db.prepare(`DELETE FROM room_rematch WHERE room_id IN (${ids})`).run(...hostedRooms);
+      db.prepare(`DELETE FROM rooms WHERE id IN (${ids})`).run(...hostedRooms);
+    }
+
+    db.prepare("DELETE FROM room_answers WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM room_players WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM user_badges WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  });
+
+  deleteRoomData();
+  res.json({ ok: true });
+});
+
+app.post("/me/deactivate", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+  db.prepare("UPDATE users SET deleted_at = ? WHERE id = ?").run(nowIso(), req.user.id);
+  res.json({ ok: true });
 });
 
 app.get("/leaderboard", authMiddleware, (req, res) => {
@@ -487,6 +1044,9 @@ app.post("/rooms/:code/join", authMiddleware, (req, res) => {
   }
   const players = getRoomPlayers(room.id);
   const exists = players.find((player) => player.id === req.user.id);
+  if (!exists && room.status !== "lobby") {
+    return res.status(409).json({ error: "Room already started" });
+  }
   if (!exists && players.length >= 2) {
     return res.status(409).json({ error: "Room is full" });
   }
@@ -544,6 +1104,9 @@ app.get("/rooms/:code", authMiddleware, (req, res) => {
   const room = getRoomByCode(req.params.code);
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
+  }
+  if (!isRoomMember(room.id, req.user.id)) {
+    return res.status(403).json({ error: "Not a member of this room" });
   }
   res.json(roomState(room));
 });
@@ -618,6 +1181,9 @@ app.get("/rooms/:code/summary", authMiddleware, (req, res) => {
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
   }
+  if (!isRoomMember(room.id, req.user.id)) {
+    return res.status(403).json({ error: "Not a member of this room" });
+  }
   const quiz = getQuiz(room.quiz_id);
   const players = getRoomPlayers(room.id);
   const answers = getRoomAnswers(room.id);
@@ -665,6 +1231,9 @@ io.on("connection", (socket) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
     const room = getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
+    if (!isRoomMember(room.id, user.id)) {
+      return socket.emit("room:error", { error: "Not a member of this room" });
+    }
     socket.join(code);
     io.to(code).emit("room:update", roomState(room));
   });
@@ -673,6 +1242,9 @@ io.on("connection", (socket) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
     const room = getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
+    if (!isRoomMember(room.id, user.id)) {
+      return socket.emit("room:error", { error: "Not a member of this room" });
+    }
     if (room.host_user_id !== user.id) {
       return socket.emit("room:error", { error: "Only the host can start" });
     }
@@ -688,6 +1260,9 @@ io.on("connection", (socket) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
     const room = getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
+    if (!isRoomMember(room.id, user.id)) {
+      return socket.emit("room:error", { error: "Not a member of this room" });
+    }
     if (room.status !== "complete") {
       return socket.emit("room:error", { error: "Room is not complete" });
     }
@@ -720,6 +1295,9 @@ io.on("connection", (socket) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
     const room = getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
+    if (!isRoomMember(room.id, user.id)) {
+      return socket.emit("room:error", { error: "Not a member of this room" });
+    }
     if (room.status !== "active") return;
 
     const existing = db
@@ -728,6 +1306,14 @@ io.on("connection", (socket) => {
       )
       .get(room.id, user.id, questionId);
     if (!existing) {
+      const quiz = getQuiz(room.quiz_id);
+      if (!quiz) return;
+      const question = quiz.questions.find((item) => item.id === questionId);
+      if (!question) return;
+      const maxIndex = question.options?.en?.length ?? 0;
+      if (!Number.isInteger(answerIndex) || answerIndex < -1 || answerIndex >= maxIndex) {
+        return;
+      }
       db.prepare(
         `INSERT INTO room_answers (room_id, user_id, question_id, answer_index, answered_at)
          VALUES (?, ?, ?, ?, ?)`

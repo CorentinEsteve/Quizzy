@@ -42,6 +42,7 @@ export type User = {
   email: string;
   displayName: string;
   country: string;
+  emailVerified?: boolean;
 };
 
 export type RoomState = {

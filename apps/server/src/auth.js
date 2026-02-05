@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dualquizz_dev_secret";
+if (process.env.NODE_ENV === "production" && JWT_SECRET === "dualquizz_dev_secret") {
+  throw new Error("JWT_SECRET must be set in production.");
+}
 const JWT_EXPIRES_IN = "7d";
 
 export function signToken(user) {
@@ -9,7 +12,8 @@ export function signToken(user) {
       sub: user.id,
       email: user.email,
       displayName: user.display_name,
-      country: user.country || "US"
+      country: user.country || "US",
+      emailVerified: user.email_verified === 1 || user.email_verified === true
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -31,7 +35,8 @@ export function authMiddleware(req, res, next) {
       id: payload.sub,
       email: payload.email,
       displayName: payload.displayName,
-      country: payload.country || "US"
+      country: payload.country || "US",
+      emailVerified: payload.emailVerified === true
     };
     return next();
   } catch (err) {

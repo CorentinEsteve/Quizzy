@@ -4,8 +4,11 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
+  Alert,
+  Linking,
   PanResponder,
   Platform,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -16,10 +19,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { io, Socket } from "socket.io-client";
 import * as Notifications from "expo-notifications";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import Constants from "expo-constants";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { API_BASE_URL } from "./src/config";
+import { API_BASE_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
 import { theme } from "./src/theme";
 import { Locale, t } from "./src/i18n";
 import { AuthScreen, AuthMode } from "./src/screens/AuthScreen";
@@ -39,6 +44,10 @@ import {
 } from "./src/components/NotificationBanner";
 import {
   createRoom,
+  deleteAccount,
+  deactivateAccount,
+  exportAccountData,
+  fetchMe,
   fetchMyRooms,
   fetchStats,
   fetchQuizzes,
@@ -48,8 +57,13 @@ import {
   fetchSummary,
   joinRoom,
   loginUser,
+  confirmPasswordReset,
+  requestEmailVerification,
+  requestPasswordReset,
   registerUser,
-  updateProfile
+  updateEmail,
+  updateProfile,
+  updatePassword
 } from "./src/api";
 import { getRewardForResults } from "./src/data/rewards";
 import {
@@ -64,6 +78,8 @@ import {
 } from "./src/data/types";
 
 const MAIN_PANELS = ["lobby", "account"] as const;
+const AUTH_TOKEN_KEY = "dq_auth_token";
+const AUTH_USER_KEY = "dq_auth_user";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -89,6 +105,23 @@ type RoomNotificationPayload = {
   roomCode: string;
   roomStatus: RoomSnapshot["status"];
 };
+
+function buildInviteUrl(code: string, appScheme: string) {
+  return `${appScheme}://room?code=${encodeURIComponent(code)}`;
+}
+
+function parseRoomCodeFromUrl(url: string | null) {
+  if (!url) return null;
+  const queryMatch = /[?&]code=([^&]+)/i.exec(url);
+  if (queryMatch?.[1]) {
+    return decodeURIComponent(queryMatch[1]).trim();
+  }
+  const pathMatch = /\/room\/([^/?#]+)/i.exec(url);
+  if (pathMatch?.[1]) {
+    return decodeURIComponent(pathMatch[1]).trim();
+  }
+  return null;
+}
 
 function normalizeProgressMap(progress: Record<string, number> | undefined) {
   const result: Record<number, number> = {};
@@ -138,6 +171,7 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
+  const [restoringAuth, setRestoringAuth] = useState(true);
   const [panel, setPanel] = useState<"lobby" | "account" | "leaderboard">("lobby");
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -159,6 +193,7 @@ export default function App() {
   const [badgesLoading, setBadgesLoading] = useState(false);
   const [notificationQueue, setNotificationQueue] = useState<InAppNotification[]>([]);
   const [activeNotification, setActiveNotification] = useState<InAppNotification | null>(null);
+  const [pendingJoinCode, setPendingJoinCode] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const roomRef = useRef<RoomState | null>(null);
@@ -173,6 +208,27 @@ export default function App() {
   const panelTranslateX = useRef(new Animated.Value(0));
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      const code = parseRoomCodeFromUrl(url);
+      if (code) setPendingJoinCode(code);
+    };
+    Linking.getInitialURL()
+      .then((url) => {
+        const code = parseRoomCodeFromUrl(url);
+        if (code) setPendingJoinCode(code);
+      })
+      .catch(() => null);
+    const subscription = Linking.addEventListener("url", handleUrl);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingJoinCode || !token || loading || room) return;
+    handleJoinRoom(pendingJoinCode);
+    setPendingJoinCode(null);
+  }, [pendingJoinCode, token, loading, room]);
 
   const panelIndex = MAIN_PANELS.indexOf(panel);
   const activePanelIndex = panelIndex >= 0 ? panelIndex : 0;
@@ -348,15 +404,29 @@ export default function App() {
     const start = Date.now();
     const bootstrap = async () => {
       try {
-        const [onboardingValue, notificationValue] = await Promise.all([
+        const [onboardingValue, notificationValue, storedToken, storedUser] = await Promise.all([
           AsyncStorage.getItem("dq_onboarding"),
-          AsyncStorage.getItem("dq_notifications")
+          AsyncStorage.getItem("dq_notifications"),
+          AsyncStorage.getItem(AUTH_TOKEN_KEY),
+          AsyncStorage.getItem(AUTH_USER_KEY)
         ]);
         if (onboardingValue === "seen") setHasSeenOnboarding(true);
         if (notificationValue === "off") setNotificationsEnabled(false);
+        if (storedToken && storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser) as User;
+            if (parsed?.id && parsed?.email) {
+              setToken(storedToken);
+              setUser(parsed);
+            }
+          } catch {
+            // ignore invalid cached user
+          }
+        }
       } catch {
         // ignore bootstrap errors
       } finally {
+        if (isMounted) setRestoringAuth(false);
         const elapsed = Date.now() - start;
         const remaining = Math.max(0, 1200 - elapsed);
         timeoutId = setTimeout(() => {
@@ -374,9 +444,14 @@ export default function App() {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       appStateRef.current = nextState;
+      if (nextState === "active" && token) {
+        fetchMe(token)
+          .then((data) => setUser(data.user))
+          .catch(() => null);
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (!notificationsEnabled) return;
@@ -497,6 +572,13 @@ export default function App() {
       .catch(() => setRoomError(t(locale, "unableQuizzes")))
       .finally(() => setLoading(false));
   }, [token, locale]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchMe(token)
+      .then((data) => setUser((prev) => (prev ? { ...prev, ...data.user } : data.user)))
+      .catch(() => null);
+  }, [token]);
 
   useEffect(() => {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding) return;
@@ -684,6 +766,12 @@ export default function App() {
     AsyncStorage.setItem("dq_notifications", notificationsEnabled ? "on" : "off").catch(() => null);
   }, [notificationsEnabled]);
 
+  useEffect(() => {
+    if (!token || !user) return;
+    AsyncStorage.setItem(AUTH_TOKEN_KEY, token).catch(() => null);
+    AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(user)).catch(() => null);
+  }, [token, user]);
+
   async function handleAuth(payload: {
     email: string;
     password: string;
@@ -709,10 +797,65 @@ export default function App() {
       if (authMode === "register") {
         setLocale(payload.locale);
       }
+      AsyncStorage.setItem(AUTH_TOKEN_KEY, response.token).catch(() => null);
+      AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user)).catch(() => null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t(locale, "authFailed");
+      if (message.toLowerCase().includes("deactivated")) {
+        setAuthError(t(locale, "accountDeactivated"));
+      } else {
+        setAuthError(message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleReactivate(email: string, password: string) {
+    setAuthError(null);
+    if (!email || !password) {
+      setAuthError(t(locale, "authFailed"));
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/reactivate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      if (!response.ok) {
+        const message = await response.json().catch(() => ({}));
+        throw new Error(message.error || t(locale, "authFailed"));
+      }
+      const data = await response.json();
+      setToken(data.token);
+      setUser(data.user);
+      setPanel("lobby");
+      AsyncStorage.setItem(AUTH_TOKEN_KEY, data.token).catch(() => null);
+      AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user)).catch(() => null);
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword(email: string) {
+    try {
+      await requestPasswordReset(email);
+      setAuthError(t(locale, "resetSent"));
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
+    }
+  }
+
+  async function handleResetConfirm(token: string, newPassword: string) {
+    try {
+      await confirmPasswordReset({ token, newPassword });
+      setAuthError(t(locale, "passwordUpdated"));
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
     }
   }
 
@@ -796,9 +939,92 @@ export default function App() {
     }
   }
 
+  async function handleChangePassword(payload: {
+    currentPassword: string;
+    newPassword: string;
+  }) {
+    if (!token) return;
+    try {
+      await updatePassword(token, payload);
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async function handleChangeEmail(payload: {
+    newEmail: string;
+    currentPassword: string;
+  }) {
+    if (!token) return;
+    const response = await updateEmail(token, payload);
+    if (response?.email) {
+      setUser((prev) =>
+        prev
+          ? { ...prev, email: response.email, emailVerified: response.emailVerified ?? false }
+          : prev
+      );
+    }
+  }
+
+  async function handleExportData() {
+    if (!token) return;
+    const canShare = await Sharing.isAvailableAsync().catch(() => false);
+    if (!canShare) {
+      Alert.alert(t(locale, "exportData"), t(locale, "deleteAccountError"));
+      return;
+    }
+    const data = await exportAccountData(token);
+    const filename = `quiz-app-export-${Date.now()}.json`;
+    const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+    if (!baseDir) {
+      Alert.alert(t(locale, "exportData"), t(locale, "deleteAccountError"));
+      return;
+    }
+    const uri = `${baseDir}${filename}`;
+    await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
+    await Sharing.shareAsync(uri, {
+      mimeType: "application/json",
+      dialogTitle: t(locale, "exportData")
+    });
+  }
+
+  function handleContactSupport() {
+    if (SUPPORT_URL) {
+      Linking.openURL(SUPPORT_URL).catch(() => null);
+      return;
+    }
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => null);
+  }
+
+  async function handleResendVerification() {
+    if (!user?.email) return;
+    try {
+      await requestEmailVerification(user.email);
+      setRoomError(t(locale, "verificationSent"));
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    }
+  }
+
   function handleStartRoom() {
     if (!room) return;
     socketRef.current?.emit("room:start", { code: room.code });
+  }
+
+  async function handleShareInvite() {
+    if (!room) return;
+    const appScheme = Constants.expoConfig?.scheme ?? "dualquizz";
+    const inviteUrl = buildInviteUrl(room.code, appScheme);
+    const message = t(locale, "shareInviteMessage", { url: inviteUrl, code: room.code });
+    try {
+      await Share.share({
+        message,
+        url: inviteUrl,
+        title: t(locale, "shareInviteTitle")
+      });
+    } catch (err) {
+      // Sharing canceled or unavailable; ignore to keep flow smooth.
+    }
   }
 
   function handleAnswer(questionId: string, answerIndex: number) {
@@ -849,6 +1075,69 @@ export default function App() {
     setRecapSummary(null);
     closedRoomCodesRef.current.clear();
     setPanel("lobby");
+    AsyncStorage.removeItem(AUTH_TOKEN_KEY).catch(() => null);
+    AsyncStorage.removeItem(AUTH_USER_KEY).catch(() => null);
+  }
+
+  function handleOpenPrivacy() {
+    Linking.openURL(`${API_BASE_URL}/legal/privacy`).catch(() => null);
+  }
+
+  function handleOpenTerms() {
+    Linking.openURL(`${API_BASE_URL}/legal/terms`).catch(() => null);
+  }
+
+  function handleDeleteAccount() {
+    if (!token) return;
+    Alert.alert(
+      t(locale, "deleteAccountTitle"),
+      t(locale, "deleteAccountBody"),
+      [
+        { text: t(locale, "deleteAccountCancel"), style: "cancel" },
+        {
+          text: t(locale, "deleteAccountConfirm"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount(token);
+              Alert.alert(t(locale, "deleteAccount"), t(locale, "deleteAccountSuccess"));
+              handleLogout();
+            } catch (err) {
+              Alert.alert(t(locale, "deleteAccount"), t(locale, "deleteAccountError"));
+            }
+          }
+        }
+      ],
+      { cancelable: true }
+    );
+  }
+
+  function handleDeactivateAccount() {
+    if (!token) return;
+    Alert.alert(
+      t(locale, "deactivateAccountTitle"),
+      t(locale, "deactivateAccountBody"),
+      [
+        { text: t(locale, "deleteAccountCancel"), style: "cancel" },
+        {
+          text: t(locale, "deactivateAccountConfirm"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deactivateAccount(token);
+              Alert.alert(
+                t(locale, "deactivateAccount"),
+                t(locale, "deactivateAccountSuccess")
+              );
+              handleLogout();
+            } catch (err) {
+              Alert.alert(t(locale, "deactivateAccount"), t(locale, "deleteAccountError"));
+            }
+          }
+        }
+      ],
+      { cancelable: true }
+    );
   }
 
   const lobbyScreen = !loading && token && user && !room && hasSeenOnboarding ? (
@@ -894,11 +1183,14 @@ export default function App() {
         </View>
       )}
 
-      {!token && (
+      {!token && !restoringAuth && (
         <AuthScreen
           mode={authMode}
           onToggleMode={() => setAuthMode(authMode === "login" ? "register" : "login")}
           onSubmit={handleAuth}
+          onForgotPassword={handleForgotPassword}
+          onResetConfirm={handleResetConfirm}
+          onReactivate={handleReactivate}
           error={authError}
           loading={loading}
           locale={locale}
@@ -940,6 +1232,16 @@ export default function App() {
                 onUpdateProfile={handleUpdateProfile}
                 notificationsEnabled={notificationsEnabled}
                 onToggleNotifications={() => setNotificationsEnabled((prev) => !prev)}
+                onOpenPrivacy={handleOpenPrivacy}
+                onOpenTerms={handleOpenTerms}
+                onDeleteAccount={handleDeleteAccount}
+                onDeactivateAccount={handleDeactivateAccount}
+                onChangePassword={handleChangePassword}
+                onChangeEmail={handleChangeEmail}
+                onExportData={handleExportData}
+                onContactSupport={handleContactSupport}
+                onResendVerification={handleResendVerification}
+                emailVerified={user.emailVerified}
               />
             </View>
           </Animated.View>
@@ -995,6 +1297,7 @@ export default function App() {
             user={user}
             onStart={handleStartRoom}
             onLeave={handleLeaveRoom}
+            onShareInvite={handleShareInvite}
             locale={locale}
           />
         </EdgeSwipeBack>

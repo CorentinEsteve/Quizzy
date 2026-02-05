@@ -28,6 +28,9 @@ type Props = {
     locale: Locale;
     country: string;
   }) => void;
+  onForgotPassword: (email: string) => void;
+  onResetConfirm: (token: string, newPassword: string) => void;
+  onReactivate: (email: string, password: string) => void;
   error?: string | null;
   loading?: boolean;
   locale: Locale;
@@ -38,6 +41,9 @@ export function AuthScreen({
   mode,
   onToggleMode,
   onSubmit,
+  onForgotPassword,
+  onResetConfirm,
+  onReactivate,
   error,
   loading,
   locale,
@@ -49,6 +55,13 @@ export function AuthScreen({
   const [displayName, setDisplayName] = useState("");
   const [country, setCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
   const [registerStep, setRegisterStep] = useState(0);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode === "register") {
@@ -153,7 +166,7 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {mode === "login" ? (
+            {mode === "login" && !showReset ? (
               <>
                 <InputField
                   label={t(locale, "email")}
@@ -168,6 +181,94 @@ export function AuthScreen({
                   placeholder="********"
                   secureTextEntry
                 />
+                <Pressable
+                  style={styles.forgotLink}
+                  onPress={() => {
+                    setResetEmail(email);
+                    setShowReset(true);
+                  }}
+                >
+                  <FontAwesome name="unlock-alt" size={12} color={theme.colors.muted} />
+                  <Text style={styles.forgotLinkText}>{t(locale, "forgotPassword")}</Text>
+                </Pressable>
+              </>
+            ) : null}
+
+            {mode === "login" && showReset ? (
+              <>
+                <Text style={styles.subtitle}>{t(locale, "resetPasswordBody")}</Text>
+                <InputField
+                  label={t(locale, "email")}
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  placeholder="you@studio.com"
+                />
+                <View style={styles.resetActions}>
+                  <PrimaryButton
+                    label={t(locale, "sendResetLink")}
+                    variant="primary"
+                    onPress={() => onForgotPassword(resetEmail)}
+                    style={styles.resetPrimaryButton}
+                  />
+                  <PrimaryButton
+                    label={t(locale, "cancel")}
+                    variant="ghost"
+                    onPress={() => setShowReset(false)}
+                    style={styles.resetGhostButton}
+                  />
+                </View>
+                <Pressable
+                  style={styles.inlineLink}
+                  onPress={() => setShowResetConfirm((prev) => !prev)}
+                >
+                  <Text style={styles.inlineLinkText}>{t(locale, "haveResetCode")}</Text>
+                </Pressable>
+                {showResetConfirm ? (
+                  <>
+                    <InputField
+                      label={t(locale, "resetCode")}
+                      value={resetToken}
+                      onChangeText={setResetToken}
+                      placeholder="ABC123"
+                      autoCapitalize="none"
+                    />
+                    <InputField
+                      label={t(locale, "newPassword")}
+                      value={resetNewPassword}
+                      onChangeText={setResetNewPassword}
+                      placeholder="********"
+                      secureTextEntry
+                    />
+                    <InputField
+                      label={t(locale, "confirmPassword")}
+                      value={resetConfirmPassword}
+                      onChangeText={setResetConfirmPassword}
+                      placeholder="********"
+                      secureTextEntry
+                    />
+                    {resetError ? <Text style={styles.error}>{resetError}</Text> : null}
+                    <PrimaryButton
+                      label={t(locale, "resetNow")}
+                      variant="primary"
+                      onPress={() => {
+                        if (!resetToken.trim()) {
+                          setResetError(t(locale, "resetCodeError"));
+                          return;
+                        }
+                        if (resetNewPassword.length < 8) {
+                          setResetError(t(locale, "passwordTooShort"));
+                          return;
+                        }
+                        if (resetNewPassword !== resetConfirmPassword) {
+                          setResetError(t(locale, "passwordMismatch"));
+                          return;
+                        }
+                        setResetError(null);
+                        onResetConfirm(resetToken, resetNewPassword);
+                      }}
+                    />
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -318,7 +419,7 @@ export function AuthScreen({
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            {mode === "login" ? (
+            {mode === "login" && !showReset ? (
               <PrimaryButton
                 label={loading ? t(locale, "pleaseWait") : t(locale, "signIn")}
                 icon="sign-in"
@@ -326,7 +427,7 @@ export function AuthScreen({
                 onPress={() => onSubmit({ email, password, displayName, locale, country })}
                 disabled={!isLoginValid || loading}
               />
-            ) : registerStep === 0 ? (
+            ) : mode === "login" && showReset ? null : registerStep === 0 ? (
               <PrimaryButton
                 label={t(locale, "continue")}
                 icon="arrow-right"
@@ -481,6 +582,46 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
+  },
+  inlineLink: {
+    alignSelf: "flex-start",
+    paddingVertical: theme.spacing.xs
+  },
+  inlineLinkText: {
+    color: theme.colors.accent,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  forgotLink: {
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(11, 14, 20, 0.04)",
+    minHeight: 32
+  },
+  forgotLinkText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  resetActions: {
+    flexDirection: "column",
+    gap: theme.spacing.sm,
+    alignItems: "stretch"
+  },
+  resetPrimaryButton: {
+    alignSelf: "stretch"
+  },
+  resetGhostButton: {
+    alignSelf: "stretch"
   },
   languageRow: {
     gap: theme.spacing.xs

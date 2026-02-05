@@ -13,6 +13,8 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "socket.io": "^4.7.5",
-    "better-sqlite3": "^11.5.0"
+    "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.6.0",
+    "resend": "^4.1.0"
   }
 }

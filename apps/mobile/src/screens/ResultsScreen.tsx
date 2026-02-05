@@ -428,16 +428,14 @@ export function ResultsScreen({
           ) : null}
 
           {reward ? (
-            <LinearGradient colors={["#FFF6E6", "#FFFFFF"]} style={styles.rewardCard}>
+            <LinearGradient colors={["#FFF7EB", "#FFFFFF"]} style={styles.rewardCard}>
               <View style={styles.rewardRow}>
-                <Text style={styles.rewardEmoji}>{reward.emoji}</Text>
+                <View style={styles.rewardBadge}>
+                  <Text style={styles.rewardEmoji}>{reward.emoji}</Text>
+                </View>
                 <View style={styles.rewardCopy}>
-                  <Text style={styles.rewardTitle}>
-                    {t(locale, reward.titleKey)}
-                  </Text>
-                  <Text style={styles.rewardBody}>
-                    {t(locale, reward.descriptionKey)}
-                  </Text>
+                  <Text style={styles.rewardTitle}>{t(locale, reward.titleKey)}</Text>
+                  <Text style={styles.rewardBody}>{t(locale, reward.descriptionKey)}</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -632,9 +630,9 @@ const styles = StyleSheet.create({
   },
   rewardCard: {
     borderRadius: theme.radius.lg,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.35)",
+    borderColor: "rgba(243, 183, 78, 0.22)",
     gap: theme.spacing.sm
   },
   rewardRow: {
@@ -642,23 +640,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.sm
   },
+  rewardBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "rgba(243, 183, 78, 0.18)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(243, 183, 78, 0.35)"
+  },
   rewardEmoji: {
-    fontSize: 24
+    fontSize: 18
   },
   rewardCopy: {
     flex: 1,
-    gap: theme.spacing.xs
+    gap: 2
   },
   rewardTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: 20,
+    fontSize: theme.typography.body,
     fontWeight: "600"
   },
   rewardBody: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body
+    fontSize: theme.typography.small,
+    lineHeight: 18
   },
   resultCard: {
     gap: theme.spacing.xs
@@ -824,14 +835,15 @@ const styles = StyleSheet.create({
   },
   answerRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: theme.spacing.sm
   },
   answerLabel: {
     width: 110,
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    lineHeight: 18
   },
   correctPill: {
     backgroundColor: "rgba(43, 158, 102, 0.14)",
