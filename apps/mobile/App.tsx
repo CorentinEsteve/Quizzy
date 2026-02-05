@@ -8,7 +8,6 @@ import {
   Linking,
   PanResponder,
   Platform,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -68,7 +67,10 @@ import {
   fetchRoom,
   fetchSummary,
   joinRoom,
+  inviteToRoom,
+  cancelRoomInvite,
   loginUser,
+  isAuthError,
   confirmPasswordReset,
   requestEmailVerification,
   requestPasswordReset,
@@ -124,16 +126,13 @@ type RoomSnapshot = {
   players: { id: number; displayName: string }[];
   progressByUserId: Record<number, number>;
   rematchReady: number[];
+  inviteForMe?: boolean;
 };
 
 type RoomNotificationPayload = {
   roomCode: string;
   roomStatus: RoomSnapshot["status"];
 };
-
-function buildInviteUrl(code: string, appScheme: string) {
-  return `${appScheme}://room?code=${encodeURIComponent(code)}`;
-}
 
 function parseRoomCodeFromUrl(url: string | null) {
   if (!url) return null;
@@ -184,7 +183,8 @@ function snapshotFromRoomList(room: RoomListItem): RoomSnapshot {
     totalQuestions: room.quiz.questions?.length ?? 0,
     players: room.players.map((player) => ({ id: player.id, displayName: player.displayName })),
     progressByUserId: normalizeProgressMap(room.progress),
-    rematchReady: room.rematchReady ?? []
+    rematchReady: room.rematchReady ?? [],
+    inviteForMe: room.myRole === "invited"
   };
 }
 
@@ -277,6 +277,7 @@ export default function App() {
   const roomRef = useRef<RoomState | null>(null);
   const recapRef = useRef<RoomState | null>(null);
   const roomSnapshotsRef = useRef<Map<string, RoomSnapshot>>(new Map());
+  const hasLoadedRoomsRef = useRef(false);
   const closedRoomCodesRef = useRef<Set<string>>(new Set());
   const panelIndexRef = useRef(0);
   const swipeEnabledRef = useRef(false);
@@ -453,6 +454,10 @@ export default function App() {
       if (newlyReady.some((id) => id !== user.id)) {
         notify("notificationRematchTitle", "notificationRematchBody", "accent");
       }
+
+      if (snapshot.inviteForMe && !previous.inviteForMe) {
+        notify("notificationInviteTitle", "notificationInviteBody", "accent");
+      }
     },
     [enqueueNotification, locale, notificationsEnabled, openMatchFromPayload, scheduleSystemNotification, user]
   );
@@ -462,6 +467,8 @@ export default function App() {
       const previous = roomSnapshotsRef.current.get(snapshot.code);
       if (previous) {
         notifyRoomSnapshot(snapshot, previous);
+      } else if (snapshot.inviteForMe && hasLoadedRoomsRef.current) {
+        notifyRoomSnapshot(snapshot, { ...snapshot, inviteForMe: false });
       }
       roomSnapshotsRef.current.set(snapshot.code, snapshot);
     },
@@ -534,7 +541,9 @@ export default function App() {
       if (nextState === "active" && token) {
         fetchMe(token)
           .then((data) => setUser(data.user))
-          .catch(() => null);
+          .catch((err) => {
+            handleAuthFailure(err);
+          });
       }
     });
     return () => subscription.remove();
@@ -664,13 +673,19 @@ export default function App() {
     if (!token) return;
     fetchMe(token)
       .then((data) => setUser((prev) => (prev ? { ...prev, ...data.user } : data.user)))
-      .catch(() => null);
+      .catch((err) => {
+        handleAuthFailure(err);
+      });
   }, [token]);
 
   useEffect(() => {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding) return;
     refreshMyRooms();
-    fetchStats(token).then(setStats).catch(() => null);
+    fetchStats(token)
+      .then(setStats)
+      .catch((err) => {
+        handleAuthFailure(err);
+      });
   }, [token, user, panel, hasSeenOnboarding]);
 
   useEffect(() => {
@@ -705,18 +720,30 @@ export default function App() {
                   setDailyHistory(history.history);
                   return data;
                 })
-                .catch(() => data);
+                .catch((err) => {
+                  handleAuthFailure(err);
+                  return data;
+                });
             })
-            .catch(() => data);
+            .catch((err) => {
+              handleAuthFailure(err);
+              return data;
+            });
         }
         return fetchDailyHistory(token, 7)
           .then((history) => {
             setDailyHistory(history.history);
             return data;
           })
-          .catch(() => data);
+          .catch((err) => {
+            handleAuthFailure(err);
+            return data;
+          });
       })
-      .catch(() => null)
+      .catch((err) => {
+        handleAuthFailure(err);
+        return null;
+      })
       .finally(() => setDailyLoading(false));
   }
 
@@ -726,9 +753,18 @@ export default function App() {
       .then((data) => {
         setMyRooms(data.rooms);
         processRoomListSnapshots(data.rooms);
+        if (!hasLoadedRoomsRef.current) {
+          hasLoadedRoomsRef.current = true;
+        }
       })
-      .catch(() => null);
-    fetchStats(token).then(setStats).catch(() => null);
+      .catch((err) => {
+        handleAuthFailure(err);
+      });
+    fetchStats(token)
+      .then(setStats)
+      .catch((err) => {
+        handleAuthFailure(err);
+      });
   }
 
   useEffect(() => {
@@ -825,6 +861,11 @@ export default function App() {
       socket.emit("auth", { token });
     });
 
+    socket.on("auth:error", ({ error }) => {
+      setAuthError(error || t(locale, "authFailed"));
+      handleLogout();
+    });
+
     socket.on("room:update", (state: RoomState) => {
       processRoomSnapshot(snapshotFromRoomState(state));
       if (
@@ -840,7 +881,9 @@ export default function App() {
         if (state.status === "complete") {
           fetchSummary(token, state.code)
             .then((data) => setSummary(data))
-            .catch(() => null);
+            .catch((err) => {
+              handleAuthFailure(err);
+            });
         }
         return;
       }
@@ -859,6 +902,11 @@ export default function App() {
     });
 
     socket.on("room:error", ({ error }) => {
+      if (error && String(error).toLowerCase().includes("unauthorized")) {
+        setAuthError(t(locale, "authFailed"));
+        handleLogout();
+        return;
+      }
       setRoomError(error || "Room error");
     });
 
@@ -877,11 +925,15 @@ export default function App() {
         setLeaderboardGlobal(globalData);
         setLeaderboardLocal(localData);
       })
-      .catch(() => null)
+      .catch((err) => {
+        handleAuthFailure(err);
+      })
       .finally(() => setLeaderboardLoading(false));
     fetchBadges(token)
       .then(setBadges)
-      .catch(() => null)
+      .catch((err) => {
+        handleAuthFailure(err);
+      })
       .finally(() => setBadgesLoading(false));
   }, [token, user, panel]);
 
@@ -1002,10 +1054,14 @@ export default function App() {
     try {
       const results = await fetchDailyResults(token);
       setDailyResults(results);
-      const history = await fetchDailyHistory(token, 7).catch(() => null);
+      const history = await fetchDailyHistory(token, 7).catch((err) => {
+        handleAuthFailure(err);
+        return null;
+      });
       if (history) setDailyHistory(history.history);
       setDailyStage("results");
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     } finally {
       setDailyLoading(false);
@@ -1042,11 +1098,15 @@ export default function App() {
       if (result.completed) {
         const results = await fetchDailyResults(token);
         setDailyResults(results);
-        const history = await fetchDailyHistory(token, 7).catch(() => null);
+        const history = await fetchDailyHistory(token, 7).catch((err) => {
+          handleAuthFailure(err);
+          return null;
+        });
         if (history) setDailyHistory(history.history);
         setDailyStage("results");
       }
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     } finally {
       setDailySubmitting(false);
@@ -1069,6 +1129,7 @@ export default function App() {
       closedRoomCodesRef.current.delete(state.code);
       socketRef.current?.emit("room:join", { code: state.code });
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     } finally {
       setLoading(false);
@@ -1087,6 +1148,7 @@ export default function App() {
       closedRoomCodesRef.current.delete(state.code);
       socketRef.current?.emit("room:join", { code: state.code });
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     } finally {
       setLoading(false);
@@ -1108,6 +1170,7 @@ export default function App() {
       closedRoomCodesRef.current.delete(code);
       socketRef.current?.emit("room:join", { code });
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     }
   }
@@ -1123,6 +1186,7 @@ export default function App() {
       closedRoomCodesRef.current.delete(state.code);
       socketRef.current?.emit("room:join", { code: state.code });
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     }
   }
@@ -1133,6 +1197,7 @@ export default function App() {
       const response = await updateProfile(token, payload);
       setUser(response.user);
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     }
   }
@@ -1145,6 +1210,7 @@ export default function App() {
     try {
       await updatePassword(token, payload);
     } catch (err) {
+      if (handleAuthFailure(err)) return;
       throw err;
     }
   }
@@ -1154,13 +1220,18 @@ export default function App() {
     currentPassword: string;
   }) {
     if (!token) return;
-    const response = await updateEmail(token, payload);
-    if (response?.email) {
-      setUser((prev) =>
-        prev
-          ? { ...prev, email: response.email, emailVerified: response.emailVerified ?? false }
-          : prev
-      );
+    try {
+      const response = await updateEmail(token, payload);
+      if (response?.email) {
+        setUser((prev) =>
+          prev
+            ? { ...prev, email: response.email, emailVerified: response.emailVerified ?? false }
+            : prev
+        );
+      }
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
+      throw err;
     }
   }
 
@@ -1171,19 +1242,24 @@ export default function App() {
       Alert.alert(t(locale, "exportData"), t(locale, "deleteAccountError"));
       return;
     }
-    const data = await exportAccountData(token);
-    const filename = `quiz-app-export-${Date.now()}.json`;
-    const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
-    if (!baseDir) {
+    try {
+      const data = await exportAccountData(token);
+      const filename = `quiz-app-export-${Date.now()}.json`;
+      const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!baseDir) {
+        Alert.alert(t(locale, "exportData"), t(locale, "deleteAccountError"));
+        return;
+      }
+      const uri = `${baseDir}${filename}`;
+      await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/json",
+        dialogTitle: t(locale, "exportData")
+      });
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
       Alert.alert(t(locale, "exportData"), t(locale, "deleteAccountError"));
-      return;
     }
-    const uri = `${baseDir}${filename}`;
-    await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
-    await Sharing.shareAsync(uri, {
-      mimeType: "application/json",
-      dialogTitle: t(locale, "exportData")
-    });
   }
 
   function handleContactSupport() {
@@ -1209,19 +1285,29 @@ export default function App() {
     socketRef.current?.emit("room:start", { code: room.code });
   }
 
-  async function handleShareInvite() {
-    if (!room) return;
-    const appScheme = Constants.expoConfig?.scheme ?? "qwizzy";
-    const inviteUrl = buildInviteUrl(room.code, appScheme);
-    const message = t(locale, "shareInviteMessage", { code: room.code });
+  async function handleInviteOpponent(opponentId: number, opponentName: string) {
+    if (!token || !room) return;
+    setRoomError(null);
     try {
-      await Share.share({
-        message,
-        url: inviteUrl,
-        title: t(locale, "shareInviteTitle")
-      });
+      const updated = await inviteToRoom(token, room.code, opponentId);
+      setRoom(updated);
+      setRoomError(t(locale, "inviteSentToast", { name: opponentName }));
     } catch (err) {
-      // Sharing canceled or unavailable; ignore to keep flow smooth.
+      if (handleAuthFailure(err)) return;
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    }
+  }
+
+  async function handleCancelInvite(opponentId: number, opponentName: string) {
+    if (!token || !room) return;
+    setRoomError(null);
+    try {
+      const updated = await cancelRoomInvite(token, room.code, opponentId);
+      setRoom(updated);
+      setRoomError(t(locale, "inviteCancelledToast", { name: opponentName }));
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
     }
   }
 
@@ -1281,6 +1367,14 @@ export default function App() {
     AsyncStorage.removeItem(AUTH_USER_KEY).catch(() => null);
   }
 
+  function handleAuthFailure(err: unknown) {
+    if (isAuthError(err)) {
+      handleLogout();
+      return true;
+    }
+    return false;
+  }
+
   function handleOpenPrivacy() {
     Linking.openURL(`${API_BASE_URL}/legal/privacy`).catch(() => null);
   }
@@ -1305,6 +1399,7 @@ export default function App() {
               Alert.alert(t(locale, "deleteAccount"), t(locale, "deleteAccountSuccess"));
               handleLogout();
             } catch (err) {
+              if (handleAuthFailure(err)) return;
               Alert.alert(t(locale, "deleteAccount"), t(locale, "deleteAccountError"));
             }
           }
@@ -1333,6 +1428,7 @@ export default function App() {
               );
               handleLogout();
             } catch (err) {
+              if (handleAuthFailure(err)) return;
               Alert.alert(t(locale, "deactivateAccount"), t(locale, "deleteAccountError"));
             }
           }
@@ -1400,6 +1496,7 @@ export default function App() {
           onResetConfirm={handleResetConfirm}
           onReactivate={handleReactivate}
           error={authError}
+          onClearError={() => setAuthError(null)}
           loading={loading}
           locale={locale}
           onChangeLocale={setLocale}
@@ -1534,7 +1631,9 @@ export default function App() {
             user={user}
             onStart={handleStartRoom}
             onLeave={handleLeaveRoom}
-            onShareInvite={handleShareInvite}
+            onInviteOpponent={handleInviteOpponent}
+            onCancelInvite={handleCancelInvite}
+            recentOpponents={stats?.opponents ?? []}
             locale={locale}
           />
         </EdgeSwipeBack>

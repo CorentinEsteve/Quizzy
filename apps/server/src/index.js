@@ -400,18 +400,27 @@ async function getRoomByCode(code) {
   return data;
 }
 
-async function getRoomPlayers(roomId) {
+const ACTIVE_ROLES = new Set(["host", "guest"]);
+
+async function getRoomPlayers(roomId, options = {}) {
+  const { includeInvited = false } = options;
   const { data } = await supabase
     .from("room_players")
     .select("user_id, role, users(display_name)")
     .eq("room_id", roomId);
-  return (
+  const players =
     data?.map((row) => ({
       id: row.user_id,
       displayName: row.users?.display_name ?? "Player",
       role: row.role
-    })) || []
-  );
+    })) || [];
+  if (includeInvited) return players;
+  return players.filter((player) => ACTIVE_ROLES.has(player.role));
+}
+
+async function getRoomInvites(roomId) {
+  const players = await getRoomPlayers(roomId, { includeInvited: true });
+  return players.filter((player) => player.role === "invited");
 }
 
 async function isRoomMember(roomId, userId) {
@@ -603,6 +612,7 @@ async function awardBadgesForRoom(roomId) {
 async function roomState(room) {
   const quiz = await getQuiz(room.quiz_id);
   const players = await getRoomPlayers(room.id);
+  const invites = await getRoomInvites(room.id);
   const answers = await getRoomAnswers(room.id);
   const rematch = await getRoomRematch(room.id);
   const statsByUser = computeAnswerStats(quiz, answers);
@@ -623,6 +633,7 @@ async function roomState(room) {
     currentIndex: room.current_index,
     quiz,
     players,
+    invites,
     progress,
     rematchReady: rematch.map((item) => item.userId)
   };
@@ -1537,32 +1548,133 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
   }
-  const players = await getRoomPlayers(room.id);
-  const exists = players.find((player) => player.id === req.user.id);
-  if (!exists && room.status !== "lobby") {
+  const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
+  const players = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
+  const existing = allPlayers.find((player) => player.id === req.user.id);
+  const isInvited = existing?.role === "invited";
+  if (!existing && room.status !== "lobby") {
     return res.status(409).json({ error: "Room already started" });
   }
-  if (!exists && players.length >= 2) {
+  if (isInvited && room.status !== "lobby") {
+    return res.status(409).json({ error: "Room already started" });
+  }
+  if (!existing && players.length >= 2) {
     return res.status(409).json({ error: "Room is full" });
   }
-  if (!exists) {
+  if (isInvited && players.length >= 2) {
+    return res.status(409).json({ error: "Room is full" });
+  }
+  if (!existing) {
     await supabase.from("room_players").insert({
       room_id: room.id,
       user_id: req.user.id,
       role: "guest",
       joined_at: nowIso()
     });
+  } else if (isInvited && room.status === "lobby") {
+    await supabase
+      .from("room_players")
+      .update({ role: "guest", joined_at: nowIso() })
+      .eq("room_id", room.id)
+      .eq("user_id", req.user.id);
   }
+  res.json(await roomState(room));
+});
+
+app.post("/rooms/:code/invite", authMiddleware, async (req, res) => {
+  const room = await getRoomByCode(req.params.code);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  if (room.host_user_id !== req.user.id) {
+    return res.status(403).json({ error: "Only the host can invite" });
+  }
+  if (room.status !== "lobby") {
+    return res.status(409).json({ error: "Room already started" });
+  }
+
+  const inviteeId = Number(req.body?.userId);
+  if (!Number.isInteger(inviteeId) || inviteeId <= 0) {
+    return res.status(400).json({ error: "Invalid invite target" });
+  }
+  if (inviteeId === req.user.id) {
+    return res.status(400).json({ error: "Cannot invite yourself" });
+  }
+
+  const { data: invitee } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", inviteeId)
+    .maybeSingle();
+  if (!invitee) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
+  const activePlayers = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
+  const existing = allPlayers.find((player) => player.id === inviteeId);
+
+  if (activePlayers.length >= 2 && !existing) {
+    return res.status(409).json({ error: "Room is full" });
+  }
+  if (!existing) {
+    await supabase.from("room_players").insert({
+      room_id: room.id,
+      user_id: inviteeId,
+      role: "invited",
+      joined_at: nowIso()
+    });
+  }
+
+  res.json(await roomState(room));
+});
+
+app.delete("/rooms/:code/invite/:userId", authMiddleware, async (req, res) => {
+  const room = await getRoomByCode(req.params.code);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  if (room.host_user_id !== req.user.id) {
+    return res.status(403).json({ error: "Only the host can cancel invites" });
+  }
+  if (room.status !== "lobby") {
+    return res.status(409).json({ error: "Room already started" });
+  }
+
+  const inviteeId = Number(req.params.userId);
+  if (!Number.isInteger(inviteeId) || inviteeId <= 0) {
+    return res.status(400).json({ error: "Invalid invite target" });
+  }
+
+  const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
+  const existing = allPlayers.find((player) => player.id === inviteeId);
+  if (!existing) {
+    return res.status(404).json({ error: "Invite not found" });
+  }
+  if (existing.role !== "invited") {
+    return res.status(409).json({ error: "Player already joined" });
+  }
+
+  await supabase
+    .from("room_players")
+    .delete()
+    .eq("room_id", room.id)
+    .eq("user_id", inviteeId)
+    .eq("role", "invited");
+
   res.json(await roomState(room));
 });
 
 app.get("/rooms/mine", authMiddleware, async (req, res) => {
   const { data: rows } = await supabase
     .from("room_players")
-    .select("rooms(*)")
+    .select("rooms(*), role")
     .eq("user_id", req.user.id)
     .order("created_at", { ascending: false, foreignTable: "rooms" });
   const rooms = (rows || []).map((row) => row.rooms).filter(Boolean);
+  const roleByRoomId = new Map(
+    (rows || []).map((row) => [row.rooms?.id, row.role]).filter((item) => item[0])
+  );
 
   const result = await Promise.all(
     rooms.map(async (room) => {
@@ -1589,7 +1701,8 @@ app.get("/rooms/mine", authMiddleware, async (req, res) => {
         progress,
         players,
         scores,
-        rematchReady: rematch.map((item) => item.userId)
+        rematchReady: rematch.map((item) => item.userId),
+        myRole: roleByRoomId.get(room.id) || "guest"
       };
     })
   );
@@ -1628,7 +1741,9 @@ app.get("/stats", authMiddleware, async (req, res) => {
     const opponent = players.find((player) => player.id !== req.user.id);
     const rematch = await getRoomRematch(room.id);
     if (rematch.length > 0) rematchRequested += 1;
-    if (!opponent) return;
+    if (!opponent) {
+      continue;
+    }
 
     const key = String(opponent.id);
     if (!perOpponent[key]) {

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -330,9 +331,13 @@ export function LobbyScreen({
           status: nextStatus
         }
       : null;
-  const recapTotal = recapStats
-    ? recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties
-    : 0;
+  const recapData =
+    recapStats ??
+    ({
+      totals: { wins: 0, losses: 0, ties: 0, ongoing: 0, rematchRequested: 0 },
+      opponents: []
+    } as StatsResponse);
+  const recapTotal = recapData.totals.wins + recapData.totals.losses + recapData.totals.ties;
 
   return (
     <View style={styles.page}>
@@ -376,14 +381,20 @@ export function LobbyScreen({
           </View>
         </View>
 
-        {recapStats ? (
-          <Pressable
-            onPress={onOpenPersonalLeaderboard}
-            accessibilityRole="button"
-            accessibilityLabel={t(locale, "openPersonalLeaderboard")}
-            hitSlop={6}
-          >
-            <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
+        <Pressable
+          onPress={recapStats ? onOpenPersonalLeaderboard : undefined}
+          accessibilityRole={recapStats ? "button" : undefined}
+          accessibilityLabel={recapStats ? t(locale, "openPersonalLeaderboard") : undefined}
+          hitSlop={6}
+        >
+            <GlassCard
+              style={[
+                styles.introCard,
+                styles.recapCard,
+                !recapStats && styles.recapCardMuted
+              ]}
+              accent={theme.colors.primary}
+            >
               <View style={styles.recapHeader}>
                 <View style={styles.recapHeaderText}>
                   <View style={styles.recapTitleRow}>
@@ -392,25 +403,27 @@ export function LobbyScreen({
                   </View>
                   <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
                 </View>
-                <View style={styles.recapHeaderAction}>
-                  <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
-                  <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
-                </View>
+                {recapStats ? (
+                  <View style={styles.recapHeaderAction}>
+                    <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
+                    <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
+                  </View>
+                ) : null}
               </View>
             <View style={styles.recapRow}>
               <View style={[styles.recapPill, styles.recapPillWin]}>
                 <FontAwesome name="trophy" size={12} color={theme.colors.success} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.wins}</Text>
+                <Text style={styles.recapPillValue}>{recapData.totals.wins}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalWins")}</Text>
               </View>
               <View style={[styles.recapPill, styles.recapPillLoss]}>
                 <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.losses}</Text>
+                <Text style={styles.recapPillValue}>{recapData.totals.losses}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalLosses")}</Text>
               </View>
               <View style={[styles.recapPill, styles.recapPillTie]}>
                 <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.ties}</Text>
+                <Text style={styles.recapPillValue}>{recapData.totals.ties}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
               </View>
             </View>
@@ -421,21 +434,21 @@ export function LobbyScreen({
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarWin,
-                      { flex: recapStats.totals.wins }
+                      { flex: recapData.totals.wins }
                     ]}
                   />
                   <View
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarLoss,
-                      { flex: recapStats.totals.losses }
+                      { flex: recapData.totals.losses }
                     ]}
                   />
                   <View
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarTie,
-                      { flex: recapStats.totals.ties }
+                      { flex: recapData.totals.ties }
                     ]}
                   />
                 </>
@@ -451,10 +464,10 @@ export function LobbyScreen({
               </Text>
             </View>
           </View>
-            {recapStats.opponents.length > 0 ? (
+            {recapData.opponents.length > 0 ? (
               <View style={styles.opponentList}>
                 <Text style={styles.recapMetaLabel}>{t(locale, "topRivals")}</Text>
-                {recapStats.opponents.slice(0, 2).map((opponent) => (
+                {recapData.opponents.slice(0, 2).map((opponent) => (
                   <View key={opponent.opponentId} style={styles.opponentRow}>
                     <Text style={styles.opponentName}>
                       {t(locale, "vsLabel")} {opponent.opponentName}
@@ -484,8 +497,7 @@ export function LobbyScreen({
               </View>
             ) : null}
             </GlassCard>
-          </Pressable>
-        ) : null}
+        </Pressable>
 
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
@@ -766,6 +778,21 @@ export function LobbyScreen({
             </Text>
           </View>
         ) : null}
+
+        <GlassCard style={styles.shareCard}>
+          <View style={styles.shareRow}>
+            <View style={styles.shareTextBlock}>
+              <Text style={styles.shareTitle}>Share the app!</Text>
+              <Text style={styles.shareSubtitle}>Scan to download and play together.</Text>
+            </View>
+            <View style={styles.shareArrowWrap}>
+              <FontAwesome name="long-arrow-right" size={20} color={theme.colors.muted} />
+            </View>
+            <View style={styles.qrWrap}>
+              <Image source={require("../../assets/qrcode.png")} style={styles.qrImage} />
+            </View>
+          </View>
+        </GlassCard>
 
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
           <GlassCard style={styles.introCard}>
@@ -1448,6 +1475,48 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     lineHeight: 18
   },
+  shareCard: {
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg
+  },
+  shareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md
+  },
+  shareTextBlock: {
+    flex: 1
+  },
+  shareTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600"
+  },
+  shareSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    marginTop: theme.spacing.xs
+  },
+  shareArrowWrap: {
+    paddingHorizontal: theme.spacing.xs
+  },
+  qrWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qrImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 12
+  },
   recapHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1489,6 +1558,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 20,
     elevation: 6
+  },
+  recapCardMuted: {
+    opacity: 0.75
   },
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",

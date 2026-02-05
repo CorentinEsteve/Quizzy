@@ -1,5 +1,5 @@
-import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
@@ -7,24 +7,53 @@ import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { Pill } from "../components/Pill";
 import { PrimaryButton } from "../components/PrimaryButton";
-import { RoomState, User } from "../data/types";
+import { RoomState, StatsResponse, User } from "../data/types";
 
 type Props = {
   room: RoomState;
   user: User;
   onStart: () => void;
   onLeave: () => void;
-  onShareInvite: () => void;
+  onInviteOpponent: (opponentId: number, opponentName: string) => void;
+  onCancelInvite: (opponentId: number, opponentName: string) => void;
+  recentOpponents: StatsResponse["opponents"];
   locale: Locale;
 };
 
-export function RoomLobbyScreen({ room, user, onStart, onLeave, onShareInvite, locale }: Props) {
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase()).join("");
+}
+
+export function RoomLobbyScreen({
+  room,
+  user,
+  onStart,
+  onLeave,
+  onInviteOpponent,
+  onCancelInvite,
+  recentOpponents,
+  locale
+}: Props) {
   const insets = useSafeAreaInsets();
   const isHost = room.players.find((player) => player.id === user.id)?.role === "host";
   const hasBothPlayers = room.players.length >= 2;
   const canStart = isHost && hasBothPlayers;
   const footerInset = theme.spacing.lg + insets.bottom + 96;
   const modeLabel = room.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel");
+  const [invitedOpponentIds, setInvitedOpponentIds] = useState<number[]>([]);
+  const invitedByRoom = useMemo(
+    () => new Set((room.invites || []).map((invite) => invite.id)),
+    [room.invites]
+  );
+
+  const availableOpponents = useMemo(() => {
+    const activeIds = new Set(room.players.map((player) => player.id));
+    return recentOpponents.filter((opponent) => !activeIds.has(opponent.opponentId));
+  }, [recentOpponents, room.players]);
+  const visibleOpponents = availableOpponents.slice(0, 4);
+  const canInviteOpponents = isHost && !hasBothPlayers;
+  const canManageInvites = isHost;
 
   return (
     <View style={styles.page}>
@@ -64,17 +93,88 @@ export function RoomLobbyScreen({ room, user, onStart, onLeave, onShareInvite, l
         </View>
 
         <GlassCard style={styles.card}>
-          <Text style={styles.sectionTitle}>{t(locale, "inviteCode")}</Text>
+          <Text style={styles.sectionTitle}>{t(locale, "inviteFriendTitle")}</Text>
+          <Text style={styles.sectionMeta}>{t(locale, "inviteFriendBody")}</Text>
           <Text style={styles.code}>{room.code}</Text>
-          <View style={styles.inviteActions}>
-            <PrimaryButton
-              label={t(locale, "shareInvite")}
-              icon="share-alt"
-              variant="ghost"
-              onPress={onShareInvite}
-              style={styles.inviteButton}
-            />
-          </View>
+          {isHost ? (
+            <View style={styles.inviteRecentBlock}>
+              <View style={styles.inviteRecentHeader}>
+                <Text style={styles.inviteRecentTitle}>{t(locale, "inviteRecentTitle")}</Text>
+                {!canInviteOpponents ? (
+                  <Text style={styles.inviteRoomFull}>{t(locale, "inviteRoomFull")}</Text>
+                ) : null}
+              </View>
+              {visibleOpponents.length > 0 ? (
+                <View style={styles.inviteOpponentList}>
+                  {visibleOpponents.map((opponent) => {
+                    const invited =
+                      invitedByRoom.has(opponent.opponentId) ||
+                      invitedOpponentIds.includes(opponent.opponentId);
+                    const actionLabel = invited ? t(locale, "inviteCancel") : t(locale, "inviteAction");
+                    const canPress = invited ? canManageInvites : canInviteOpponents;
+                    return (
+                      <View key={opponent.opponentId} style={styles.inviteOpponentRow}>
+                        <View style={styles.inviteAvatar}>
+                          <Text style={styles.inviteAvatarText}>
+                            {initials(opponent.opponentName)}
+                          </Text>
+                        </View>
+                        <View style={styles.inviteOpponentInfo}>
+                          <Text style={styles.inviteOpponentName} numberOfLines={1}>
+                            {opponent.opponentName}
+                          </Text>
+                          <Text style={styles.inviteOpponentMeta}>
+                            {t(locale, "inviteRecord", {
+                              wins: opponent.wins,
+                              losses: opponent.losses,
+                              ties: opponent.ties
+                            })}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => {
+                            if (!canPress) return;
+                            if (invited) {
+                              onCancelInvite(opponent.opponentId, opponent.opponentName);
+                              setInvitedOpponentIds((prev) =>
+                                prev.filter((id) => id !== opponent.opponentId)
+                              );
+                              return;
+                            }
+                            onInviteOpponent(opponent.opponentId, opponent.opponentName);
+                            setInvitedOpponentIds((prev) =>
+                              prev.includes(opponent.opponentId)
+                                ? prev
+                                : [...prev, opponent.opponentId]
+                            );
+                          }}
+                          disabled={!canPress}
+                          style={({ pressed }) => [
+                            styles.inviteAction,
+                            invited && styles.inviteActionCancel,
+                            !canPress && styles.inviteActionDisabled,
+                            pressed && canPress && styles.inviteActionPressed
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.inviteActionText,
+                              invited && styles.inviteActionTextCancel,
+                              !canPress && styles.inviteActionTextDisabled
+                            ]}
+                          >
+                            {actionLabel}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.inviteEmpty}>{t(locale, "inviteRecentEmpty")}</Text>
+              )}
+            </View>
+          ) : null}
         </GlassCard>
 
         <GlassCard style={styles.card}>
@@ -93,7 +193,10 @@ export function RoomLobbyScreen({ room, user, onStart, onLeave, onShareInvite, l
             </View>
           ))}
           {room.players.length < 2 ? (
-            <Text style={styles.waiting}>{t(locale, "lobbyWaiting")}</Text>
+            <View style={styles.openSeat}>
+              <Text style={styles.openSeatLabel}>{t(locale, "openSeat")}</Text>
+              <Pill label={t(locale, "readyToInvite")} />
+            </View>
           ) : null}
         </GlassCard>
 
@@ -110,7 +213,7 @@ export function RoomLobbyScreen({ room, user, onStart, onLeave, onShareInvite, l
               ? isHost
                 ? t(locale, "lobbyStartHint")
                 : t(locale, "lobbyGuestHint")
-              : t(locale, "lobbyWaiting")}
+              : t(locale, "lobbyInviteHint")}
           </Text>
         </GlassCard>
 
@@ -257,7 +360,20 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
-  waiting: {
+  openSeat: {
+    marginTop: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(11, 14, 20, 0.03)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  openSeatLabel: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
@@ -269,12 +385,105 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2
   },
-  inviteActions: {
-    marginTop: theme.spacing.xs
+  inviteRecentBlock: {
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm
   },
-  inviteButton: {
-    alignSelf: "flex-start",
-    paddingHorizontal: theme.spacing.sm
+  inviteRecentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  inviteRecentTitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
+  inviteRoomFull: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  inviteOpponentList: {
+    gap: theme.spacing.sm
+  },
+  inviteOpponentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    borderRadius: 16,
+    backgroundColor: "rgba(11, 14, 20, 0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.08)"
+  },
+  inviteAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(94, 124, 255, 0.16)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  inviteAvatarText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "700"
+  },
+  inviteOpponentInfo: {
+    flex: 1,
+    gap: 2
+  },
+  inviteOpponentName: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  inviteOpponentMeta: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  inviteAction: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.12)"
+  },
+  inviteActionPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }]
+  },
+  inviteActionDisabled: {
+    backgroundColor: "rgba(11, 14, 20, 0.03)",
+    borderColor: "rgba(11, 14, 20, 0.06)"
+  },
+  inviteActionCancel: {
+    backgroundColor: "rgba(235, 87, 87, 0.12)",
+    borderColor: "rgba(235, 87, 87, 0.28)"
+  },
+  inviteActionText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  inviteActionTextCancel: {
+    color: theme.colors.danger
+  },
+  inviteActionTextDisabled: {
+    color: theme.colors.muted
+  },
+  inviteEmpty: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
   },
   metaRow: {
     flexDirection: "row",

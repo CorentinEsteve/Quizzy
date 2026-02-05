@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -32,6 +32,7 @@ type Props = {
   onResetConfirm: (token: string, newPassword: string) => void;
   onReactivate: (email: string, password: string) => void;
   error?: string | null;
+  onClearError?: () => void;
   loading?: boolean;
   locale: Locale;
   onChangeLocale: (locale: Locale) => void;
@@ -45,6 +46,7 @@ export function AuthScreen({
   onResetConfirm,
   onReactivate,
   error,
+  onClearError,
   loading,
   locale,
   onChangeLocale
@@ -62,12 +64,23 @@ export function AuthScreen({
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const errorRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (mode === "register") {
       setRegisterStep(0);
     }
   }, [mode]);
+
+  useEffect(() => {
+    errorRef.current = error ?? null;
+  }, [error]);
+
+  useEffect(() => {
+    if (errorRef.current) {
+      onClearError?.();
+    }
+  }, [mode, showReset, onClearError]);
 
   const isEmailValid = useMemo(() => email.trim().includes("@") && email.trim().includes("."), [email]);
   const isPasswordValid = useMemo(() => password.length >= 8, [password]);

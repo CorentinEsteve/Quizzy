@@ -52,6 +52,7 @@ export type RoomState = {
   currentIndex: number;
   quiz: Quiz;
   players: { id: number; displayName: string; role: string }[];
+  invites?: { id: number; displayName: string; role: string }[];
   progress: { userId: number; answeredCount: number; correctCount?: number; wrongCount?: number }[];
   rematchReady: number[];
 };
@@ -117,6 +118,7 @@ export type RoomListItem = {
   players: { id: number; displayName: string; role: string }[];
   scores: Record<string, number>;
   rematchReady: number[];
+  myRole?: string;
 };
 
 export type RoomsResponse = {

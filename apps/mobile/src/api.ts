@@ -15,6 +15,33 @@ import {
 
 export type AuthResponse = { token: string; user: User };
 
+export class AuthError extends Error {
+  constructor(message = "Unauthorized") {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
+export function isAuthError(error: unknown): error is AuthError {
+  if (error instanceof AuthError) return true;
+  if (!error || typeof error !== "object") return false;
+  return "name" in error && (error as { name?: string }).name === "AuthError";
+}
+
+async function ensureOk(
+  response: Response,
+  fallbackMessage: string,
+  options?: { authRequired?: boolean }
+) {
+  if (response.ok) return;
+  const message = await response.json().catch(() => ({}));
+  const isAuth = response.status === 401 || response.status === 403;
+  if (options?.authRequired && isAuth) {
+    throw new AuthError(message.error || "Unauthorized");
+  }
+  throw new Error(message.error || fallbackMessage);
+}
+
 export async function registerUser(
   email: string,
   password: string,
@@ -26,10 +53,7 @@ export async function registerUser(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, displayName, country })
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to register");
-  }
+  await ensureOk(response, "Unable to register");
   return response.json();
 }
 
@@ -39,10 +63,7 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password })
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to login");
-  }
+  await ensureOk(response, "Unable to login");
   return response.json();
 }
 
@@ -52,10 +73,7 @@ export async function requestEmailVerification(email: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email })
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to send verification");
-  }
+  await ensureOk(response, "Unable to send verification");
   return response.json();
 }
 
@@ -65,10 +83,7 @@ export async function requestPasswordReset(email: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email })
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to request reset");
-  }
+  await ensureOk(response, "Unable to request reset");
   return response.json();
 }
 
@@ -78,16 +93,13 @@ export async function confirmPasswordReset(payload: { token: string; newPassword
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to reset password");
-  }
+  await ensureOk(response, "Unable to reset password");
   return response.json();
 }
 
 export async function fetchQuizzes(): Promise<QuizSummary[]> {
   const response = await fetch(`${API_BASE_URL}/quizzes`);
-  if (!response.ok) throw new Error("Unable to load quizzes");
+  await ensureOk(response, "Unable to load quizzes");
   return response.json();
 }
 
@@ -96,10 +108,7 @@ export async function fetchDailyQuiz(token: string): Promise<DailyQuizStatus> {
   const response = await fetch(`${API_BASE_URL}/daily-quiz?tzOffset=${tzOffset}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load daily quiz");
-  }
+  await ensureOk(response, "Unable to load daily quiz", { authRequired: true });
   return response.json();
 }
 
@@ -116,10 +125,7 @@ export async function submitDailyAnswer(
     },
     body: JSON.stringify({ ...payload, tzOffset })
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to submit answer");
-  }
+  await ensureOk(response, "Unable to submit answer", { authRequired: true });
   return response.json() as Promise<{
     date: string;
     answeredCount: number;
@@ -135,10 +141,7 @@ export async function fetchDailyResults(token: string): Promise<DailyQuizResults
   const response = await fetch(`${API_BASE_URL}/daily-quiz/results?tzOffset=${tzOffset}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load daily results");
-  }
+  await ensureOk(response, "Unable to load daily results", { authRequired: true });
   return response.json();
 }
 
@@ -146,10 +149,7 @@ export async function fetchDailyHistory(token: string, limit = 7) {
   const response = await fetch(`${API_BASE_URL}/daily-quiz/history?limit=${limit}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load daily history");
-  }
+  await ensureOk(response, "Unable to load daily history", { authRequired: true });
   return response.json() as Promise<{ history: DailyQuizHistoryItem[] }>;
 }
 
@@ -170,10 +170,7 @@ export async function createRoom(
     },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to create room");
-  }
+  await ensureOk(response, "Unable to create room", { authRequired: true });
   return response.json() as Promise<RoomState>;
 }
 
@@ -185,10 +182,31 @@ export async function joinRoom(token: string, code: string) {
       Authorization: `Bearer ${token}`
     }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to join room");
-  }
+  await ensureOk(response, "Unable to join room", { authRequired: true });
+  return response.json() as Promise<RoomState>;
+}
+
+export async function inviteToRoom(token: string, code: string, userId: number) {
+  const response = await fetch(`${API_BASE_URL}/rooms/${code}/invite`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ userId })
+  });
+  await ensureOk(response, "Unable to send invite", { authRequired: true });
+  return response.json() as Promise<RoomState>;
+}
+
+export async function cancelRoomInvite(token: string, code: string, userId: number) {
+  const response = await fetch(`${API_BASE_URL}/rooms/${code}/invite/${userId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  await ensureOk(response, "Unable to cancel invite", { authRequired: true });
   return response.json() as Promise<RoomState>;
 }
 
@@ -196,10 +214,7 @@ export async function fetchRoom(token: string, code: string) {
   const response = await fetch(`${API_BASE_URL}/rooms/${code}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load room");
-  }
+  await ensureOk(response, "Unable to load room", { authRequired: true });
   return response.json() as Promise<RoomState>;
 }
 
@@ -207,10 +222,7 @@ export async function fetchSummary(token: string, code: string): Promise<RoomSum
   const response = await fetch(`${API_BASE_URL}/rooms/${code}/summary`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load summary");
-  }
+  await ensureOk(response, "Unable to load summary", { authRequired: true });
   return response.json();
 }
 
@@ -224,10 +236,7 @@ export async function fetchLeaderboard(
   const response = await fetch(`${API_BASE_URL}/leaderboard?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load leaderboard");
-  }
+  await ensureOk(response, "Unable to load leaderboard", { authRequired: true });
   return response.json() as Promise<LeaderboardResponse>;
 }
 
@@ -235,10 +244,7 @@ export async function fetchBadges(token: string) {
   const response = await fetch(`${API_BASE_URL}/badges`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load badges");
-  }
+  await ensureOk(response, "Unable to load badges", { authRequired: true });
   return response.json() as Promise<BadgesResponse>;
 }
 
@@ -246,10 +252,7 @@ export async function fetchMe(token: string) {
   const response = await fetch(`${API_BASE_URL}/me`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load profile");
-  }
+  await ensureOk(response, "Unable to load profile", { authRequired: true });
   return response.json() as Promise<{ user: User }>;
 }
 
@@ -257,10 +260,7 @@ export async function fetchMyRooms(token: string) {
   const response = await fetch(`${API_BASE_URL}/rooms/mine`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load rooms");
-  }
+  await ensureOk(response, "Unable to load rooms", { authRequired: true });
   return response.json() as Promise<RoomsResponse>;
 }
 
@@ -268,10 +268,7 @@ export async function fetchStats(token: string) {
   const response = await fetch(`${API_BASE_URL}/stats`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to load stats");
-  }
+  await ensureOk(response, "Unable to load stats", { authRequired: true });
   return response.json() as Promise<StatsResponse>;
 }
 
@@ -287,10 +284,7 @@ export async function updateProfile(
     },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to update profile");
-  }
+  await ensureOk(response, "Unable to update profile", { authRequired: true });
   return response.json();
 }
 
@@ -301,10 +295,7 @@ export async function deleteAccount(token: string) {
       Authorization: `Bearer ${token}`
     }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to delete account");
-  }
+  await ensureOk(response, "Unable to delete account", { authRequired: true });
   return response.json();
 }
 
@@ -320,10 +311,7 @@ export async function updatePassword(
     },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to update password");
-  }
+  await ensureOk(response, "Unable to update password", { authRequired: true });
   return response.json();
 }
 
@@ -339,10 +327,7 @@ export async function updateEmail(
     },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to update email");
-  }
+  await ensureOk(response, "Unable to update email", { authRequired: true });
   return response.json();
 }
 
@@ -350,10 +335,7 @@ export async function exportAccountData(token: string) {
   const response = await fetch(`${API_BASE_URL}/me/export`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to export data");
-  }
+  await ensureOk(response, "Unable to export data", { authRequired: true });
   return response.json();
 }
 
@@ -362,9 +344,6 @@ export async function deactivateAccount(token: string) {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) {
-    const message = await response.json().catch(() => ({}));
-    throw new Error(message.error || "Unable to deactivate account");
-  }
+  await ensureOk(response, "Unable to deactivate account", { authRequired: true });
   return response.json();
 }

@@ -85,3 +85,4 @@ apps/server/data/*.sqlite-*
 *.pem
 *.key
 *.crt
+*.p8
