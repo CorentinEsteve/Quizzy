@@ -20,7 +20,7 @@ const io = new SocketServer(httpServer, {
 
 const port = process.env.PORT || 3001;
 const APP_NAME = process.env.APP_NAME || "Quiz App";
-const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@example.com";
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "onboarding@resend.dev";
 const SUPPORT_URL = process.env.SUPPORT_URL || "";
 const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${port}`;
 const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "";

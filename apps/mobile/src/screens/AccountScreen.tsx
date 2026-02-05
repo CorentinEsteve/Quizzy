@@ -499,10 +499,10 @@ export function AccountScreen({
             <View style={styles.profileText}>
               <Text style={styles.name}>{user.displayName}</Text>
               <Text style={styles.email}>{user.email}</Text>
-              <View style={styles.profileMetaRow}>
-                <Text style={styles.country}>
-                  {t(locale, "country")}: {countryLabel(locale, user.country || "US")}
-                </Text>
+              <Text style={styles.country}>
+                {t(locale, "country")}: {countryLabel(locale, user.country || "US")}
+              </Text>
+              <View style={styles.profileBadgeRow}>
                 <Pill
                   label={
                     emailVerified
@@ -514,11 +514,12 @@ export function AccountScreen({
               </View>
             </View>
           </View>
+          <View style={styles.profileDivider} />
           <PrimaryButton
             label={t(locale, "editProfile")}
             variant="ghost"
             icon="pencil"
-            style={[styles.compactButton, styles.buttonBreathing]}
+            style={[styles.compactButton, styles.profileButton]}
             onPress={() => {
               setDisplayName(user.displayName);
               setCountry(user.country || "US");
@@ -706,19 +707,13 @@ const styles = StyleSheet.create({
   },
   profileText: {
     flex: 1,
-    gap: theme.spacing.xs
-  },
-  profileMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-    alignItems: "center"
+    gap: 4
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(94, 124, 255, 0.15)",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(94, 124, 255, 0.18)",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -737,12 +732,23 @@ const styles = StyleSheet.create({
   email: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body
+    fontSize: theme.typography.small
   },
   country: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  profileBadgeRow: {
+    marginTop: theme.spacing.xs
+  },
+  profileDivider: {
+    height: 1,
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    marginTop: theme.spacing.sm
+  },
+  profileButton: {
+    marginTop: theme.spacing.sm
   },
   sectionCard: {
     gap: theme.spacing.xs
