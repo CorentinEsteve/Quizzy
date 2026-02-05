@@ -53,6 +53,16 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function withTimeout(promise, label, ms = 8000) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Timeout: ${label}`));
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 function isValidEmail(value) {
   if (typeof value !== "string") return false;
   const trimmed = value.trim();
@@ -1722,10 +1732,21 @@ app.get("/rooms/:code", authMiddleware, async (req, res) => {
 });
 
 app.get("/stats", authMiddleware, async (req, res) => {
-  const { data: roomRows } = await supabase
-    .from("room_players")
-    .select("rooms(*)")
-    .eq("user_id", req.user.id);
+  const requestId = Math.random().toString(36).slice(2, 8);
+  const start = Date.now();
+  let roomRows = null;
+  try {
+    const response = await withTimeout(
+      supabase.from("room_players").select("rooms(*)").eq("user_id", req.user.id),
+      "stats rooms query",
+      8000
+    );
+    roomRows = response?.data || [];
+  } catch (err) {
+    console.warn(`[stats:${requestId}] rooms query failed`, err);
+    return res.status(504).json({ error: "Stats query timed out" });
+  }
+
   const rooms = (roomRows || []).map((row) => row.rooms).filter(Boolean);
 
   const perOpponent = {};
@@ -1736,12 +1757,27 @@ app.get("/stats", authMiddleware, async (req, res) => {
   let rematchRequested = 0;
 
   for (const room of rooms) {
+    if (!room) continue;
     if (room.status === "active") ongoing += 1;
-    const players = await getRoomPlayers(room.id);
-    const opponent = players.find((player) => player.id !== req.user.id);
-    const rematch = await getRoomRematch(room.id);
+    let players = [];
+    let rematch = [];
+    let quiz = null;
+    let answers = [];
+    try {
+      [players, rematch, quiz, answers] = await Promise.all([
+        withTimeout(getRoomPlayers(room.id), `stats players ${room.id}`, 8000),
+        withTimeout(getRoomRematch(room.id), `stats rematch ${room.id}`, 8000),
+        withTimeout(getQuiz(room.quiz_id), `stats quiz ${room.quiz_id}`, 8000),
+        withTimeout(getRoomAnswers(room.id), `stats answers ${room.id}`, 8000)
+      ]);
+    } catch (err) {
+      console.warn(`[stats:${requestId}] room ${room.id} skipped`, err);
+      continue;
+    }
+
     if (rematch.length > 0) rematchRequested += 1;
-    if (!opponent) continue;
+    const opponent = players.find((player) => player.id !== req.user.id);
+    if (!opponent || !quiz) continue;
 
     const key = String(opponent.id);
     if (!perOpponent[key]) {
@@ -1755,8 +1791,6 @@ app.get("/stats", authMiddleware, async (req, res) => {
     }
 
     if (room.status === "complete") {
-      const quiz = await getQuiz(room.quiz_id);
-      const answers = await getRoomAnswers(room.id);
       const myScore = computeScore(quiz, answers, req.user.id);
       const theirScore = computeScore(quiz, answers, opponent.id);
       if (myScore > theirScore) {
@@ -1782,6 +1816,11 @@ app.get("/stats", authMiddleware, async (req, res) => {
     },
     opponents: Object.values(perOpponent)
   });
+
+  const elapsed = Date.now() - start;
+  if (elapsed > 3000) {
+    console.log(`[stats:${requestId}] completed in ${elapsed}ms`);
+  }
 });
 
 app.get("/rooms/:code/summary", authMiddleware, async (req, res) => {
