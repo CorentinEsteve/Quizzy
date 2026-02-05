@@ -1741,9 +1741,7 @@ app.get("/stats", authMiddleware, async (req, res) => {
     const opponent = players.find((player) => player.id !== req.user.id);
     const rematch = await getRoomRematch(room.id);
     if (rematch.length > 0) rematchRequested += 1;
-    if (!opponent) {
-      continue;
-    }
+    if (!opponent) continue;
 
     const key = String(opponent.id);
     if (!perOpponent[key]) {

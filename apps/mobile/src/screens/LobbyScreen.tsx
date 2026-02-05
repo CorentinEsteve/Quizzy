@@ -331,13 +331,9 @@ export function LobbyScreen({
           status: nextStatus
         }
       : null;
-  const recapData =
-    recapStats ??
-    ({
-      totals: { wins: 0, losses: 0, ties: 0, ongoing: 0, rematchRequested: 0 },
-      opponents: []
-    } as StatsResponse);
-  const recapTotal = recapData.totals.wins + recapData.totals.losses + recapData.totals.ties;
+  const recapTotal = recapStats
+    ? recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties
+    : 0;
 
   return (
     <View style={styles.page}>
@@ -381,20 +377,14 @@ export function LobbyScreen({
           </View>
         </View>
 
-        <Pressable
-          onPress={recapStats ? onOpenPersonalLeaderboard : undefined}
-          accessibilityRole={recapStats ? "button" : undefined}
-          accessibilityLabel={recapStats ? t(locale, "openPersonalLeaderboard") : undefined}
-          hitSlop={6}
-        >
-            <GlassCard
-              style={[
-                styles.introCard,
-                styles.recapCard,
-                !recapStats && styles.recapCardMuted
-              ]}
-              accent={theme.colors.primary}
-            >
+        {recapStats ? (
+          <Pressable
+            onPress={onOpenPersonalLeaderboard}
+            accessibilityRole="button"
+            accessibilityLabel={t(locale, "openPersonalLeaderboard")}
+            hitSlop={6}
+          >
+            <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
               <View style={styles.recapHeader}>
                 <View style={styles.recapHeaderText}>
                   <View style={styles.recapTitleRow}>
@@ -403,27 +393,25 @@ export function LobbyScreen({
                   </View>
                   <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
                 </View>
-                {recapStats ? (
-                  <View style={styles.recapHeaderAction}>
-                    <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
-                    <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
-                  </View>
-                ) : null}
+                <View style={styles.recapHeaderAction}>
+                  <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
+                  <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
+                </View>
               </View>
             <View style={styles.recapRow}>
               <View style={[styles.recapPill, styles.recapPillWin]}>
                 <FontAwesome name="trophy" size={12} color={theme.colors.success} />
-                <Text style={styles.recapPillValue}>{recapData.totals.wins}</Text>
+                <Text style={styles.recapPillValue}>{recapStats.totals.wins}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalWins")}</Text>
               </View>
               <View style={[styles.recapPill, styles.recapPillLoss]}>
                 <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
-                <Text style={styles.recapPillValue}>{recapData.totals.losses}</Text>
+                <Text style={styles.recapPillValue}>{recapStats.totals.losses}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalLosses")}</Text>
               </View>
               <View style={[styles.recapPill, styles.recapPillTie]}>
                 <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
-                <Text style={styles.recapPillValue}>{recapData.totals.ties}</Text>
+                <Text style={styles.recapPillValue}>{recapStats.totals.ties}</Text>
                 <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
               </View>
             </View>
@@ -434,21 +422,21 @@ export function LobbyScreen({
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarWin,
-                      { flex: recapData.totals.wins }
+                      { flex: recapStats.totals.wins }
                     ]}
                   />
                   <View
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarLoss,
-                      { flex: recapData.totals.losses }
+                      { flex: recapStats.totals.losses }
                     ]}
                   />
                   <View
                     style={[
                       styles.recapBarSegment,
                       styles.recapBarTie,
-                      { flex: recapData.totals.ties }
+                      { flex: recapStats.totals.ties }
                     ]}
                   />
                 </>
@@ -464,10 +452,10 @@ export function LobbyScreen({
               </Text>
             </View>
           </View>
-            {recapData.opponents.length > 0 ? (
+            {recapStats.opponents.length > 0 ? (
               <View style={styles.opponentList}>
                 <Text style={styles.recapMetaLabel}>{t(locale, "topRivals")}</Text>
-                {recapData.opponents.slice(0, 2).map((opponent) => (
+                {recapStats.opponents.slice(0, 2).map((opponent) => (
                   <View key={opponent.opponentId} style={styles.opponentRow}>
                     <Text style={styles.opponentName}>
                       {t(locale, "vsLabel")} {opponent.opponentName}
@@ -497,7 +485,8 @@ export function LobbyScreen({
               </View>
             ) : null}
             </GlassCard>
-        </Pressable>
+          </Pressable>
+        ) : null}
 
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
@@ -1558,9 +1547,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 20,
     elevation: 6
-  },
-  recapCardMuted: {
-    opacity: 0.75
   },
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",
