@@ -1,6 +1,6 @@
-# Quizz App (Clean Edition)
+# Qwizzy
 
-A clean, Apple-like take on a DualQuizz-style experience built with React Native (Expo) and Node.js.
+A clean, Apple-like take on a duel quiz experience built with React Native (Expo) and Node.js.
 Includes JWT authentication and real-time multiplayer (sync + async) via Socket.io.
 
 ## Structure

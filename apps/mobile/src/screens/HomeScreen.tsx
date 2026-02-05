@@ -30,7 +30,7 @@ export function HomeScreen({ quizzes, onSelect }: Props) {
           end={{ x: 1, y: 1 }}
           style={styles.heroBackdrop}
         />
-        <Text style={styles.eyebrow}>DualQuizz Clean</Text>
+        <Text style={styles.eyebrow}>Qwizzy</Text>
         <Text style={styles.title}>Two minds. One elegant rhythm.</Text>
         <Text style={styles.body}>
           Play refined, focused quizzes designed for calm competition and delightfully clear results.

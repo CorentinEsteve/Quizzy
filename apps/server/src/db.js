@@ -7,7 +7,7 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, "dualquizz.db");
+const dbPath = path.join(dataDir, "qwizzy.db");
 export const db = new Database(dbPath);
 
 export function migrate() {

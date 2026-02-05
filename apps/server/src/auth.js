@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dualquizz_dev_secret";
-if (process.env.NODE_ENV === "production" && JWT_SECRET === "dualquizz_dev_secret") {
+const JWT_SECRET = process.env.JWT_SECRET || "qwizzy_dev_secret";
+if (process.env.NODE_ENV === "production" && JWT_SECRET === "qwizzy_dev_secret") {
   throw new Error("JWT_SECRET must be set in production.");
 }
 const JWT_EXPIRES_IN = "7d";

@@ -518,6 +518,7 @@ export function AccountScreen({
             label={t(locale, "editProfile")}
             variant="ghost"
             icon="pencil"
+            style={[styles.compactButton, styles.buttonBreathing]}
             onPress={() => {
               setDisplayName(user.displayName);
               setCountry(user.country || "US");
@@ -527,21 +528,26 @@ export function AccountScreen({
         </GlassCard>
 
         {!emailVerified ? (
-          <GlassCard style={styles.sectionCard}>
+          <View style={styles.sectionBlock}>
             <Text style={styles.sectionTitle}>{t(locale, "verifyEmail")}</Text>
-            <Text style={styles.sectionBody}>{t(locale, "verifyEmailBody")}</Text>
-            <PrimaryButton
-              label={t(locale, "resendVerification")}
-              icon="paper-plane"
-              variant="ghost"
-              onPress={onResendVerification}
-            />
-          </GlassCard>
+            <GlassCard style={[styles.sectionCard, styles.listCard]}>
+              <View style={styles.verifyContent}>
+                <Text style={styles.sectionBody}>{t(locale, "verifyEmailBody")}</Text>
+                <PrimaryButton
+                  label={t(locale, "resendVerification")}
+                  icon="paper-plane"
+                  variant="ghost"
+                  style={[styles.compactButton, styles.buttonBreathing]}
+                  onPress={onResendVerification}
+                />
+              </View>
+            </GlassCard>
+          </View>
         ) : null}
 
-        <GlassCard style={styles.sectionCard}>
+        <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{t(locale, "preferences")}</Text>
-          <View style={styles.listGroup}>
+          <GlassCard style={[styles.sectionCard, styles.listCard]}>
             <View style={[styles.listRow, styles.listRowDivider]}>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>{t(locale, "notifications")}</Text>
@@ -567,12 +573,12 @@ export function AccountScreen({
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
-          </View>
-        </GlassCard>
+          </GlassCard>
+        </View>
 
-        <GlassCard style={styles.sectionCard}>
+        <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{t(locale, "account")}</Text>
-          <View style={styles.listGroup}>
+          <GlassCard style={[styles.sectionCard, styles.listCard]}>
             <Pressable
               style={[styles.listRow, styles.listRowDivider]}
               onPress={() => setRoute("security")}
@@ -626,26 +632,28 @@ export function AccountScreen({
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
-          </View>
-        </GlassCard>
+          </GlassCard>
+        </View>
 
-        <GlassCard style={styles.sectionCard}>
+        <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{t(locale, "activity")}</Text>
-          <View style={styles.statRow}>
-            <Text style={styles.sectionBody}>{t(locale, "statsBody")}</Text>
-            <Text style={styles.sectionMetaStrong}>0</Text>
-          </View>
-          <View style={[styles.statRow, styles.subtleTop]}>
-            <Text style={styles.sectionBody}>{t(locale, "statsMeta")}</Text>
-            <Text style={styles.sectionMetaStrong}>0</Text>
-          </View>
-          <View style={[styles.statRow, styles.subtleTop]}>
-            <Text style={styles.sectionBody}>{t(locale, "sessionsBody")}</Text>
-            <Text style={styles.sectionMetaStrong}>
-              {new Date().toLocaleDateString()}
-            </Text>
-          </View>
-        </GlassCard>
+          <GlassCard style={[styles.sectionCard, styles.listCard]}>
+            <View style={[styles.listRow, styles.listRowDivider]}>
+              <Text style={styles.rowTitle}>{t(locale, "statsBody")}</Text>
+              <Text style={styles.sectionMetaStrong}>0</Text>
+            </View>
+            <View style={[styles.listRow, styles.listRowDivider]}>
+              <Text style={styles.rowTitle}>{t(locale, "statsMeta")}</Text>
+              <Text style={styles.sectionMetaStrong}>0</Text>
+            </View>
+            <View style={styles.listRow}>
+              <Text style={styles.rowTitle}>{t(locale, "sessionsBody")}</Text>
+              <Text style={styles.sectionMetaStrong}>
+                {new Date().toLocaleDateString()}
+              </Text>
+            </View>
+          </GlassCard>
+        </View>
 
         <View style={styles.footer}>
           <PrimaryButton
@@ -739,12 +747,6 @@ const styles = StyleSheet.create({
   sectionCard: {
     gap: theme.spacing.xs
   },
-  listGroup: {
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)"
-  },
   listRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -752,11 +754,21 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.6)"
+    backgroundColor: "rgba(255, 255, 255, 0.45)"
   },
   listRowDivider: {
     borderBottomWidth: 1,
     borderBottomColor: "rgba(11, 14, 20, 0.08)"
+  },
+  sectionBlock: {
+    gap: theme.spacing.xs
+  },
+  listCard: {
+    padding: 0
+  },
+  verifyContent: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs
   },
   rowText: {
     flex: 1,
@@ -786,6 +798,14 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(11, 14, 20, 0.08)",
     marginVertical: theme.spacing.sm
+  },
+  compactButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    minHeight: 38
+  },
+  buttonBreathing: {
+    marginTop: theme.spacing.sm
   },
   sectionTitle: {
     color: theme.colors.muted,

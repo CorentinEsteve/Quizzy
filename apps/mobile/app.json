@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "DualQuizz Clean",
-    "slug": "dualquizz-clean",
-    "scheme": "dualquizz",
+    "name": "Qwizzy",
+    "slug": "qwizzy",
+    "scheme": "qwizzy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

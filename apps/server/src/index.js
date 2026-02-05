@@ -641,12 +641,25 @@ app.get("/legal/privacy", (req, res) => {
       <ul>
         <li>Authenticate your account and secure multiplayer rooms</li>
         <li>Show stats, badges, and leaderboards</li>
+        <li>Send verification and password reset emails</li>
         <li>Send match notifications (optional)</li>
+      </ul>
+      <h2>Third-party services</h2>
+      <ul>
+        <li>Email delivery: Resend</li>
+        <li>Crash reporting: if enabled, we may collect crash diagnostics</li>
+      </ul>
+      <h2>Data retention</h2>
+      <ul>
+        <li>You can delete your account at any time in the app</li>
+        <li>Deactivated accounts can be reactivated on sign-in</li>
+        <li>Account deletion removes profile data and game history</li>
       </ul>
       <h2>Your choices</h2>
       <ul>
         <li>You can update your profile from the app</li>
         <li>You can request account deletion from the app</li>
+        <li>You can export your account data from the app</li>
       </ul>
       <h2>Contact</h2>
       ${supportLine}
@@ -667,6 +680,7 @@ app.get("/legal/terms", (req, res) => {
       <ul>
         <li>You are responsible for keeping your login credentials secure.</li>
         <li>We may suspend accounts that abuse the service.</li>
+        <li>You can deactivate or delete your account in the app.</li>
       </ul>
       <h2>Content</h2>
       <ul>
@@ -1708,5 +1722,5 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(port, () => {
-  console.log(`DualQuizz API running on port ${port}`);
+  console.log(`Qwizzy API running on port ${port}`);
 });
