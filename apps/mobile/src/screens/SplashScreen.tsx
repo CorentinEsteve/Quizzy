@@ -137,9 +137,8 @@ export function SplashScreen({ locale }: Props) {
 
       <View style={[styles.content, { paddingTop: insets.top + theme.spacing.xl }]}>
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>{t(locale, "appName")}</Text>
-          <Text style={styles.title}>{t(locale, "splashTagline")}</Text>
-          <Text style={styles.subtitle}>{t(locale, "splashCaption")}</Text>
+          <Text style={styles.title}>{t(locale, "appName")}</Text>
+          <Text style={styles.subtitle}>{t(locale, "splashTagline")}</Text>
         </View>
 
         <View style={[styles.hero, { width: heroWidth, height: heroHeight }]}>
@@ -151,11 +150,7 @@ export function SplashScreen({ locale }: Props) {
               </View>
               <Animated.View style={[styles.logoShimmer, { transform: [{ translateX: shimmerTranslate }] }]} />
             </View>
-            <View style={styles.heroMeta}>
-              <View style={styles.heroLine} />
-              <Text style={styles.heroMetaText}>{t(locale, "splashMeta")}</Text>
-              <View style={styles.heroLine} />
-            </View>
+            <View style={styles.heroLine} />
           </View>
         </View>
       </View>
@@ -180,17 +175,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.sm
   },
-  eyebrow: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    textTransform: "uppercase",
-    letterSpacing: 1.4
-  },
   title: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: 28,
+    fontSize: 34,
     fontWeight: "700",
     textAlign: "center"
   },
@@ -251,19 +239,6 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     backgroundColor: "rgba(255, 255, 255, 0.18)"
-  },
-  heroMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: theme.spacing.sm
-  },
-  heroMetaText: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 1.4
   },
   heroLine: {
     width: 34,

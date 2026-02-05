@@ -1213,7 +1213,7 @@ export default function App() {
     if (!room) return;
     const appScheme = Constants.expoConfig?.scheme ?? "qwizzy";
     const inviteUrl = buildInviteUrl(room.code, appScheme);
-    const message = t(locale, "shareInviteMessage", { url: inviteUrl, code: room.code });
+    const message = t(locale, "shareInviteMessage", { code: room.code });
     try {
       await Share.share({
         message,
