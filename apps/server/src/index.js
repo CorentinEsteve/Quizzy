@@ -4,12 +4,10 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server as SocketServer } from "socket.io";
 import bcrypt from "bcryptjs";
-import { db, migrate } from "./db.js";
+import { supabase } from "./db.js";
 import { authMiddleware, signToken, verifyToken } from "./auth.js";
 import { quizzes } from "./quizzes.js";
 import { Resend } from "resend";
-
-migrate();
 
 const app = express();
 const httpServer = createServer(app);
@@ -71,39 +69,51 @@ function generateCode() {
   return code;
 }
 
-function getCustomQuiz(quizId) {
-  const row = db
-    .prepare("SELECT quiz_json FROM room_quizzes WHERE quiz_id = ?")
-    .get(quizId);
-  if (!row) return null;
-  try {
-    return JSON.parse(row.quiz_json);
-  } catch (_err) {
-    return null;
+async function getCustomQuiz(quizId) {
+  const { data, error } = await supabase
+    .from("room_quizzes")
+    .select("quiz_json")
+    .eq("quiz_id", quizId)
+    .maybeSingle();
+  if (error || !data) return null;
+  if (typeof data.quiz_json === "string") {
+    try {
+      return JSON.parse(data.quiz_json);
+    } catch (_err) {
+      return null;
+    }
   }
+  return data.quiz_json;
 }
 
-function getAllCustomQuizzes() {
-  const rows = db.prepare("SELECT quiz_json FROM room_quizzes").all();
-  return rows
+async function getAllCustomQuizzes() {
+  const { data, error } = await supabase.from("room_quizzes").select("quiz_json");
+  if (error || !data) return [];
+  return data
     .map((row) => {
-      try {
-        return JSON.parse(row.quiz_json);
-      } catch (_err) {
-        return null;
+      if (typeof row.quiz_json === "string") {
+        try {
+          return JSON.parse(row.quiz_json);
+        } catch (_err) {
+          return null;
+        }
       }
+      return row.quiz_json;
     })
     .filter(Boolean);
 }
 
-function getQuiz(quizId) {
-  return getCustomQuiz(quizId) || quizzes.find((quiz) => quiz.id === quizId);
+async function getQuiz(quizId) {
+  const custom = await getCustomQuiz(quizId);
+  return custom || quizzes.find((quiz) => quiz.id === quizId);
 }
 
-function saveCustomQuiz(quiz) {
-  db.prepare(
-    "INSERT INTO room_quizzes (quiz_id, quiz_json, created_at) VALUES (?, ?, ?)"
-  ).run(quiz.id, JSON.stringify(quiz), nowIso());
+async function saveCustomQuiz(quiz) {
+  await supabase.from("room_quizzes").upsert({
+    quiz_id: quiz.id,
+    quiz_json: quiz,
+    created_at: nowIso()
+  });
 }
 
 function shuffle(items) {
@@ -157,13 +167,21 @@ function seededShuffle(items, seedValue) {
   return list;
 }
 
-function getDailyQuiz(dateKey) {
-  const row = db.prepare("SELECT quiz_json FROM daily_quizzes WHERE date = ?").get(dateKey);
-  if (row) {
-    try {
-      return JSON.parse(row.quiz_json);
-    } catch (_err) {
-      // fall through to recreate
+async function getDailyQuiz(dateKey) {
+  const { data } = await supabase
+    .from("daily_quizzes")
+    .select("quiz_json")
+    .eq("date", dateKey)
+    .maybeSingle();
+  if (data?.quiz_json) {
+    if (typeof data.quiz_json === "string") {
+      try {
+        return JSON.parse(data.quiz_json);
+      } catch (_err) {
+        // fall through to recreate
+      }
+    } else {
+      return data.quiz_json;
     }
   }
 
@@ -182,20 +200,25 @@ function getDailyQuiz(dateKey) {
     questions: selected
   };
 
-  db.prepare(
-    "INSERT OR REPLACE INTO daily_quizzes (date, quiz_json, created_at) VALUES (?, ?, ?)"
-  ).run(dateKey, JSON.stringify(dailyQuiz), nowIso());
+  await supabase.from("daily_quizzes").upsert({
+    date: dateKey,
+    quiz_json: dailyQuiz,
+    created_at: nowIso()
+  });
 
   return dailyQuiz;
 }
 
-function getDailyAnswers(dateKey, userId) {
-  return db
-    .prepare(
-      `SELECT question_id as questionId, answer_index as answerIndex
-       FROM daily_answers WHERE quiz_date = ? AND user_id = ?`
-    )
-    .all(dateKey, userId);
+async function getDailyAnswers(dateKey, userId) {
+  const { data } = await supabase
+    .from("daily_answers")
+    .select("question_id, answer_index")
+    .eq("quiz_date", dateKey)
+    .eq("user_id", userId);
+  return (
+    data?.map((row) => ({ questionId: row.question_id, answerIndex: row.answer_index })) ||
+    []
+  );
 }
 
 function computeDailyCounts(quiz, answers) {
@@ -214,54 +237,71 @@ function computeDailyCounts(quiz, answers) {
   return { correct, wrong };
 }
 
-function getFriendCandidates(userId, limit = 5) {
-  return db
-    .prepare(
-      `SELECT rp2.user_id as userId,
-              users.display_name as displayName,
-              COUNT(*) as matchCount,
-              MAX(rooms.created_at) as lastMatch
-       FROM room_players rp1
-       JOIN room_players rp2
-         ON rp1.room_id = rp2.room_id AND rp2.user_id != rp1.user_id
-       JOIN rooms ON rooms.id = rp1.room_id
-       JOIN users ON users.id = rp2.user_id
-       WHERE rp1.user_id = ?
-       GROUP BY rp2.user_id
-       ORDER BY matchCount DESC, lastMatch DESC
-       LIMIT ?`
-    )
-    .all(userId, limit);
+async function getFriendCandidates(userId, limit = 5) {
+  const { data: roomRows } = await supabase
+    .from("room_players")
+    .select("room_id")
+    .eq("user_id", userId);
+  const roomIds = roomRows?.map((row) => row.room_id) || [];
+  if (roomIds.length === 0) return [];
+
+  const { data: playerRows } = await supabase
+    .from("room_players")
+    .select("room_id, user_id")
+    .in("room_id", roomIds);
+  const { data: users } = await supabase
+    .from("users")
+    .select("id, display_name")
+    .in(
+      "id",
+      Array.from(new Set((playerRows || []).map((row) => row.user_id)))
+    );
+  const userMap = new Map(users?.map((u) => [u.id, u.display_name]) || []);
+
+  const counts = new Map();
+  (playerRows || []).forEach((row) => {
+    if (row.user_id === userId) return;
+    const current = counts.get(row.user_id) || { matchCount: 0 };
+    current.matchCount += 1;
+    counts.set(row.user_id, current);
+  });
+
+  return Array.from(counts.entries())
+    .map(([id, stats]) => ({
+      userId: id,
+      displayName: userMap.get(id) || "Player",
+      matchCount: stats.matchCount
+    }))
+    .sort((a, b) => b.matchCount - a.matchCount)
+    .slice(0, limit);
 }
 
-function buildDailyResults(dateKey, userId) {
-  const quiz = getDailyQuiz(dateKey);
+async function buildDailyResults(dateKey, userId) {
+  const quiz = await getDailyQuiz(dateKey);
   if (!quiz) return null;
   const totalQuestions = quiz.questions.length;
   if (totalQuestions === 0) return null;
 
-  const myAnswers = getDailyAnswers(dateKey, userId);
+  const myAnswers = await getDailyAnswers(dateKey, userId);
   if (myAnswers.length < totalQuestions) return null;
 
-  const allAnswers = db
-    .prepare(
-      `SELECT user_id as userId, question_id as questionId, answer_index as answerIndex
-       FROM daily_answers WHERE quiz_date = ?`
-    )
-    .all(dateKey);
+  const { data: allAnswers } = await supabase
+    .from("daily_answers")
+    .select("user_id, question_id, answer_index")
+    .eq("quiz_date", dateKey);
 
   const answerKey = new Map(quiz.questions.map((question) => [question.id, question.answer]));
   const statsByUser = new Map();
-  allAnswers.forEach((answer) => {
-    const stats = statsByUser.get(answer.userId) || { answered: 0, correct: 0, wrong: 0 };
+  (allAnswers || []).forEach((answer) => {
+    const stats = statsByUser.get(answer.user_id) || { answered: 0, correct: 0, wrong: 0 };
     stats.answered += 1;
-    const correctIndex = answerKey.get(answer.questionId);
-    if (answer.answerIndex === correctIndex) {
+    const correctIndex = answerKey.get(answer.question_id);
+    if (answer.answer_index === correctIndex) {
       stats.correct += 1;
     } else {
       stats.wrong += 1;
     }
-    statsByUser.set(answer.userId, stats);
+    statsByUser.set(answer.user_id, stats);
   });
 
   const participants = statsByUser.size;
@@ -354,63 +394,80 @@ function sanitizeQuiz(quiz) {
   };
 }
 
-function getRoomByCode(code) {
-  return db.prepare("SELECT * FROM rooms WHERE code = ?").get(code);
+async function getRoomByCode(code) {
+  const { data, error } = await supabase.from("rooms").select("*").eq("code", code).maybeSingle();
+  if (error) return null;
+  return data;
 }
 
-function getRoomPlayers(roomId) {
-  return db
-    .prepare(
-      `SELECT users.id, users.display_name as displayName, room_players.role
-       FROM room_players
-       JOIN users ON users.id = room_players.user_id
-       WHERE room_players.room_id = ?`
-    )
-    .all(roomId);
+async function getRoomPlayers(roomId) {
+  const { data } = await supabase
+    .from("room_players")
+    .select("user_id, role, users(display_name)")
+    .eq("room_id", roomId);
+  return (
+    data?.map((row) => ({
+      id: row.user_id,
+      displayName: row.users?.display_name ?? "Player",
+      role: row.role
+    })) || []
+  );
 }
 
-function isRoomMember(roomId, userId) {
-  const row = db
-    .prepare(
-      `SELECT 1 FROM room_players WHERE room_id = ? AND user_id = ? LIMIT 1`
-    )
-    .get(roomId, userId);
-  return Boolean(row);
+async function isRoomMember(roomId, userId) {
+  const { data } = await supabase
+    .from("room_players")
+    .select("user_id")
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
 }
 
-function getRoomAnswers(roomId) {
-  return db
-    .prepare("SELECT * FROM room_answers WHERE room_id = ?")
-    .all(roomId);
+async function getRoomAnswers(roomId) {
+  const { data } = await supabase.from("room_answers").select("*").eq("room_id", roomId);
+  return data || [];
 }
 
-function getRoomRematch(roomId) {
-  return db
-    .prepare("SELECT user_id as userId FROM room_rematch WHERE room_id = ?")
-    .all(roomId);
+async function getRoomRematch(roomId) {
+  const { data } = await supabase
+    .from("room_rematch")
+    .select("user_id")
+    .eq("room_id", roomId);
+  return (data || []).map((row) => ({ userId: row.user_id }));
 }
 
-function getAllAnswers() {
-  return db.prepare("SELECT * FROM room_answers").all();
+async function getAllAnswers() {
+  const { data } = await supabase.from("room_answers").select("*");
+  return data || [];
 }
 
-function getAllUsers() {
-  return db
-    .prepare("SELECT id, display_name as displayName, email, country FROM users")
-    .all();
+async function getAllUsers() {
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name, email, country, deleted_at");
+  return (data || [])
+    .filter((user) => !user.deleted_at)
+    .map((user) => ({
+      id: user.id,
+      displayName: user.display_name,
+      email: user.email,
+      country: user.country
+    }));
 }
 
-function computeLeaderboard(scope, country) {
-  const users = getAllUsers().map((user) => ({
+async function computeLeaderboard(scope, country) {
+  const users = (await getAllUsers()).map((user) => ({
     ...user,
     country: user.country || "US",
     score: 0,
     answered: 0
   }));
-  const answers = getAllAnswers();
+  const answers = await getAllAnswers();
 
   const answerMap = new Map();
-  for (const quiz of [...quizzes, ...getAllCustomQuizzes()]) {
+  const customQuizzes = await getAllCustomQuizzes();
+  for (const quiz of [...quizzes, ...customQuizzes]) {
     for (const question of quiz.questions) {
       answerMap.set(question.id, question.answer);
     }
@@ -480,47 +537,56 @@ function computeAnswerStats(quiz, answers) {
   }, {});
 }
 
-function getBadges() {
-  return db.prepare("SELECT id, title, description FROM badges").all();
+async function getBadges() {
+  const { data } = await supabase.from("badges").select("id, title, description");
+  return data || [];
 }
 
-function getUserBadges(userId) {
-  return db
-    .prepare("SELECT badge_id as badgeId, earned_at as earnedAt FROM user_badges WHERE user_id = ?")
-    .all(userId);
+async function getUserBadges(userId) {
+  const { data } = await supabase
+    .from("user_badges")
+    .select("badge_id, earned_at")
+    .eq("user_id", userId);
+  return (data || []).map((row) => ({ badgeId: row.badge_id, earnedAt: row.earned_at }));
 }
 
-function awardBadge(userId, badgeId) {
-  const existing = db
-    .prepare("SELECT badge_id FROM user_badges WHERE user_id = ? AND badge_id = ?")
-    .get(userId, badgeId);
-  if (existing) return;
-  db.prepare(
-    "INSERT INTO user_badges (user_id, badge_id, earned_at) VALUES (?, ?, ?)"
-  ).run(userId, badgeId, nowIso());
+async function awardBadge(userId, badgeId) {
+  const { data } = await supabase
+    .from("user_badges")
+    .select("badge_id")
+    .eq("user_id", userId)
+    .eq("badge_id", badgeId)
+    .maybeSingle();
+  if (data) return;
+  await supabase.from("user_badges").insert({
+    user_id: userId,
+    badge_id: badgeId,
+    earned_at: nowIso()
+  });
 }
 
-function awardBadgesForRoom(roomId) {
-  const room = db.prepare("SELECT * FROM rooms WHERE id = ?").get(roomId);
+async function awardBadgesForRoom(roomId) {
+  const { data: room } = await supabase.from("rooms").select("*").eq("id", roomId).maybeSingle();
   if (!room) return;
-  const quiz = getQuiz(room.quiz_id);
+  const quiz = await getQuiz(room.quiz_id);
   if (!quiz) return;
-  const answers = getRoomAnswers(roomId);
-  const players = getRoomPlayers(roomId);
+  const answers = await getRoomAnswers(roomId);
+  const players = await getRoomPlayers(roomId);
 
-  players.forEach((player) => {
+  for (const player of players) {
     const score = computeScore(quiz, answers, player.id);
     const answeredCount = answers.filter((item) => item.user_id === player.id).length;
     if (answeredCount > 0) {
-      awardBadge(player.id, "dual_spark");
+      await awardBadge(player.id, "dual_spark");
     }
     if (score >= 3) {
-      awardBadge(player.id, "focus_glow");
+      await awardBadge(player.id, "focus_glow");
     }
-  });
+  }
 
-  players.forEach((player) => {
-    const totalCorrect = getAllAnswers()
+  const allAnswers = await getAllAnswers();
+  for (const player of players) {
+    const totalCorrect = allAnswers
       .filter((item) => item.user_id === player.id)
       .reduce((acc, item) => {
         const correct = quizzes
@@ -529,16 +595,16 @@ function awardBadgesForRoom(roomId) {
         return acc + (item.answer_index === correct ? 1 : 0);
       }, 0);
     if (totalCorrect >= 10) {
-      awardBadge(player.id, "calm_streak");
+      await awardBadge(player.id, "calm_streak");
     }
-  });
+  }
 }
 
-function roomState(room) {
-  const quiz = getQuiz(room.quiz_id);
-  const players = getRoomPlayers(room.id);
-  const answers = getRoomAnswers(room.id);
-  const rematch = getRoomRematch(room.id);
+async function roomState(room) {
+  const quiz = await getQuiz(room.quiz_id);
+  const players = await getRoomPlayers(room.id);
+  const answers = await getRoomAnswers(room.id);
+  const rematch = await getRoomRematch(room.id);
   const statsByUser = computeAnswerStats(quiz, answers);
   const progress = players.map((player) => {
     const answeredCount = answers.filter((item) => item.user_id === player.id).length;
@@ -707,14 +773,14 @@ app.get("/quizzes", (req, res) => {
   );
 });
 
-app.get("/daily-quiz", authMiddleware, (req, res) => {
+app.get("/daily-quiz", authMiddleware, async (req, res) => {
   const tzOffset = Number(req.query.tzOffset);
   const dateKey = todayKey(tzOffset);
-  const quiz = getDailyQuiz(dateKey);
+  const quiz = await getDailyQuiz(dateKey);
   if (!quiz) {
     return res.status(500).json({ error: "Unable to load daily quiz" });
   }
-  const answers = getDailyAnswers(dateKey, req.user.id);
+  const answers = await getDailyAnswers(dateKey, req.user.id);
   const counts = computeDailyCounts(quiz, answers);
   const totalQuestions = quiz.questions.length;
   const answeredCount = answers.length;
@@ -732,10 +798,10 @@ app.get("/daily-quiz", authMiddleware, (req, res) => {
   });
 });
 
-app.post("/daily-quiz/answer", authMiddleware, (req, res) => {
+app.post("/daily-quiz/answer", authMiddleware, async (req, res) => {
   const { questionId, answerIndex, tzOffset } = req.body;
   const dateKey = todayKey(Number(tzOffset));
-  const quiz = getDailyQuiz(dateKey);
+  const quiz = await getDailyQuiz(dateKey);
   if (!quiz) {
     return res.status(500).json({ error: "Unable to load daily quiz" });
   }
@@ -748,12 +814,18 @@ app.post("/daily-quiz/answer", authMiddleware, (req, res) => {
     return res.status(400).json({ error: "Invalid answer" });
   }
 
-  db.prepare(
-    `INSERT OR IGNORE INTO daily_answers (quiz_date, user_id, question_id, answer_index, answered_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(dateKey, req.user.id, questionId, answerIndex, nowIso());
+  await supabase.from("daily_answers").upsert(
+    {
+      quiz_date: dateKey,
+      user_id: req.user.id,
+      question_id: questionId,
+      answer_index: answerIndex,
+      answered_at: nowIso()
+    },
+    { onConflict: "quiz_date,user_id,question_id" }
+  );
 
-  const answers = getDailyAnswers(dateKey, req.user.id);
+  const answers = await getDailyAnswers(dateKey, req.user.id);
   const counts = computeDailyCounts(quiz, answers);
   const totalQuestions = quiz.questions.length;
   const answeredCount = answers.length;
@@ -769,37 +841,35 @@ app.post("/daily-quiz/answer", authMiddleware, (req, res) => {
   });
 });
 
-app.get("/daily-quiz/results", authMiddleware, (req, res) => {
+app.get("/daily-quiz/results", authMiddleware, async (req, res) => {
   const tzOffset = Number(req.query.tzOffset);
   const dateKey = todayKey(tzOffset);
-  const baseResults = buildDailyResults(dateKey, req.user.id);
+  const baseResults = await buildDailyResults(dateKey, req.user.id);
   if (!baseResults) {
     return res.status(409).json({ error: "Complete the daily quiz first" });
   }
 
-  const quiz = getDailyQuiz(dateKey);
+  const quiz = await getDailyQuiz(dateKey);
   const totalQuestions = quiz?.questions.length ?? 0;
-  const allAnswers = db
-    .prepare(
-      `SELECT user_id as userId, question_id as questionId, answer_index as answerIndex
-       FROM daily_answers WHERE quiz_date = ?`
-    )
-    .all(dateKey);
+  const { data: allAnswers } = await supabase
+    .from("daily_answers")
+    .select("user_id, question_id, answer_index")
+    .eq("quiz_date", dateKey);
   const answerKey = new Map(quiz.questions.map((question) => [question.id, question.answer]));
   const statsByUser = new Map();
-  allAnswers.forEach((answer) => {
-    const stats = statsByUser.get(answer.userId) || { answered: 0, correct: 0, wrong: 0 };
+  (allAnswers || []).forEach((answer) => {
+    const stats = statsByUser.get(answer.user_id) || { answered: 0, correct: 0, wrong: 0 };
     stats.answered += 1;
-    const correctIndex = answerKey.get(answer.questionId);
-    if (answer.answerIndex === correctIndex) {
+    const correctIndex = answerKey.get(answer.question_id);
+    if (answer.answer_index === correctIndex) {
       stats.correct += 1;
     } else {
       stats.wrong += 1;
     }
-    statsByUser.set(answer.userId, stats);
+    statsByUser.set(answer.user_id, stats);
   });
 
-  const friends = getFriendCandidates(req.user.id, 5)
+  const friends = (await getFriendCandidates(req.user.id, 5))
     .map((friend) => {
       const stats = statsByUser.get(friend.userId) || { answered: 0, correct: 0, wrong: 0 };
       const answered = stats.answered;
@@ -822,20 +892,19 @@ app.get("/daily-quiz/results", authMiddleware, (req, res) => {
   res.json({ ...baseResults, friends });
 });
 
-app.get("/daily-quiz/history", authMiddleware, (req, res) => {
+app.get("/daily-quiz/history", authMiddleware, async (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 7, 1), 14);
-  const rows = db
-    .prepare(
-      `SELECT DISTINCT quiz_date as date
-       FROM daily_answers
-       WHERE user_id = ?
-       ORDER BY quiz_date DESC
-       LIMIT ?`
-    )
-    .all(req.user.id, limit);
+  const { data: rows } = await supabase
+    .from("daily_answers")
+    .select("quiz_date")
+    .eq("user_id", req.user.id)
+    .order("quiz_date", { ascending: false })
+    .limit(limit);
 
-  const history = rows
-    .map((row) => buildDailyResults(row.date, req.user.id))
+  const results = await Promise.all(
+    (rows || []).map((row) => buildDailyResults(row.quiz_date, req.user.id))
+  );
+  const history = results
     .filter(Boolean)
     .map((entry) => ({
       date: entry.date,
@@ -850,7 +919,7 @@ app.get("/daily-quiz/history", authMiddleware, (req, res) => {
   res.json({ history });
 });
 
-app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) => {
+app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), async (req, res) => {
   const { email, password, displayName, country } = req.body;
   if (!email || !password || !displayName) {
     return res.status(400).json({ error: "Missing fields" });
@@ -864,7 +933,11 @@ app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) 
   if (String(displayName).trim().length < 2) {
     return res.status(400).json({ error: "Display name is too short" });
   }
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
   if (existing) {
     return res.status(409).json({ error: "Email already registered" });
   }
@@ -872,27 +945,23 @@ app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) 
   const normalizedCountry = (country || "US").toUpperCase();
   const verificationToken = createToken();
   const verificationExpires = addMinutes(new Date(), 60).toISOString();
-  const result = db
-    .prepare(
-      "INSERT INTO users (email, display_name, password_hash, created_at, country, email_verified, verification_token, verification_token_expires) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .run(
+  const { data: user, error } = await supabase
+    .from("users")
+    .insert({
       email,
-      displayName,
-      passwordHash,
-      nowIso(),
-      normalizedCountry,
-      0,
-      verificationToken,
-      verificationExpires
-    );
-  const user = {
-    id: result.lastInsertRowid,
-    email,
-    display_name: displayName,
-    country: normalizedCountry,
-    email_verified: 0
-  };
+      display_name: displayName,
+      password_hash: passwordHash,
+      created_at: nowIso(),
+      country: normalizedCountry,
+      email_verified: false,
+      verification_token: verificationToken,
+      verification_token_expires: verificationExpires
+    })
+    .select("id, email, display_name, country, email_verified")
+    .single();
+  if (error || !user) {
+    return res.status(500).json({ error: "Unable to create user" });
+  }
   const token = signToken(user);
   try {
     const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
@@ -909,23 +978,23 @@ app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) 
     user: {
       id: user.id,
       email,
-      displayName,
+      displayName: user.display_name,
       country: normalizedCountry,
-      emailVerified: false
+      emailVerified: user.email_verified === true
     }
   });
 });
 
-app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), (req, res) => {
+app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Missing fields" });
   }
-  const user = db
-    .prepare(
-      "SELECT id, email, display_name, password_hash, country, email_verified, deleted_at FROM users WHERE email = ?"
-    )
-    .get(email);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email, display_name, password_hash, country, email_verified, deleted_at")
+    .eq("email", email)
+    .maybeSingle();
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
@@ -944,21 +1013,21 @@ app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), (req, res) => 
       email: user.email,
       displayName: user.display_name,
       country: user.country || "US",
-      emailVerified: user.email_verified === 1
+      emailVerified: user.email_verified === true
     }
   });
 });
 
-app.post("/auth/reactivate", rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+app.post("/auth/reactivate", rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "Missing fields" });
   }
-  const user = db
-    .prepare(
-      "SELECT id, email, display_name, password_hash, country, email_verified, deleted_at FROM users WHERE email = ?"
-    )
-    .get(email);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email, display_name, password_hash, country, email_verified, deleted_at")
+    .eq("email", email)
+    .maybeSingle();
   if (!user || !user.deleted_at) {
     return res.status(404).json({ error: "Account not found" });
   }
@@ -966,7 +1035,7 @@ app.post("/auth/reactivate", rateLimit({ windowMs: 60_000, max: 10 }), (req, res
   if (!isValid) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
-  db.prepare("UPDATE users SET deleted_at = NULL WHERE id = ?").run(user.id);
+  await supabase.from("users").update({ deleted_at: null }).eq("id", user.id);
   const token = signToken({ ...user, deleted_at: null });
   res.json({
     token,
@@ -975,30 +1044,36 @@ app.post("/auth/reactivate", rateLimit({ windowMs: 60_000, max: 10 }), (req, res
       email: user.email,
       displayName: user.display_name,
       country: user.country || "US",
-      emailVerified: user.email_verified === 1
+      emailVerified: user.email_verified === true
     }
   });
 });
 
-app.post("/auth/request-verify", rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+app.post("/auth/request-verify", rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
   const { email } = req.body;
   if (!isValidEmail(email)) {
     return res.status(400).json({ error: "Invalid email" });
   }
-  const user = db
-    .prepare("SELECT id, email_verified FROM users WHERE email = ?")
-    .get(email);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email_verified")
+    .eq("email", email)
+    .maybeSingle();
   if (!user) {
     return res.json({ ok: true });
   }
-  if (user.email_verified === 1) {
+  if (user.email_verified === true) {
     return res.json({ ok: true });
   }
   const verificationToken = createToken();
   const verificationExpires = addMinutes(new Date(), 60).toISOString();
-  db.prepare(
-    "UPDATE users SET verification_token = ?, verification_token_expires = ? WHERE id = ?"
-  ).run(verificationToken, verificationExpires, user.id);
+  await supabase
+    .from("users")
+    .update({
+      verification_token: verificationToken,
+      verification_token_expires: verificationExpires
+    })
+    .eq("id", user.id);
   try {
     const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
     sendEmail({
@@ -1012,16 +1087,16 @@ app.post("/auth/request-verify", rateLimit({ windowMs: 60_000, max: 5 }), (req, 
   return res.json({ ok: true });
 });
 
-app.get("/auth/verify", (req, res) => {
+app.get("/auth/verify", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   if (!token) {
     return res.status(400).send("Invalid token");
   }
-  const user = db
-    .prepare(
-      "SELECT id, verification_token_expires FROM users WHERE verification_token = ?"
-    )
-    .get(token);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, verification_token_expires")
+    .eq("verification_token", token)
+    .maybeSingle();
   if (!user) {
     return res.status(404).send("Token not found");
   }
@@ -1031,9 +1106,14 @@ app.get("/auth/verify", (req, res) => {
       return res.status(410).send("Token expired");
     }
   }
-  db.prepare(
-    "UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?"
-  ).run(user.id);
+  await supabase
+    .from("users")
+    .update({
+      email_verified: true,
+      verification_token: null,
+      verification_token_expires: null
+    })
+    .eq("id", user.id);
   const html = renderSimplePage(
     "Email verified",
     "<p>Your email has been verified. You can return to the app.</p>"
@@ -1041,20 +1121,24 @@ app.get("/auth/verify", (req, res) => {
   return res.type("html").send(html);
 });
 
-app.post("/auth/password-reset/request", rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+app.post("/auth/password-reset/request", rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
   const { email } = req.body;
   if (!isValidEmail(email)) {
     return res.status(400).json({ error: "Invalid email" });
   }
-  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const { data: user } = await supabase.from("users").select("id").eq("email", email).maybeSingle();
   if (!user) {
     return res.json({ ok: true });
   }
   const resetToken = createToken();
   const resetExpires = addMinutes(new Date(), 30).toISOString();
-  db.prepare(
-    "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?"
-  ).run(resetToken, resetExpires, user.id);
+  await supabase
+    .from("users")
+    .update({
+      password_reset_token: resetToken,
+      password_reset_expires: resetExpires
+    })
+    .eq("id", user.id);
   try {
     const resetUrl = `${APP_BASE_URL}/auth/reset?token=${resetToken}`;
     sendEmail({
@@ -1087,16 +1171,16 @@ app.get("/auth/reset", (req, res) => {
   return res.type("html").send(html);
 });
 
-app.post("/auth/reset", express.urlencoded({ extended: true }), (req, res) => {
+app.post("/auth/reset", express.urlencoded({ extended: true }), async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword || String(newPassword).length < 8) {
     return res.status(400).send("Invalid request");
   }
-  const user = db
-    .prepare(
-      "SELECT id, password_reset_expires FROM users WHERE password_reset_token = ?"
-    )
-    .get(token);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, password_reset_expires")
+    .eq("password_reset_token", token)
+    .maybeSingle();
   if (!user) {
     return res.status(404).send("Token not found");
   }
@@ -1107,9 +1191,14 @@ app.post("/auth/reset", express.urlencoded({ extended: true }), (req, res) => {
     }
   }
   const passwordHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare(
-    "UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?"
-  ).run(passwordHash, user.id);
+  await supabase
+    .from("users")
+    .update({
+      password_hash: passwordHash,
+      password_reset_token: null,
+      password_reset_expires: null
+    })
+    .eq("id", user.id);
   const html = renderSimplePage(
     "Password updated",
     "<p>Your password has been updated. You can return to the app.</p>"
@@ -1117,16 +1206,16 @@ app.post("/auth/reset", express.urlencoded({ extended: true }), (req, res) => {
   return res.type("html").send(html);
 });
 
-app.post("/auth/password-reset/confirm", rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+app.post("/auth/password-reset/confirm", rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword || String(newPassword).length < 8) {
     return res.status(400).json({ error: "Invalid request" });
   }
-  const user = db
-    .prepare(
-      "SELECT id, password_reset_expires FROM users WHERE password_reset_token = ?"
-    )
-    .get(token);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, password_reset_expires")
+    .eq("password_reset_token", token)
+    .maybeSingle();
   if (!user) {
     return res.status(404).json({ error: "Token not found" });
   }
@@ -1137,25 +1226,38 @@ app.post("/auth/password-reset/confirm", rateLimit({ windowMs: 60_000, max: 10 }
     }
   }
   const passwordHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare(
-    "UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?"
-  ).run(passwordHash, user.id);
+  await supabase
+    .from("users")
+    .update({
+      password_hash: passwordHash,
+      password_reset_token: null,
+      password_reset_expires: null
+    })
+    .eq("id", user.id);
   return res.json({ ok: true });
 });
 
-app.get("/me", authMiddleware, (req, res) => {
-  const user = db
-    .prepare(
-      "SELECT id, email, display_name as displayName, country, email_verified as emailVerified FROM users WHERE id = ?"
-    )
-    .get(req.user.id);
+app.get("/me", authMiddleware, async (req, res) => {
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email, display_name, country, email_verified")
+    .eq("id", req.user.id)
+    .maybeSingle();
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
-  res.json({ user: { ...user, country: user.country || "US", emailVerified: user.emailVerified === 1 } });
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      country: user.country || "US",
+      emailVerified: user.email_verified === true
+    }
+  });
 });
 
-app.patch("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 30 }), (req, res) => {
+app.patch("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 30 }), async (req, res) => {
   const { displayName, country } = req.body;
   const updates = [];
   const params = [];
@@ -1177,33 +1279,49 @@ app.patch("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 30 }), (req,
   }
 
   params.push(req.user.id);
-  db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`).run(...params);
-  const updated = db
-    .prepare("SELECT id, email, display_name, country FROM users WHERE id = ?")
-    .get(req.user.id);
+  const updatePayload = {};
+  updates.forEach((statement, index) => {
+    const key = statement.split(" = ")[0];
+    updatePayload[key] = params[index];
+  });
+  await supabase.from("users").update(updatePayload).eq("id", req.user.id);
+  const { data: updated } = await supabase
+    .from("users")
+    .select("id, email, display_name, country, email_verified")
+    .eq("id", req.user.id)
+    .maybeSingle();
+  if (!updated) {
+    return res.status(404).json({ error: "User not found" });
+  }
   res.json({
     user: {
       id: updated.id,
       email: updated.email,
       displayName: updated.display_name,
       country: updated.country || "US",
-      emailVerified: updated.email_verified === 1
+      emailVerified: updated.email_verified === true
     }
   });
 });
 
-app.patch("/me/email", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+app.patch("/me/email", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
   const { newEmail, currentPassword } = req.body;
   if (!isValidEmail(newEmail) || !currentPassword) {
     return res.status(400).json({ error: "Invalid email or password" });
   }
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(newEmail.trim());
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id")
+    .eq("email", newEmail.trim())
+    .maybeSingle();
   if (existing && existing.id !== req.user.id) {
     return res.status(409).json({ error: "Email already registered" });
   }
-  const user = db
-    .prepare("SELECT id, password_hash FROM users WHERE id = ?")
-    .get(req.user.id);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, password_hash")
+    .eq("id", req.user.id)
+    .maybeSingle();
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
@@ -1213,9 +1331,15 @@ app.patch("/me/email", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }),
   }
   const verificationToken = createToken();
   const verificationExpires = addMinutes(new Date(), 60).toISOString();
-  db.prepare(
-    "UPDATE users SET email = ?, email_verified = 0, verification_token = ?, verification_token_expires = ? WHERE id = ?"
-  ).run(newEmail.trim(), verificationToken, verificationExpires, req.user.id);
+  await supabase
+    .from("users")
+    .update({
+      email: newEmail.trim(),
+      email_verified: false,
+      verification_token: verificationToken,
+      verification_token_expires: verificationExpires
+    })
+    .eq("id", req.user.id);
   try {
     const verifyUrl = `${APP_BASE_URL}/auth/verify?token=${verificationToken}`;
     sendEmail({
@@ -1229,7 +1353,7 @@ app.patch("/me/email", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }),
   res.json({ ok: true, email: newEmail.trim(), emailVerified: false });
 });
 
-app.patch("/me/password", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), (req, res) => {
+app.patch("/me/password", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: "Missing fields" });
@@ -1238,9 +1362,11 @@ app.patch("/me/password", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 
     return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
 
-  const user = db
-    .prepare("SELECT id, password_hash FROM users WHERE id = ?")
-    .get(req.user.id);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, password_hash")
+    .eq("id", req.user.id)
+    .maybeSingle();
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
@@ -1249,108 +1375,110 @@ app.patch("/me/password", authMiddleware, rateLimit({ windowMs: 60_000, max: 10 
     return res.status(401).json({ error: "Invalid credentials" });
   }
   const passwordHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, req.user.id);
+  await supabase.from("users").update({ password_hash: passwordHash }).eq("id", req.user.id);
   res.json({ ok: true });
 });
 
-app.get("/me/export", authMiddleware, (req, res) => {
+app.get("/me/export", authMiddleware, async (req, res) => {
   const userId = req.user.id;
-  const user = db
-    .prepare(
-      "SELECT id, email, display_name as displayName, country, created_at as createdAt, email_verified as emailVerified, deleted_at as deletedAt FROM users WHERE id = ?"
-    )
-    .get(userId);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email, display_name, country, created_at, email_verified, deleted_at")
+    .eq("id", userId)
+    .maybeSingle();
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
-  const rooms = db
-    .prepare(
-      `SELECT rooms.* FROM rooms
-       JOIN room_players ON room_players.room_id = rooms.id
-       WHERE room_players.user_id = ?
-       ORDER BY rooms.created_at DESC`
-    )
-    .all(userId)
-    .map((room) => ({
-      code: room.code,
-      mode: room.mode,
-      status: room.status,
-      quizId: room.quiz_id,
-      createdAt: room.created_at,
-      startedAt: room.started_at,
-      completedAt: room.completed_at
-    }));
-  const answers = db
-    .prepare(
-      `SELECT question_id as questionId, answer_index as answerIndex, answered_at as answeredAt
-       FROM room_answers WHERE user_id = ?`
-    )
-    .all(userId);
-  const dailyAnswers = db
-    .prepare(
-      `SELECT quiz_date as date, question_id as questionId, answer_index as answerIndex, answered_at as answeredAt
-       FROM daily_answers WHERE user_id = ?`
-    )
-    .all(userId);
-  const badges = db
-    .prepare(
-      `SELECT badge_id as badgeId, earned_at as earnedAt FROM user_badges WHERE user_id = ?`
-    )
-    .all(userId);
+  const { data: rooms } = await supabase
+    .from("room_players")
+    .select("rooms(code, mode, status, quiz_id, created_at, started_at, completed_at)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false, foreignTable: "rooms" });
+  const { data: answers } = await supabase
+    .from("room_answers")
+    .select("question_id, answer_index, answered_at")
+    .eq("user_id", userId);
+  const { data: dailyAnswers } = await supabase
+    .from("daily_answers")
+    .select("quiz_date, question_id, answer_index, answered_at")
+    .eq("user_id", userId);
+  const { data: badges } = await supabase
+    .from("user_badges")
+    .select("badge_id, earned_at")
+    .eq("user_id", userId);
 
   res.json({
-    user,
-    rooms,
-    answers,
-    dailyAnswers,
-    badges,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      country: user.country,
+      createdAt: user.created_at,
+      emailVerified: user.email_verified === true,
+      deletedAt: user.deleted_at
+    },
+    rooms: (rooms || []).map((row) => ({
+      code: row.rooms?.code,
+      mode: row.rooms?.mode,
+      status: row.rooms?.status,
+      quizId: row.rooms?.quiz_id,
+      createdAt: row.rooms?.created_at,
+      startedAt: row.rooms?.started_at,
+      completedAt: row.rooms?.completed_at
+    })),
+    answers: (answers || []).map((row) => ({
+      questionId: row.question_id,
+      answerIndex: row.answer_index,
+      answeredAt: row.answered_at
+    })),
+    dailyAnswers: (dailyAnswers || []).map((row) => ({
+      date: row.quiz_date,
+      questionId: row.question_id,
+      answerIndex: row.answer_index,
+      answeredAt: row.answered_at
+    })),
+    badges: (badges || []).map((row) => ({ badgeId: row.badge_id, earnedAt: row.earned_at })),
     exportedAt: nowIso()
   });
 });
 
-app.delete("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
+app.delete("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
   const userId = req.user.id;
-  const hostedRooms = db
-    .prepare("SELECT id FROM rooms WHERE host_user_id = ?")
-    .all(userId)
-    .map((row) => row.id);
-
-  const deleteRoomData = db.transaction(() => {
-    if (hostedRooms.length > 0) {
-      const ids = hostedRooms.map(() => "?").join(", ");
-      db.prepare(`DELETE FROM room_answers WHERE room_id IN (${ids})`).run(...hostedRooms);
-      db.prepare(`DELETE FROM room_players WHERE room_id IN (${ids})`).run(...hostedRooms);
-      db.prepare(`DELETE FROM room_rematch WHERE room_id IN (${ids})`).run(...hostedRooms);
-      db.prepare(`DELETE FROM rooms WHERE id IN (${ids})`).run(...hostedRooms);
-    }
-
-    db.prepare("DELETE FROM room_answers WHERE user_id = ?").run(userId);
-    db.prepare("DELETE FROM room_players WHERE user_id = ?").run(userId);
-    db.prepare("DELETE FROM user_badges WHERE user_id = ?").run(userId);
-    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
-  });
-
-  deleteRoomData();
+  const { data: hostedRooms } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("host_user_id", userId);
+  const roomIds = hostedRooms?.map((row) => row.id) || [];
+  if (roomIds.length > 0) {
+    await supabase.from("room_answers").delete().in("room_id", roomIds);
+    await supabase.from("room_players").delete().in("room_id", roomIds);
+    await supabase.from("room_rematch").delete().in("room_id", roomIds);
+    await supabase.from("rooms").delete().in("id", roomIds);
+  }
+  await supabase.from("room_answers").delete().eq("user_id", userId);
+  await supabase.from("room_players").delete().eq("user_id", userId);
+  await supabase.from("user_badges").delete().eq("user_id", userId);
+  await supabase.from("users").delete().eq("id", userId);
   res.json({ ok: true });
 });
 
-app.post("/me/deactivate", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), (req, res) => {
-  db.prepare("UPDATE users SET deleted_at = ? WHERE id = ?").run(nowIso(), req.user.id);
+app.post("/me/deactivate", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
+  await supabase.from("users").update({ deleted_at: nowIso() }).eq("id", req.user.id);
   res.json({ ok: true });
 });
 
-app.get("/leaderboard", authMiddleware, (req, res) => {
+app.get("/leaderboard", authMiddleware, async (req, res) => {
   const scope = req.query.scope === "country" ? "country" : "global";
   const country = typeof req.query.country === "string" ? req.query.country.toUpperCase() : "US";
-  const entries = computeLeaderboard(scope, country);
+  const entries = await computeLeaderboard(scope, country);
   const meIndex = entries.findIndex((entry) => entry.userId === req.user.id);
   const me = meIndex >= 0 ? entries[meIndex] : null;
   res.json({ scope, country, entries: entries.slice(0, 10), me });
 });
 
-app.get("/badges", authMiddleware, (req, res) => {
-  const badges = getBadges();
-  const earned = getUserBadges(req.user.id);
+app.get("/badges", authMiddleware, async (req, res) => {
+  const badges = await getBadges();
+  const earned = await getUserBadges(req.user.id);
   const earnedMap = new Map(earned.map((item) => [item.badgeId, item.earnedAt]));
   const response = badges.map((badge) => ({
     id: badge.id,
@@ -1361,45 +1489,55 @@ app.get("/badges", authMiddleware, (req, res) => {
   res.json({ badges: response });
 });
 
-app.post("/rooms", authMiddleware, (req, res) => {
+app.post("/rooms", authMiddleware, async (req, res) => {
   const { quizId, categoryId, questionCount, mode: requestedMode } = req.body;
   let quiz = null;
   if (quizId) {
-    quiz = getQuiz(quizId);
+    quiz = await getQuiz(quizId);
   } else if (categoryId) {
     const count = Number(questionCount);
     if (Number.isInteger(count) && count > 0) {
       quiz = buildCategoryQuiz(categoryId, count);
     }
-    if (quiz) saveCustomQuiz(quiz);
+    if (quiz) await saveCustomQuiz(quiz);
   }
   if (!quiz) return res.status(400).json({ error: "Invalid room configuration" });
   const mode = requestedMode === "sync" ? "sync" : "async";
   let code = generateCode();
-  while (getRoomByCode(code)) {
+  while (await getRoomByCode(code)) {
     code = generateCode();
   }
-  const result = db
-    .prepare(
-      `INSERT INTO rooms (code, mode, quiz_id, status, host_user_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    )
-    .run(code, mode, quiz.id, "lobby", req.user.id, nowIso());
-  db.prepare(
-    `INSERT INTO room_players (room_id, user_id, role, joined_at)
-     VALUES (?, ?, ?, ?)`
-  ).run(result.lastInsertRowid, req.user.id, "host", nowIso());
+  const { data: room, error } = await supabase
+    .from("rooms")
+    .insert({
+      code,
+      mode,
+      quiz_id: quiz.id,
+      status: "lobby",
+      host_user_id: req.user.id,
+      created_at: nowIso()
+    })
+    .select("*")
+    .single();
+  if (error || !room) {
+    return res.status(500).json({ error: "Unable to create room" });
+  }
+  await supabase.from("room_players").insert({
+    room_id: room.id,
+    user_id: req.user.id,
+    role: "host",
+    joined_at: nowIso()
+  });
 
-  const room = getRoomByCode(code);
-  res.json(roomState(room));
+  res.json(await roomState(room));
 });
 
-app.post("/rooms/:code/join", authMiddleware, (req, res) => {
-  const room = getRoomByCode(req.params.code);
+app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
+  const room = await getRoomByCode(req.params.code);
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
   }
-  const players = getRoomPlayers(room.id);
+  const players = await getRoomPlayers(room.id);
   const exists = players.find((player) => player.id === req.user.id);
   if (!exists && room.status !== "lobby") {
     return res.status(409).json({ error: "Room already started" });
@@ -1408,74 +1546,74 @@ app.post("/rooms/:code/join", authMiddleware, (req, res) => {
     return res.status(409).json({ error: "Room is full" });
   }
   if (!exists) {
-    db.prepare(
-      `INSERT INTO room_players (room_id, user_id, role, joined_at)
-       VALUES (?, ?, ?, ?)`
-    ).run(room.id, req.user.id, "guest", nowIso());
+    await supabase.from("room_players").insert({
+      room_id: room.id,
+      user_id: req.user.id,
+      role: "guest",
+      joined_at: nowIso()
+    });
   }
-  res.json(roomState(room));
+  res.json(await roomState(room));
 });
 
-app.get("/rooms/mine", authMiddleware, (req, res) => {
-  const rooms = db
-    .prepare(
-      `SELECT rooms.* FROM rooms
-       JOIN room_players ON room_players.room_id = rooms.id
-       WHERE room_players.user_id = ?
-       ORDER BY rooms.created_at DESC`
-    )
-    .all(req.user.id);
+app.get("/rooms/mine", authMiddleware, async (req, res) => {
+  const { data: rows } = await supabase
+    .from("room_players")
+    .select("rooms(*)")
+    .eq("user_id", req.user.id)
+    .order("created_at", { ascending: false, foreignTable: "rooms" });
+  const rooms = (rows || []).map((row) => row.rooms).filter(Boolean);
 
-  const result = rooms.map((room) => {
-    const quiz = getQuiz(room.quiz_id);
-    const answers = getRoomAnswers(room.id);
-    const players = getRoomPlayers(room.id);
-    const rematch = getRoomRematch(room.id);
-    const progress = answers.reduce((acc, item) => {
-      acc[item.user_id] = (acc[item.user_id] || 0) + 1;
-      return acc;
-    }, {});
-    const scores =
-      room.status === "complete"
-        ? players.reduce((acc, player) => {
-            acc[player.id] = computeScore(quiz, answers, player.id);
-            return acc;
-          }, {})
-        : {};
-    return {
-      code: room.code,
-      mode: room.mode,
-      status: room.status,
-      quiz: sanitizeQuiz(quiz),
-      progress,
-      players,
-      scores,
-      rematchReady: rematch.map((item) => item.userId)
-    };
-  });
+  const result = await Promise.all(
+    rooms.map(async (room) => {
+      const quiz = await getQuiz(room.quiz_id);
+      const answers = await getRoomAnswers(room.id);
+      const players = await getRoomPlayers(room.id);
+      const rematch = await getRoomRematch(room.id);
+      const progress = answers.reduce((acc, item) => {
+        acc[item.user_id] = (acc[item.user_id] || 0) + 1;
+        return acc;
+      }, {});
+      const scores =
+        room.status === "complete"
+          ? players.reduce((acc, player) => {
+              acc[player.id] = computeScore(quiz, answers, player.id);
+              return acc;
+            }, {})
+          : {};
+      return {
+        code: room.code,
+        mode: room.mode,
+        status: room.status,
+        quiz: sanitizeQuiz(quiz),
+        progress,
+        players,
+        scores,
+        rematchReady: rematch.map((item) => item.userId)
+      };
+    })
+  );
 
   res.json({ rooms: result });
 });
 
-app.get("/rooms/:code", authMiddleware, (req, res) => {
-  const room = getRoomByCode(req.params.code);
+app.get("/rooms/:code", authMiddleware, async (req, res) => {
+  const room = await getRoomByCode(req.params.code);
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
   }
-  if (!isRoomMember(room.id, req.user.id)) {
+  if (!(await isRoomMember(room.id, req.user.id))) {
     return res.status(403).json({ error: "Not a member of this room" });
   }
-  res.json(roomState(room));
+  res.json(await roomState(room));
 });
 
-app.get("/stats", authMiddleware, (req, res) => {
-  const rooms = db
-    .prepare(
-      `SELECT rooms.* FROM rooms
-       JOIN room_players ON room_players.room_id = rooms.id
-       WHERE room_players.user_id = ?`
-    )
-    .all(req.user.id);
+app.get("/stats", authMiddleware, async (req, res) => {
+  const { data: roomRows } = await supabase
+    .from("room_players")
+    .select("rooms(*)")
+    .eq("user_id", req.user.id);
+  const rooms = (roomRows || []).map((row) => row.rooms).filter(Boolean);
 
   const perOpponent = {};
   let wins = 0;
@@ -1484,11 +1622,11 @@ app.get("/stats", authMiddleware, (req, res) => {
   let ongoing = 0;
   let rematchRequested = 0;
 
-  rooms.forEach((room) => {
+  for (const room of rooms) {
     if (room.status === "active") ongoing += 1;
-    const players = getRoomPlayers(room.id);
+    const players = await getRoomPlayers(room.id);
     const opponent = players.find((player) => player.id !== req.user.id);
-    const rematch = getRoomRematch(room.id);
+    const rematch = await getRoomRematch(room.id);
     if (rematch.length > 0) rematchRequested += 1;
     if (!opponent) return;
 
@@ -1504,8 +1642,8 @@ app.get("/stats", authMiddleware, (req, res) => {
     }
 
     if (room.status === "complete") {
-      const quiz = getQuiz(room.quiz_id);
-      const answers = getRoomAnswers(room.id);
+      const quiz = await getQuiz(room.quiz_id);
+      const answers = await getRoomAnswers(room.id);
       const myScore = computeScore(quiz, answers, req.user.id);
       const theirScore = computeScore(quiz, answers, opponent.id);
       if (myScore > theirScore) {
@@ -1519,7 +1657,7 @@ app.get("/stats", authMiddleware, (req, res) => {
         perOpponent[key].ties += 1;
       }
     }
-  });
+  }
 
   res.json({
     totals: {
@@ -1533,17 +1671,17 @@ app.get("/stats", authMiddleware, (req, res) => {
   });
 });
 
-app.get("/rooms/:code/summary", authMiddleware, (req, res) => {
-  const room = getRoomByCode(req.params.code);
+app.get("/rooms/:code/summary", authMiddleware, async (req, res) => {
+  const room = await getRoomByCode(req.params.code);
   if (!room) {
     return res.status(404).json({ error: "Room not found" });
   }
-  if (!isRoomMember(room.id, req.user.id)) {
+  if (!(await isRoomMember(room.id, req.user.id))) {
     return res.status(403).json({ error: "Not a member of this room" });
   }
-  const quiz = getQuiz(room.quiz_id);
-  const players = getRoomPlayers(room.id);
-  const answers = getRoomAnswers(room.id);
+  const quiz = await getQuiz(room.quiz_id);
+  const players = await getRoomPlayers(room.id);
+  const answers = await getRoomAnswers(room.id);
   const scores = players.map((player) => ({
     userId: player.id,
     displayName: player.displayName,
@@ -1584,86 +1722,99 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("room:join", ({ code }) => {
+  socket.on("room:join", async ({ code }) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
-    const room = getRoomByCode(code);
+    const room = await getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
-    if (!isRoomMember(room.id, user.id)) {
+    if (!(await isRoomMember(room.id, user.id))) {
       return socket.emit("room:error", { error: "Not a member of this room" });
     }
     socket.join(code);
-    io.to(code).emit("room:update", roomState(room));
+    io.to(code).emit("room:update", await roomState(room));
   });
 
-  socket.on("room:start", ({ code }) => {
+  socket.on("room:start", async ({ code }) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
-    const room = getRoomByCode(code);
+    const room = await getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
-    if (!isRoomMember(room.id, user.id)) {
+    if (!(await isRoomMember(room.id, user.id))) {
       return socket.emit("room:error", { error: "Not a member of this room" });
     }
     if (room.host_user_id !== user.id) {
       return socket.emit("room:error", { error: "Only the host can start" });
     }
     if (room.status !== "lobby") return;
-    db.prepare(
-      "UPDATE rooms SET status = ?, current_index = 0, started_at = ? WHERE id = ?"
-    ).run("active", nowIso(), room.id);
-    const updated = getRoomByCode(code);
-    io.to(code).emit("room:update", roomState(updated));
+    await supabase
+      .from("rooms")
+      .update({ status: "active", current_index: 0, started_at: nowIso() })
+      .eq("id", room.id);
+    const updated = await getRoomByCode(code);
+    io.to(code).emit("room:update", await roomState(updated));
   });
 
-  socket.on("room:rematch", ({ code }) => {
+  socket.on("room:rematch", async ({ code }) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
-    const room = getRoomByCode(code);
+    const room = await getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
-    if (!isRoomMember(room.id, user.id)) {
+    if (!(await isRoomMember(room.id, user.id))) {
       return socket.emit("room:error", { error: "Not a member of this room" });
     }
     if (room.status !== "complete") {
       return socket.emit("room:error", { error: "Room is not complete" });
     }
 
-    db.prepare(
-      "INSERT OR IGNORE INTO room_rematch (room_id, user_id, ready_at) VALUES (?, ?, ?)"
-    ).run(room.id, user.id, nowIso());
+    await supabase
+      .from("room_rematch")
+      .upsert(
+        { room_id: room.id, user_id: user.id, ready_at: nowIso() },
+        { onConflict: "room_id,user_id" }
+      );
 
-    const players = getRoomPlayers(room.id);
-    const rematch = getRoomRematch(room.id);
+    const players = await getRoomPlayers(room.id);
+    const rematch = await getRoomRematch(room.id);
 
     if (rematch.length >= players.length) {
-      const currentQuiz = getQuiz(room.quiz_id);
+      const currentQuiz = await getQuiz(room.quiz_id);
       const nextQuiz = currentQuiz
         ? buildCategoryQuiz(currentQuiz.categoryId || "all", currentQuiz.questions.length)
         : null;
-      if (nextQuiz) saveCustomQuiz(nextQuiz);
-      db.prepare("DELETE FROM room_answers WHERE room_id = ?").run(room.id);
-      db.prepare("DELETE FROM room_rematch WHERE room_id = ?").run(room.id);
-      db.prepare(
-        "UPDATE rooms SET status = ?, current_index = 0, started_at = ?, completed_at = NULL, quiz_id = ? WHERE id = ?"
-      ).run("active", nowIso(), nextQuiz ? nextQuiz.id : room.quiz_id, room.id);
+      if (nextQuiz) await saveCustomQuiz(nextQuiz);
+      await supabase.from("room_answers").delete().eq("room_id", room.id);
+      await supabase.from("room_rematch").delete().eq("room_id", room.id);
+      await supabase
+        .from("rooms")
+        .update({
+          status: "active",
+          current_index: 0,
+          started_at: nowIso(),
+          completed_at: null,
+          quiz_id: nextQuiz ? nextQuiz.id : room.quiz_id
+        })
+        .eq("id", room.id);
     }
 
-    const updated = getRoomByCode(code);
-    io.to(code).emit("room:update", roomState(updated));
+    const updated = await getRoomByCode(code);
+    io.to(code).emit("room:update", await roomState(updated));
   });
 
-  socket.on("room:answer", ({ code, questionId, answerIndex }) => {
+  socket.on("room:answer", async ({ code, questionId, answerIndex }) => {
     if (!user) return socket.emit("room:error", { error: "Unauthorized" });
-    const room = getRoomByCode(code);
+    const room = await getRoomByCode(code);
     if (!room) return socket.emit("room:error", { error: "Room not found" });
-    if (!isRoomMember(room.id, user.id)) {
+    if (!(await isRoomMember(room.id, user.id))) {
       return socket.emit("room:error", { error: "Not a member of this room" });
     }
     if (room.status !== "active") return;
 
-    const existing = db
-      .prepare(
-        `SELECT * FROM room_answers WHERE room_id = ? AND user_id = ? AND question_id = ?`
-      )
-      .get(room.id, user.id, questionId);
+    const { data: existing } = await supabase
+      .from("room_answers")
+      .select("*")
+      .eq("room_id", room.id)
+      .eq("user_id", user.id)
+      .eq("question_id", questionId)
+      .maybeSingle();
     if (!existing) {
-      const quiz = getQuiz(room.quiz_id);
+      const quiz = await getQuiz(room.quiz_id);
       if (!quiz) return;
       const question = quiz.questions.find((item) => item.id === questionId);
       if (!question) return;
@@ -1671,15 +1822,18 @@ io.on("connection", (socket) => {
       if (!Number.isInteger(answerIndex) || answerIndex < -1 || answerIndex >= maxIndex) {
         return;
       }
-      db.prepare(
-        `INSERT INTO room_answers (room_id, user_id, question_id, answer_index, answered_at)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(room.id, user.id, questionId, answerIndex, nowIso());
+      await supabase.from("room_answers").insert({
+        room_id: room.id,
+        user_id: user.id,
+        question_id: questionId,
+        answer_index: answerIndex,
+        answered_at: nowIso()
+      });
     }
 
-    const quiz = getQuiz(room.quiz_id);
-    const answers = getRoomAnswers(room.id);
-    const players = getRoomPlayers(room.id);
+    const quiz = await getQuiz(room.quiz_id);
+    const answers = await getRoomAnswers(room.id);
+    const players = await getRoomPlayers(room.id);
 
     if (room.mode === "sync") {
       const question = quiz.questions[room.current_index];
@@ -1687,14 +1841,13 @@ io.on("connection", (socket) => {
       if (answeredCount >= players.length) {
         const nextIndex = room.current_index + 1;
         if (nextIndex >= quiz.questions.length) {
-          db.prepare("UPDATE rooms SET status = ?, completed_at = ? WHERE id = ?").run(
-            "complete",
-            nowIso(),
-            room.id
-          );
-          awardBadgesForRoom(room.id);
+          await supabase
+            .from("rooms")
+            .update({ status: "complete", completed_at: nowIso() })
+            .eq("id", room.id);
+          await awardBadgesForRoom(room.id);
         } else {
-          db.prepare("UPDATE rooms SET current_index = ? WHERE id = ?").run(nextIndex, room.id);
+          await supabase.from("rooms").update({ current_index: nextIndex }).eq("id", room.id);
         }
       }
     } else {
@@ -1703,17 +1856,16 @@ io.on("connection", (socket) => {
         return answeredCount >= quiz.questions.length;
       });
       if (completedPlayers.length === players.length) {
-        db.prepare("UPDATE rooms SET status = ?, completed_at = ? WHERE id = ?").run(
-          "complete",
-          nowIso(),
-          room.id
-        );
-        awardBadgesForRoom(room.id);
+        await supabase
+          .from("rooms")
+          .update({ status: "complete", completed_at: nowIso() })
+          .eq("id", room.id);
+        await awardBadgesForRoom(room.id);
       }
     }
 
-    const updated = getRoomByCode(code);
-    io.to(code).emit("room:update", roomState(updated));
+    const updated = await getRoomByCode(code);
+    io.to(code).emit("room:update", await roomState(updated));
   });
 
   socket.on("disconnect", () => {
