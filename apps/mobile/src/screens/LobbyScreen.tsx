@@ -20,7 +20,7 @@ import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
-import { QuizSummary, StatsResponse } from "../data/types";
+import { DailyQuizResults, DailyQuizStatus, QuizSummary, StatsResponse } from "../data/types";
 
 type Props = {
   quizzes: QuizSummary[];
@@ -43,6 +43,12 @@ type Props = {
   onOpenRecap: (code: string) => void;
   onResumeRoom: (code: string) => void;
   recapStats: StatsResponse | null;
+  dailyQuiz: DailyQuizStatus | null;
+  dailyResults: DailyQuizResults | null;
+  dailyLoading: boolean;
+  onOpenDailyQuiz: () => void;
+  onOpenDailyResults: () => void;
+  dailyBestStreak: number;
 };
 
 const ALL_CATEGORY_ID = "all";
@@ -65,7 +71,13 @@ export function LobbyScreen({
   sessions,
   onOpenRecap,
   onResumeRoom,
-  recapStats
+  recapStats,
+  dailyQuiz,
+  dailyResults,
+  dailyLoading,
+  onOpenDailyQuiz,
+  onOpenDailyResults,
+  dailyBestStreak
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -171,6 +183,22 @@ export function LobbyScreen({
   const remainingSessions = nextSession
     ? activeSessions.filter((session) => session.code !== nextSession.code)
     : activeSessions;
+  const dailyAnswered = dailyQuiz?.answeredCount ?? 0;
+  const dailyTotal = dailyQuiz?.totalQuestions ?? 10;
+  const dailyCompleted = dailyQuiz?.completed ?? false;
+  const dailyPercentile = dailyResults?.my.percentile ?? null;
+  const dailyActionLabel = dailyCompleted
+    ? t(locale, "dailyQuizResults")
+    : dailyAnswered > 0
+      ? t(locale, "dailyQuizContinue")
+      : t(locale, "dailyQuizPlay");
+  const dailyProgressLabel = t(locale, "dailyQuizProgress", {
+    count: dailyAnswered,
+    total: dailyTotal
+  });
+  const showDailyCard = Boolean(dailyQuiz) || dailyLoading;
+  const handleDailyPress = dailyCompleted ? onOpenDailyResults : onOpenDailyQuiz;
+  const dailyProgressRatio = Math.min(dailyAnswered / Math.max(dailyTotal, 1), 1);
 
   const selectedCategory = useMemo(
     () => categories.find((category) => category.id === selectedCategoryId) || null,
@@ -239,12 +267,13 @@ export function LobbyScreen({
       Animated.sequence([
         Animated.timing(continuePulse, {
           toValue: 1,
-          duration: 1400,
+          duration: 1800,
           useNativeDriver: true
         }),
+        Animated.delay(400),
         Animated.timing(continuePulse, {
           toValue: 0,
-          duration: 1400,
+          duration: 0,
           useNativeDriver: true
         })
       ])
@@ -321,6 +350,11 @@ export function LobbyScreen({
       <View style={styles.backgroundOrbAccent} pointerEvents="none" />
       <View style={styles.backgroundGlow} pointerEvents="none" />
       <View style={styles.backgroundGlass} pointerEvents="none" />
+      <LinearGradient
+        colors={["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.7)", "rgba(255, 255, 255, 0.88)"]}
+        style={[styles.bottomFade, { paddingBottom: insets.bottom }]}
+        pointerEvents="none"
+      />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -409,10 +443,14 @@ export function LobbyScreen({
                 <View style={[styles.recapBarSegment, styles.recapBarEmpty]} />
               )}
             </View>
-            <View style={styles.recapStreakRow}>
-              <Text style={styles.recapStreakLabel}>{t(locale, "bestStreak")}</Text>
-              <Text style={styles.recapStreakValue}>—</Text>
+          <View style={styles.recapStreakRow}>
+            <Text style={styles.recapStreakLabel}>{t(locale, "bestDailyStreak")}</Text>
+            <View style={styles.recapStreakPill}>
+              <Text style={styles.recapStreakPillText}>
+                {dailyBestStreak > 0 ? dailyBestStreak : "—"}
+              </Text>
             </View>
+          </View>
             {recapStats.opponents.length > 0 ? (
               <View style={styles.opponentList}>
                 <Text style={styles.recapMetaLabel}>{t(locale, "topRivals")}</Text>
@@ -495,6 +533,81 @@ export function LobbyScreen({
                 style={styles.nextActionPrimary}
               />
             </View>
+          </GlassCard>
+        ) : null}
+
+        {showDailyCard ? (
+          <GlassCard
+            accent={theme.colors.reward}
+            style={[styles.introCard, styles.dailyQuizCard, dailyCompleted && styles.dailyQuizCardCompact]}
+          >
+            <View style={styles.dailyQuizHeader}>
+              <View style={styles.dailyQuizHeaderLeft}>
+                <View style={styles.dailyQuizBadge}>
+                  <FontAwesome name="calendar" size={12} color={theme.colors.reward} />
+                </View>
+                <Text style={styles.dailyQuizLabel}>{t(locale, "dailyQuizTitle")}</Text>
+              </View>
+              {!dailyCompleted ? (
+                <Text style={styles.dailyQuizNew}>{t(locale, "dailyQuizNew")}</Text>
+              ) : null}
+            </View>
+
+            {dailyCompleted ? (
+              <View style={styles.dailyQuizCompactRow}>
+                <View style={styles.dailyQuizCompactCopy}>
+                  <Text style={styles.dailyQuizTitleCompact}>
+                    {t(locale, "dailyQuizCompleted")}
+                  </Text>
+                  <Text style={styles.dailyQuizMetaCompact}>
+                    {dailyPercentile !== null
+                      ? t(locale, "dailyQuizPercentile", { percent: dailyPercentile })
+                      : t(locale, "dailyQuizParticipants", { count: dailyResults?.participants ?? 0 })}
+                  </Text>
+                </View>
+                <View style={styles.dailyQuizCompactAction}>
+                  <Pressable
+                    onPress={onOpenDailyResults}
+                    style={({ pressed }) => [
+                      styles.dailyQuizMiniButton,
+                      pressed && styles.dailyQuizMiniButtonPressed,
+                      (dailyLoading || !dailyResults) && styles.dailyQuizMiniButtonDisabled
+                    ]}
+                    disabled={dailyLoading || !dailyResults}
+                  >
+                    <Text style={styles.dailyQuizMiniButtonText}>
+                      {t(locale, "dailyQuizResultsShort")}
+                    </Text>
+                    <FontAwesome name="chevron-right" size={12} color={theme.colors.reward} />
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.dailyQuizHero}>
+                  <Text style={styles.nextActionTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
+                  <Text style={styles.dailyQuizMeta}>{dailyProgressLabel}</Text>
+                </View>
+                <View style={styles.dailyQuizProgress}>
+                  <View
+                    style={[
+                      styles.dailyQuizProgressFill,
+                      { width: `${Math.min(dailyProgressRatio * 100, 100)}%` }
+                    ]}
+                  />
+                </View>
+                <View style={styles.dailyQuizButtons}>
+                  <PrimaryButton
+                    label={dailyActionLabel}
+                    icon="arrow-right"
+                    iconPosition="right"
+                    onPress={handleDailyPress}
+                    style={styles.dailyQuizPrimary}
+                    disabled={dailyLoading || !dailyQuiz}
+                  />
+                </View>
+              </>
+            )}
           </GlassCard>
         ) : null}
 
@@ -760,16 +873,18 @@ export function LobbyScreen({
             styles.fabPulse,
             {
               transform: [
+                { translateX: -90 },
+                { translateY: -32 },
                 {
                   scale: continuePulse.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [1, 1.12]
+                    outputRange: [0.9, 1.2]
                   })
                 }
               ],
               opacity: continuePulse.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0.35, 0]
+                outputRange: [0.4, 0]
               })
             }
           ]}
@@ -1377,7 +1492,8 @@ const styles = StyleSheet.create({
   },
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",
-    backgroundColor: "rgba(255, 255, 255, 0.96)"
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    padding: theme.spacing.md
   },
   nextActionHeader: {
     flexDirection: "row",
@@ -1424,14 +1540,14 @@ const styles = StyleSheet.create({
   nextActionTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
+    fontSize: 20,
     fontWeight: "600"
   },
   nextActionMeta: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    lineHeight: 18
+    fontSize: 12,
+    lineHeight: 16
   },
   nextActionMetaAhead: {
     color: theme.colors.success,
@@ -1446,7 +1562,7 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   nextActionProgress: {
-    height: 4,
+    height: 3,
     borderRadius: 999,
     backgroundColor: "rgba(11, 14, 20, 0.08)",
     overflow: "hidden",
@@ -1458,11 +1574,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary
   },
   nextActionButtons: {
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
     gap: theme.spacing.sm
   },
   nextActionPrimary: {
-    width: "100%"
+    width: "100%",
+    paddingVertical: 12,
+    minHeight: 40
   },
   nextActionSecondary: {
     alignSelf: "center",
@@ -1479,6 +1597,142 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
+  },
+  dailyQuizCard: {
+    borderColor: "rgba(243, 183, 78, 0.22)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs
+  },
+  dailyQuizCardCompact: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md
+  },
+  dailyQuizHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  dailyQuizHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  dailyQuizBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(243, 183, 78, 0.35)"
+  },
+  dailyQuizLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
+  dailyQuizNew: {
+    color: theme.colors.reward,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  dailyQuizHero: {
+    marginTop: theme.spacing.xs,
+    gap: 4
+  },
+  dailyQuizTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600"
+  },
+  dailyQuizMeta: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  dailyQuizProgress: {
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    overflow: "hidden",
+    marginTop: theme.spacing.xs
+  },
+  dailyQuizProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: theme.colors.reward
+  },
+  dailyQuizCompleted: {
+    marginTop: theme.spacing.xs,
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  dailyQuizButtons: {
+    marginTop: theme.spacing.xs
+  },
+  dailyQuizPrimary: {
+    width: "100%",
+    backgroundColor: theme.colors.reward
+  },
+  dailyQuizCompactRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  dailyQuizCompactCopy: {
+    flex: 1,
+    paddingRight: theme.spacing.sm
+  },
+  dailyQuizCompactAction: {
+    alignItems: "flex-end",
+    justifyContent: "center"
+  },
+  dailyQuizTitleCompact: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  dailyQuizMetaCompact: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  dailyQuizMiniButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(243, 183, 78, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.4)",
+    minWidth: 96,
+    justifyContent: "center"
+  },
+  dailyQuizMiniButtonText: {
+    color: theme.colors.reward,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  dailyQuizMiniButtonPressed: {
+    opacity: 0.7
+  },
+  dailyQuizMiniButtonDisabled: {
+    opacity: 0.5
   },
   recapPill: {
     flex: 1,
@@ -1548,8 +1802,16 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
-  recapStreakValue: {
-    color: theme.colors.ink,
+  recapStreakPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(243, 183, 78, 0.24)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.55)"
+  },
+  recapStreakPillText: {
+    color: "#7A5A1F",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
@@ -1929,10 +2191,14 @@ const styles = StyleSheet.create({
   },
   fabPulse: {
     position: "absolute",
-    width: 64,
+    left: "50%",
+    top: "50%",
+    width: 180,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "rgba(94, 124, 255, 0.35)"
+    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.32)"
   },
   fabLabel: {
     color: theme.colors.surface,
@@ -2082,6 +2348,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    alignItems: "center"
+    alignItems: "center",
+    zIndex: 2
+  },
+  bottomFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 140,
+    zIndex: 1
   }
 });

@@ -35,6 +35,8 @@ import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RoomLobbyScreen } from "./src/screens/RoomLobbyScreen";
 import { PlayScreen } from "./src/screens/PlayScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
+import { DailyQuizScreen } from "./src/screens/DailyQuizScreen";
+import { DailyResultsScreen } from "./src/screens/DailyResultsScreen";
 import { SplashScreen } from "./src/screens/SplashScreen";
 import { EdgeSwipeBack } from "./src/components/EdgeSwipeBack";
 import {
@@ -47,6 +49,9 @@ import {
   deleteAccount,
   deactivateAccount,
   exportAccountData,
+  fetchDailyQuiz,
+  fetchDailyResults,
+  fetchDailyHistory,
   fetchMe,
   fetchMyRooms,
   fetchStats,
@@ -61,6 +66,7 @@ import {
   requestEmailVerification,
   requestPasswordReset,
   registerUser,
+  submitDailyAnswer,
   updateEmail,
   updateProfile,
   updatePassword
@@ -68,6 +74,9 @@ import {
 import { getRewardForResults } from "./src/data/rewards";
 import {
   BadgesResponse,
+  DailyQuizHistoryItem,
+  DailyQuizResults,
+  DailyQuizStatus,
   LeaderboardResponse,
   QuizSummary,
   RoomListItem,
@@ -184,6 +193,59 @@ export default function App() {
   const [summary, setSummary] = useState<RoomSummary | null>(null);
   const [myRooms, setMyRooms] = useState<RoomListItem[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [dailyQuiz, setDailyQuiz] = useState<DailyQuizStatus | null>(null);
+  const [dailyResults, setDailyResults] = useState<DailyQuizResults | null>(null);
+  const [dailyHistory, setDailyHistory] = useState<DailyQuizHistoryItem[]>([]);
+  const [dailyStage, setDailyStage] = useState<"quiz" | "results" | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailySubmitting, setDailySubmitting] = useState(false);
+
+  const dailyStreaks = useMemo(() => {
+    const dates = new Set<string>();
+    dailyHistory.forEach((item) => dates.add(item.date));
+    if (dailyResults?.date) dates.add(dailyResults.date);
+    if (dates.size === 0) return { current: 0, best: 0 };
+
+    const toTime = (value: string) => new Date(`${value}T00:00:00Z`).getTime();
+    const dateList = Array.from(dates).sort((a, b) => toTime(b) - toTime(a));
+    let best = 1;
+    let current = 1;
+    let run = 1;
+
+    for (let i = 1; i < dateList.length; i += 1) {
+      const prev = toTime(dateList[i - 1]);
+      const next = toTime(dateList[i]);
+      const diffDays = Math.round((prev - next) / 86400000);
+      if (diffDays === 1) {
+        run += 1;
+      } else {
+        best = Math.max(best, run);
+        run = 1;
+      }
+    }
+    best = Math.max(best, run);
+    if (dailyResults?.date) {
+      const latest = dateList[0];
+      if (latest !== dailyResults.date) {
+        current = 0;
+      } else {
+        current = 1;
+        for (let i = 1; i < dateList.length; i += 1) {
+          const prev = toTime(dateList[i - 1]);
+          const next = toTime(dateList[i]);
+          const diffDays = Math.round((prev - next) / 86400000);
+          if (diffDays === 1) {
+            current += 1;
+          } else {
+            break;
+          }
+        }
+      }
+    } else {
+      current = 0;
+    }
+    return { current, best };
+  }, [dailyHistory, dailyResults?.date]);
   const [recapRoom, setRecapRoom] = useState<RoomState | null>(null);
   const [recapSummary, setRecapSummary] = useState<RoomSummary | null>(null);
   const [leaderboardGlobal, setLeaderboardGlobal] = useState<LeaderboardResponse | null>(null);
@@ -209,6 +271,14 @@ export default function App() {
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
+  const dailyAnswersMap = useMemo(() => {
+    const result: Record<string, number> = {};
+    dailyQuiz?.answers?.forEach((answer) => {
+      result[answer.questionId] = answer.answerIndex;
+    });
+    return result;
+  }, [dailyQuiz]);
+
   useEffect(() => {
     const handleUrl = ({ url }: { url: string }) => {
       const code = parseRoomCodeFromUrl(url);
@@ -232,10 +302,11 @@ export default function App() {
 
   const panelIndex = MAIN_PANELS.indexOf(panel);
   const activePanelIndex = panelIndex >= 0 ? panelIndex : 0;
-  const swipeEnabled = !loading && token && user && !room && !recapRoom && hasSeenOnboarding;
+  const swipeEnabled =
+    !loading && token && user && !room && !recapRoom && !dailyStage && hasSeenOnboarding;
   const panelSwipeEnabled = swipeEnabled && panelIndex >= 0;
   const showLobby = !loading && token && user && !room && hasSeenOnboarding;
-  const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom;
+  const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom && !dailyStage;
 
   const snapToIndex = useCallback(
     (index: number, animated = true, velocity = 0) => {
@@ -587,10 +658,51 @@ export default function App() {
   }, [token, user, panel, hasSeenOnboarding]);
 
   useEffect(() => {
+    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding) return;
+    refreshDailyQuiz();
+  }, [token, user, panel, hasSeenOnboarding]);
+
+  useEffect(() => {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || room || recapRoom) return;
     const interval = setInterval(() => refreshMyRooms(), 15000);
     return () => clearInterval(interval);
   }, [token, user, panel, hasSeenOnboarding, room, recapRoom]);
+
+  function refreshDailyQuiz() {
+    if (!token) return Promise.resolve(null);
+    setDailyLoading(true);
+    return fetchDailyQuiz(token)
+      .then((data) => {
+        setDailyQuiz((prev) => {
+          if (prev?.date && prev.date !== data.date) {
+            setDailyResults(null);
+            setDailyHistory([]);
+          }
+          return data;
+        });
+        if (data.completed) {
+          return fetchDailyResults(token)
+            .then((results) => {
+              setDailyResults(results);
+              return fetchDailyHistory(token, 7)
+                .then((history) => {
+                  setDailyHistory(history.history);
+                  return data;
+                })
+                .catch(() => data);
+            })
+            .catch(() => data);
+        }
+        return fetchDailyHistory(token, 7)
+          .then((history) => {
+            setDailyHistory(history.history);
+            return data;
+          })
+          .catch(() => data);
+      })
+      .catch(() => null)
+      .finally(() => setDailyLoading(false));
+  }
 
   function refreshMyRooms() {
     if (!token) return;
@@ -859,6 +971,72 @@ export default function App() {
     }
   }
 
+  async function handleOpenDailyQuiz() {
+    if (!token) return;
+    setRoomError(null);
+    const data = dailyQuiz || (await refreshDailyQuiz());
+    if (!data) return;
+    setDailyStage("quiz");
+  }
+
+  async function handleOpenDailyResults() {
+    if (!token) return;
+    setRoomError(null);
+    setDailyLoading(true);
+    try {
+      const results = await fetchDailyResults(token);
+      setDailyResults(results);
+      const history = await fetchDailyHistory(token, 7).catch(() => null);
+      if (history) setDailyHistory(history.history);
+      setDailyStage("results");
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    } finally {
+      setDailyLoading(false);
+    }
+  }
+
+  function handleCloseDaily() {
+    setDailyStage(null);
+  }
+
+  async function handleDailyAnswer(questionId: string, answerIndex: number) {
+    if (!token || !dailyQuiz || dailySubmitting) return;
+    if (dailyAnswersMap[questionId] !== undefined) return;
+    setDailySubmitting(true);
+    setRoomError(null);
+    try {
+      const result = await submitDailyAnswer(token, { questionId, answerIndex });
+      setDailyQuiz((prev) => {
+        if (!prev) return prev;
+        const alreadyAnswered = prev.answers.some((item) => item.questionId === questionId);
+        const nextAnswers = alreadyAnswered
+          ? prev.answers
+          : [...prev.answers, { questionId, answerIndex }];
+        return {
+          ...prev,
+          answers: nextAnswers,
+          answeredCount: result.answeredCount,
+          correctCount: result.correctCount,
+          wrongCount: result.wrongCount,
+          totalQuestions: result.totalQuestions,
+          completed: result.completed
+        };
+      });
+      if (result.completed) {
+        const results = await fetchDailyResults(token);
+        setDailyResults(results);
+        const history = await fetchDailyHistory(token, 7).catch(() => null);
+        if (history) setDailyHistory(history.history);
+        setDailyStage("results");
+      }
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    } finally {
+      setDailySubmitting(false);
+    }
+  }
+
   async function handleCreateRoom(
     categoryId: string,
     questionCount: number,
@@ -866,6 +1044,7 @@ export default function App() {
   ) {
     if (!token) return;
     setRoomError(null);
+    setDailyStage(null);
     setLoading(true);
     try {
       const state = await createRoom(token, { categoryId, questionCount, mode });
@@ -883,6 +1062,7 @@ export default function App() {
   async function handleJoinRoom(code: string) {
     if (!token) return;
     setRoomError(null);
+    setDailyStage(null);
     setLoading(true);
     try {
       const state = await joinRoom(token, code);
@@ -900,6 +1080,7 @@ export default function App() {
   async function handleOpenRecap(code: string) {
     if (!token) return;
     setRoomError(null);
+    setDailyStage(null);
     try {
       const [roomData, summaryData] = await Promise.all([
         fetchRoom(token, code),
@@ -918,6 +1099,7 @@ export default function App() {
   async function handleResumeRoom(code: string) {
     if (!token) return;
     setRoomError(null);
+    setDailyStage(null);
     try {
       const state = await joinRoom(token, code);
       setRoom(state);
@@ -1073,6 +1255,10 @@ export default function App() {
     setNotificationQueue([]);
     setRecapRoom(null);
     setRecapSummary(null);
+    setDailyQuiz(null);
+    setDailyResults(null);
+    setDailyHistory([]);
+    setDailyStage(null);
     closedRoomCodesRef.current.clear();
     setPanel("lobby");
     AsyncStorage.removeItem(AUTH_TOKEN_KEY).catch(() => null);
@@ -1154,6 +1340,12 @@ export default function App() {
       recapStats={stats}
       onOpenRecap={handleOpenRecap}
       onResumeRoom={handleResumeRoom}
+      dailyQuiz={dailyQuiz}
+      dailyResults={dailyResults}
+      dailyLoading={dailyLoading}
+      onOpenDailyQuiz={handleOpenDailyQuiz}
+      onOpenDailyResults={handleOpenDailyResults}
+      dailyBestStreak={dailyStreaks.best}
     />
   ) : null;
 
@@ -1285,6 +1477,35 @@ export default function App() {
             rematchReadyCount={recapRoom.rematchReady?.length ?? 0}
             rematchTotal={recapRoom.players?.length ?? 0}
             rematchReady={recapRoom.rematchReady ?? []}
+          />
+        </EdgeSwipeBack>
+      )}
+
+      {!loading && token && user && !room && dailyStage === "quiz" && dailyQuiz && (
+        <EdgeSwipeBack enabled onBack={handleCloseDaily}>
+          <DailyQuizScreen
+            quiz={dailyQuiz.quiz}
+            answers={dailyAnswersMap}
+            answeredCount={dailyQuiz.answeredCount}
+            totalQuestions={dailyQuiz.totalQuestions}
+            completed={dailyQuiz.completed}
+            submitting={dailySubmitting}
+            onAnswer={handleDailyAnswer}
+            onExit={handleCloseDaily}
+            onSeeResults={handleOpenDailyResults}
+            locale={locale}
+          />
+        </EdgeSwipeBack>
+      )}
+
+      {!loading && token && user && !room && dailyStage === "results" && dailyResults && (
+        <EdgeSwipeBack enabled onBack={handleCloseDaily}>
+          <DailyResultsScreen
+            results={dailyResults}
+            history={dailyHistory}
+            streakCount={dailyStreaks.current}
+            onBack={handleCloseDaily}
+            locale={locale}
           />
         </EdgeSwipeBack>
       )}

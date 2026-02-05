@@ -1,6 +1,9 @@
 import { API_BASE_URL } from "./config";
 import {
   BadgesResponse,
+  DailyQuizResults,
+  DailyQuizStatus,
+  DailyQuizHistoryItem,
   LeaderboardResponse,
   QuizSummary,
   RoomState,
@@ -86,6 +89,68 @@ export async function fetchQuizzes(): Promise<QuizSummary[]> {
   const response = await fetch(`${API_BASE_URL}/quizzes`);
   if (!response.ok) throw new Error("Unable to load quizzes");
   return response.json();
+}
+
+export async function fetchDailyQuiz(token: string): Promise<DailyQuizStatus> {
+  const tzOffset = new Date().getTimezoneOffset();
+  const response = await fetch(`${API_BASE_URL}/daily-quiz?tzOffset=${tzOffset}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to load daily quiz");
+  }
+  return response.json();
+}
+
+export async function submitDailyAnswer(
+  token: string,
+  payload: { questionId: string; answerIndex: number }
+) {
+  const tzOffset = new Date().getTimezoneOffset();
+  const response = await fetch(`${API_BASE_URL}/daily-quiz/answer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ ...payload, tzOffset })
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to submit answer");
+  }
+  return response.json() as Promise<{
+    date: string;
+    answeredCount: number;
+    correctCount: number;
+    wrongCount: number;
+    totalQuestions: number;
+    completed: boolean;
+  }>;
+}
+
+export async function fetchDailyResults(token: string): Promise<DailyQuizResults> {
+  const tzOffset = new Date().getTimezoneOffset();
+  const response = await fetch(`${API_BASE_URL}/daily-quiz/results?tzOffset=${tzOffset}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to load daily results");
+  }
+  return response.json();
+}
+
+export async function fetchDailyHistory(token: string, limit = 7) {
+  const response = await fetch(`${API_BASE_URL}/daily-quiz/history?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    const message = await response.json().catch(() => ({}));
+    throw new Error(message.error || "Unable to load daily history");
+  }
+  return response.json() as Promise<{ history: DailyQuizHistoryItem[] }>;
 }
 
 export async function createRoom(

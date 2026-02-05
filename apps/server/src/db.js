@@ -85,6 +85,28 @@ export function migrate() {
       FOREIGN KEY(user_id) REFERENCES users(id),
       FOREIGN KEY(badge_id) REFERENCES badges(id)
     );
+
+    CREATE TABLE IF NOT EXISTS daily_quizzes (
+      date TEXT PRIMARY KEY,
+      quiz_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_answers (
+      quiz_date TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      question_id TEXT NOT NULL,
+      answer_index INTEGER NOT NULL,
+      answered_at TEXT NOT NULL,
+      PRIMARY KEY (quiz_date, user_id, question_id),
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(quiz_date) REFERENCES daily_quizzes(date)
+    );
+
+    CREATE INDEX IF NOT EXISTS daily_answers_user_date_idx
+      ON daily_answers (user_id, quiz_date);
+    CREATE INDEX IF NOT EXISTS daily_answers_date_idx
+      ON daily_answers (quiz_date);
   `);
 
   const userColumns = db.prepare("PRAGMA table_info(users)").all();

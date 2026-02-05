@@ -115,6 +115,199 @@ function shuffle(items) {
   return list;
 }
 
+function dateKeyFromOffset(offsetMinutes) {
+  const minutes =
+    Number.isFinite(offsetMinutes) && Math.abs(offsetMinutes) <= 14 * 60
+      ? offsetMinutes
+      : 0;
+  const localMs = Date.now() - minutes * 60 * 1000;
+  return new Date(localMs).toISOString().slice(0, 10);
+}
+
+function todayKey(offsetMinutes) {
+  return dateKeyFromOffset(offsetMinutes);
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function mulberry32(seed) {
+  let t = seed;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), t | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle(items, seedValue) {
+  const list = [...items];
+  const random = mulberry32(hashString(seedValue));
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+function getDailyQuiz(dateKey) {
+  const row = db.prepare("SELECT quiz_json FROM daily_quizzes WHERE date = ?").get(dateKey);
+  if (row) {
+    try {
+      return JSON.parse(row.quiz_json);
+    } catch (_err) {
+      // fall through to recreate
+    }
+  }
+
+  const pool = quizzes.flatMap((quiz) => quiz.questions);
+  if (pool.length === 0) return null;
+  const selected = seededShuffle(pool, dateKey).slice(0, 10);
+  const count = selected.length;
+  const dailyQuiz = {
+    id: `daily_${dateKey}`,
+    categoryId: "daily",
+    categoryLabel: "Daily Quiz",
+    title: "Daily Quiz",
+    subtitle: `${count} questions`,
+    rounds: count,
+    accent: "#F3B74E",
+    questions: selected
+  };
+
+  db.prepare(
+    "INSERT OR REPLACE INTO daily_quizzes (date, quiz_json, created_at) VALUES (?, ?, ?)"
+  ).run(dateKey, JSON.stringify(dailyQuiz), nowIso());
+
+  return dailyQuiz;
+}
+
+function getDailyAnswers(dateKey, userId) {
+  return db
+    .prepare(
+      `SELECT question_id as questionId, answer_index as answerIndex
+       FROM daily_answers WHERE quiz_date = ? AND user_id = ?`
+    )
+    .all(dateKey, userId);
+}
+
+function computeDailyCounts(quiz, answers) {
+  const answerMap = new Map(answers.map((item) => [item.questionId, item.answerIndex]));
+  let correct = 0;
+  let wrong = 0;
+  quiz.questions.forEach((question) => {
+    if (!answerMap.has(question.id)) return;
+    const selected = answerMap.get(question.id);
+    if (selected === question.answer) {
+      correct += 1;
+    } else {
+      wrong += 1;
+    }
+  });
+  return { correct, wrong };
+}
+
+function getFriendCandidates(userId, limit = 5) {
+  return db
+    .prepare(
+      `SELECT rp2.user_id as userId,
+              users.display_name as displayName,
+              COUNT(*) as matchCount,
+              MAX(rooms.created_at) as lastMatch
+       FROM room_players rp1
+       JOIN room_players rp2
+         ON rp1.room_id = rp2.room_id AND rp2.user_id != rp1.user_id
+       JOIN rooms ON rooms.id = rp1.room_id
+       JOIN users ON users.id = rp2.user_id
+       WHERE rp1.user_id = ?
+       GROUP BY rp2.user_id
+       ORDER BY matchCount DESC, lastMatch DESC
+       LIMIT ?`
+    )
+    .all(userId, limit);
+}
+
+function buildDailyResults(dateKey, userId) {
+  const quiz = getDailyQuiz(dateKey);
+  if (!quiz) return null;
+  const totalQuestions = quiz.questions.length;
+  if (totalQuestions === 0) return null;
+
+  const myAnswers = getDailyAnswers(dateKey, userId);
+  if (myAnswers.length < totalQuestions) return null;
+
+  const allAnswers = db
+    .prepare(
+      `SELECT user_id as userId, question_id as questionId, answer_index as answerIndex
+       FROM daily_answers WHERE quiz_date = ?`
+    )
+    .all(dateKey);
+
+  const answerKey = new Map(quiz.questions.map((question) => [question.id, question.answer]));
+  const statsByUser = new Map();
+  allAnswers.forEach((answer) => {
+    const stats = statsByUser.get(answer.userId) || { answered: 0, correct: 0, wrong: 0 };
+    stats.answered += 1;
+    const correctIndex = answerKey.get(answer.questionId);
+    if (answer.answerIndex === correctIndex) {
+      stats.correct += 1;
+    } else {
+      stats.wrong += 1;
+    }
+    statsByUser.set(answer.userId, stats);
+  });
+
+  const participants = statsByUser.size;
+  const completedEntries = Array.from(statsByUser.entries()).filter(
+    ([, stats]) => stats.answered >= totalQuestions
+  );
+  const completedPlayers = completedEntries.length;
+  const scores = completedEntries.map(([, stats]) => stats.correct);
+  const totalScore = scores.reduce((sum, score) => sum + score, 0);
+  const averageScore = completedPlayers ? Number((totalScore / completedPlayers).toFixed(1)) : 0;
+  const averageCorrectPct = completedPlayers
+    ? Math.round((totalScore / (completedPlayers * totalQuestions)) * 100)
+    : 0;
+  const averageWrongPct = completedPlayers ? 100 - averageCorrectPct : 0;
+
+  const myStats = statsByUser.get(userId) || { answered: 0, correct: 0, wrong: 0 };
+  const higherCount = scores.filter((score) => score > myStats.correct).length;
+  const rank = completedPlayers ? higherCount + 1 : null;
+  const percentile = completedPlayers
+    ? Math.round(((completedPlayers - higherCount) / completedPlayers) * 100)
+    : null;
+  const myCorrectPct = Math.round((myStats.correct / totalQuestions) * 100);
+  const myWrongPct = Math.round((myStats.wrong / totalQuestions) * 100);
+
+  return {
+    date: dateKey,
+    totalQuestions,
+    participants,
+    completedPlayers,
+    my: {
+      score: myStats.correct,
+      correct: myStats.correct,
+      wrong: myStats.wrong,
+      correctPct: myCorrectPct,
+      wrongPct: myWrongPct,
+      rank,
+      percentile
+    },
+    global: {
+      averageScore,
+      correctPct: averageCorrectPct,
+      wrongPct: averageWrongPct
+    }
+  };
+}
+
 function getCategoryMeta(categoryId) {
   if (categoryId === "all") {
     return {
@@ -498,6 +691,149 @@ app.get("/quizzes", (req, res) => {
       questionCount: questions.length
     }))
   );
+});
+
+app.get("/daily-quiz", authMiddleware, (req, res) => {
+  const tzOffset = Number(req.query.tzOffset);
+  const dateKey = todayKey(tzOffset);
+  const quiz = getDailyQuiz(dateKey);
+  if (!quiz) {
+    return res.status(500).json({ error: "Unable to load daily quiz" });
+  }
+  const answers = getDailyAnswers(dateKey, req.user.id);
+  const counts = computeDailyCounts(quiz, answers);
+  const totalQuestions = quiz.questions.length;
+  const answeredCount = answers.length;
+  const completed = totalQuestions > 0 && answeredCount >= totalQuestions;
+
+  res.json({
+    date: dateKey,
+    quiz: sanitizeQuiz(quiz),
+    answers,
+    answeredCount,
+    correctCount: counts.correct,
+    wrongCount: counts.wrong,
+    totalQuestions,
+    completed
+  });
+});
+
+app.post("/daily-quiz/answer", authMiddleware, (req, res) => {
+  const { questionId, answerIndex, tzOffset } = req.body;
+  const dateKey = todayKey(Number(tzOffset));
+  const quiz = getDailyQuiz(dateKey);
+  if (!quiz) {
+    return res.status(500).json({ error: "Unable to load daily quiz" });
+  }
+  const question = quiz.questions.find((item) => item.id === questionId);
+  if (!question) {
+    return res.status(400).json({ error: "Invalid question" });
+  }
+  const maxIndex = question.options?.en?.length ?? 0;
+  if (!Number.isInteger(answerIndex) || answerIndex < -1 || answerIndex >= maxIndex) {
+    return res.status(400).json({ error: "Invalid answer" });
+  }
+
+  db.prepare(
+    `INSERT OR IGNORE INTO daily_answers (quiz_date, user_id, question_id, answer_index, answered_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(dateKey, req.user.id, questionId, answerIndex, nowIso());
+
+  const answers = getDailyAnswers(dateKey, req.user.id);
+  const counts = computeDailyCounts(quiz, answers);
+  const totalQuestions = quiz.questions.length;
+  const answeredCount = answers.length;
+  const completed = totalQuestions > 0 && answeredCount >= totalQuestions;
+
+  res.json({
+    date: dateKey,
+    answeredCount,
+    correctCount: counts.correct,
+    wrongCount: counts.wrong,
+    totalQuestions,
+    completed
+  });
+});
+
+app.get("/daily-quiz/results", authMiddleware, (req, res) => {
+  const tzOffset = Number(req.query.tzOffset);
+  const dateKey = todayKey(tzOffset);
+  const baseResults = buildDailyResults(dateKey, req.user.id);
+  if (!baseResults) {
+    return res.status(409).json({ error: "Complete the daily quiz first" });
+  }
+
+  const quiz = getDailyQuiz(dateKey);
+  const totalQuestions = quiz?.questions.length ?? 0;
+  const allAnswers = db
+    .prepare(
+      `SELECT user_id as userId, question_id as questionId, answer_index as answerIndex
+       FROM daily_answers WHERE quiz_date = ?`
+    )
+    .all(dateKey);
+  const answerKey = new Map(quiz.questions.map((question) => [question.id, question.answer]));
+  const statsByUser = new Map();
+  allAnswers.forEach((answer) => {
+    const stats = statsByUser.get(answer.userId) || { answered: 0, correct: 0, wrong: 0 };
+    stats.answered += 1;
+    const correctIndex = answerKey.get(answer.questionId);
+    if (answer.answerIndex === correctIndex) {
+      stats.correct += 1;
+    } else {
+      stats.wrong += 1;
+    }
+    statsByUser.set(answer.userId, stats);
+  });
+
+  const friends = getFriendCandidates(req.user.id, 5)
+    .map((friend) => {
+      const stats = statsByUser.get(friend.userId) || { answered: 0, correct: 0, wrong: 0 };
+      const answered = stats.answered;
+      const correctPct = answered ? Math.round((stats.correct / answered) * 100) : 0;
+      const wrongPct = answered ? Math.round((stats.wrong / answered) * 100) : 0;
+      return {
+        userId: friend.userId,
+        displayName: friend.displayName,
+        answered,
+        score: stats.correct,
+        correct: stats.correct,
+        wrong: stats.wrong,
+        correctPct,
+        wrongPct,
+        completed: answered >= totalQuestions
+      };
+    })
+    .filter((friend) => friend.answered > 0);
+
+  res.json({ ...baseResults, friends });
+});
+
+app.get("/daily-quiz/history", authMiddleware, (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 7, 1), 14);
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT quiz_date as date
+       FROM daily_answers
+       WHERE user_id = ?
+       ORDER BY quiz_date DESC
+       LIMIT ?`
+    )
+    .all(req.user.id, limit);
+
+  const history = rows
+    .map((row) => buildDailyResults(row.date, req.user.id))
+    .filter(Boolean)
+    .map((entry) => ({
+      date: entry.date,
+      totalQuestions: entry.totalQuestions,
+      participants: entry.participants,
+      completedPlayers: entry.completedPlayers,
+      score: entry.my.score,
+      percentile: entry.my.percentile,
+      rank: entry.my.rank
+    }));
+
+  res.json({ history });
 });
 
 app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), (req, res) => {
@@ -936,6 +1272,12 @@ app.get("/me/export", authMiddleware, (req, res) => {
        FROM room_answers WHERE user_id = ?`
     )
     .all(userId);
+  const dailyAnswers = db
+    .prepare(
+      `SELECT quiz_date as date, question_id as questionId, answer_index as answerIndex, answered_at as answeredAt
+       FROM daily_answers WHERE user_id = ?`
+    )
+    .all(userId);
   const badges = db
     .prepare(
       `SELECT badge_id as badgeId, earned_at as earnedAt FROM user_badges WHERE user_id = ?`
@@ -946,6 +1288,7 @@ app.get("/me/export", authMiddleware, (req, res) => {
     user,
     rooms,
     answers,
+    dailyAnswers,
     badges,
     exportedAt: nowIso()
   });

@@ -139,3 +139,58 @@ export type StatsResponse = {
     ties: number;
   }[];
 };
+
+export type DailyQuizStatus = {
+  date: string;
+  quiz: Quiz;
+  answers: { questionId: string; answerIndex: number }[];
+  answeredCount: number;
+  correctCount: number;
+  wrongCount: number;
+  totalQuestions: number;
+  completed: boolean;
+};
+
+export type DailyFriendStat = {
+  userId: number;
+  displayName: string;
+  answered: number;
+  score: number;
+  correct: number;
+  wrong: number;
+  correctPct: number;
+  wrongPct: number;
+  completed: boolean;
+};
+
+export type DailyQuizResults = {
+  date: string;
+  totalQuestions: number;
+  participants: number;
+  completedPlayers: number;
+  my: {
+    score: number;
+    correct: number;
+    wrong: number;
+    correctPct: number;
+    wrongPct: number;
+    rank: number | null;
+    percentile: number | null;
+  };
+  global: {
+    averageScore: number;
+    correctPct: number;
+    wrongPct: number;
+  };
+  friends: DailyFriendStat[];
+};
+
+export type DailyQuizHistoryItem = {
+  date: string;
+  totalQuestions: number;
+  participants: number;
+  completedPlayers: number;
+  score: number;
+  percentile: number | null;
+  rank: number | null;
+};
