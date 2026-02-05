@@ -40,6 +40,7 @@ export function LeaderboardScreen({
   const totalDuels = recapStats
     ? recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties
     : 0;
+  const recapTotal = totalDuels;
   const earnedBadges =
     badges?.badges
       ?.filter((badge) => badge.earnedAt)
@@ -79,37 +80,66 @@ export function LeaderboardScreen({
         <GlassCard style={[styles.sectionCard, styles.recapCard]}>
           <View style={styles.recapHeader}>
             <View style={styles.recapHeaderText}>
-              <Text style={styles.sectionTitle}>{t(locale, "recapTitle")}</Text>
+              <View style={styles.recapTitleRow}>
+                <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
+                <Text style={styles.sectionTitle}>{t(locale, "recapTitle")}</Text>
+              </View>
               <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
             </View>
-            <View style={styles.recapPill}>
-              <Text style={styles.recapPillText}>
-                {recapStats ? `${totalDuels} ${t(locale, "recapDuels")}` : "-"}
-              </Text>
+            <View style={styles.recapHeaderAction}>
+              <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
+              <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
             </View>
           </View>
           <View style={styles.recapRow}>
-            <View style={[styles.recapChip, styles.recapChipWin]}>
-              <View style={styles.recapStatRow}>
-                <FontAwesome name="trophy" size={16} color={theme.colors.success} />
-                <Text style={styles.recapValue}>{recapStats?.totals.wins ?? "-"}</Text>
-              </View>
-              <Text style={styles.recapLabel}>{t(locale, "totalWins")}</Text>
+            <View style={[styles.recapPill, styles.recapPillWin]}>
+              <FontAwesome name="trophy" size={12} color={theme.colors.success} />
+              <Text style={styles.recapPillValue}>{recapStats?.totals.wins ?? "-"}</Text>
+              <Text style={styles.recapPillLabel}>{t(locale, "totalWins")}</Text>
             </View>
-            <View style={[styles.recapChip, styles.recapChipLoss]}>
-              <View style={styles.recapStatRow}>
-                <FontAwesome name="times-circle" size={16} color={theme.colors.danger} />
-                <Text style={styles.recapValue}>{recapStats?.totals.losses ?? "-"}</Text>
-              </View>
-              <Text style={styles.recapLabel}>{t(locale, "totalLosses")}</Text>
+            <View style={[styles.recapPill, styles.recapPillLoss]}>
+              <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
+              <Text style={styles.recapPillValue}>{recapStats?.totals.losses ?? "-"}</Text>
+              <Text style={styles.recapPillLabel}>{t(locale, "totalLosses")}</Text>
             </View>
-            <View style={[styles.recapChip, styles.recapChipTie]}>
-              <View style={styles.recapStatRow}>
-                <FontAwesome name="handshake-o" size={16} color={theme.colors.reward} />
-                <Text style={styles.recapValue}>{recapStats?.totals.ties ?? "-"}</Text>
-              </View>
-              <Text style={styles.recapLabel}>{t(locale, "totalTies")}</Text>
+            <View style={[styles.recapPill, styles.recapPillTie]}>
+              <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
+              <Text style={styles.recapPillValue}>{recapStats?.totals.ties ?? "-"}</Text>
+              <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
             </View>
+          </View>
+          <View style={styles.recapBar}>
+            {recapTotal > 0 ? (
+              <>
+                <View
+                  style={[
+                    styles.recapBarSegment,
+                    styles.recapBarWin,
+                    { flex: recapStats?.totals.wins ?? 0 }
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.recapBarSegment,
+                    styles.recapBarLoss,
+                    { flex: recapStats?.totals.losses ?? 0 }
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.recapBarSegment,
+                    styles.recapBarTie,
+                    { flex: recapStats?.totals.ties ?? 0 }
+                  ]}
+                />
+              </>
+            ) : (
+              <View style={[styles.recapBarSegment, styles.recapBarEmpty]} />
+            )}
+          </View>
+          <View style={styles.recapStreakRow}>
+            <Text style={styles.recapStreakLabel}>{t(locale, "bestStreak")}</Text>
+            <Text style={styles.recapStreakValue}>—</Text>
           </View>
           {recapStats && recapStats.opponents.length > 0 ? (
             <View style={styles.opponentList}>
@@ -444,57 +474,99 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2
   },
-  recapPill: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.85)",
-    borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.08)"
+  recapTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
   },
-  recapPillText: {
+  recapHeaderAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  recapHeaderActionText: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    lineHeight: 16
   },
   recapRow: {
     flexDirection: "row",
     gap: theme.spacing.sm
   },
-  recapStatRow: {
+  recapPill: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.xs
-  },
-  recapChip: {
-    flex: 1,
+    justifyContent: "center",
+    gap: 6,
     backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.sm,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.08)",
-    borderLeftWidth: 3,
-    gap: 2
+    borderColor: "rgba(15, 23, 42, 0.08)"
   },
-  recapChipWin: {
-    borderLeftColor: "rgba(43, 158, 102, 0.9)"
+  recapPillWin: {
+    borderColor: "rgba(43, 158, 102, 0.3)"
   },
-  recapChipLoss: {
-    borderLeftColor: "rgba(235, 87, 87, 0.9)"
+  recapPillLoss: {
+    borderColor: "rgba(235, 87, 87, 0.3)"
   },
-  recapChipTie: {
-    borderLeftColor: "rgba(243, 183, 78, 0.9)"
+  recapPillTie: {
+    borderColor: "rgba(243, 183, 78, 0.3)"
   },
-  recapValue: {
+  recapPillValue: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontSize: theme.typography.body,
+    fontWeight: "700"
   },
-  recapLabel: {
+  recapPillLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12
+  },
+  recapBar: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    overflow: "hidden",
+    marginTop: theme.spacing.xs
+  },
+  recapBarSegment: {
+    height: "100%"
+  },
+  recapBarWin: {
+    backgroundColor: "rgba(43, 158, 102, 0.5)"
+  },
+  recapBarLoss: {
+    backgroundColor: "rgba(235, 87, 87, 0.5)"
+  },
+  recapBarTie: {
+    backgroundColor: "rgba(243, 183, 78, 0.5)"
+  },
+  recapBarEmpty: {
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    flex: 1
+  },
+  recapStreakRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  recapStreakLabel: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  recapStreakValue: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
   },
   opponentList: {
     gap: theme.spacing.xs

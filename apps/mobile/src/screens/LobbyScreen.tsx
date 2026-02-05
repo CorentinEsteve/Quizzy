@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  AppState,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +13,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
@@ -44,6 +46,7 @@ type Props = {
 };
 
 const ALL_CATEGORY_ID = "all";
+const DID_YOU_KNOW_KEY = "dq_did_you_know_tip";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -71,6 +74,7 @@ export function LobbyScreen({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
   const [selectedMode, setSelectedMode] = useState<"sync" | "async">("async");
+  const [tipIndex, setTipIndex] = useState(0);
   const [dialogStep, setDialogStep] = useState<"menu" | "pick" | "join">("menu");
   const [pickStep, setPickStep] = useState<"category" | "count" | "mode">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
@@ -113,6 +117,60 @@ export function LobbyScreen({
       ...Array.from(map.values())
     ];
   }, [locale, quizzes]);
+
+  const tips = useMemo(
+    () => [
+      t(locale, "didYouKnow1"),
+      t(locale, "didYouKnow2"),
+      t(locale, "didYouKnow3"),
+      t(locale, "didYouKnow4"),
+      t(locale, "didYouKnow5"),
+      t(locale, "didYouKnow6"),
+      t(locale, "didYouKnow7"),
+      t(locale, "didYouKnow8"),
+      t(locale, "didYouKnow9"),
+      t(locale, "didYouKnow10"),
+      t(locale, "didYouKnow11"),
+      t(locale, "didYouKnow12"),
+      t(locale, "didYouKnow13"),
+      t(locale, "didYouKnow14"),
+      t(locale, "didYouKnow15"),
+      t(locale, "didYouKnow16"),
+      t(locale, "didYouKnow17"),
+      t(locale, "didYouKnow18"),
+      t(locale, "didYouKnow19"),
+      t(locale, "didYouKnow20")
+    ],
+    [locale]
+  );
+
+  const activeSessions = useMemo(
+    () => sessions.filter((session) => session.status === "active"),
+    [sessions]
+  );
+  const actionableSessions = useMemo(
+    () =>
+      activeSessions.filter((session) => {
+        const totalQuestions = session.quiz.questions?.length ?? 0;
+        const myProgress = session.progress?.[String(userId)] ?? 0;
+        const opponent = session.players.find((player) => player.id !== userId);
+        const opponentProgress = opponent ? session.progress?.[String(opponent.id)] ?? 0 : 0;
+        const isAsyncDual = session.mode === "async" && session.players.length > 1;
+        const isWaitingForOpponent =
+          (session.mode === "sync" &&
+            myProgress > opponentProgress &&
+            myProgress < totalQuestions) ||
+          (isAsyncDual && myProgress >= totalQuestions && opponentProgress < totalQuestions);
+        return session.mode === "sync"
+          ? !isWaitingForOpponent && myProgress < totalQuestions
+          : myProgress < totalQuestions;
+      }),
+    [activeSessions, userId]
+  );
+  const nextSession = actionableSessions.length ? actionableSessions[0] : null;
+  const remainingSessions = nextSession
+    ? activeSessions.filter((session) => session.code !== nextSession.code)
+    : activeSessions;
 
   const selectedCategory = useMemo(
     () => categories.find((category) => category.id === selectedCategoryId) || null,
@@ -195,6 +253,58 @@ export function LobbyScreen({
     return () => animation.stop();
   }, [continuePulse]);
 
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(DID_YOU_KNOW_KEY)
+      .then((value) => {
+        if (!active) return;
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+          setTipIndex(parsed);
+        }
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tips.length) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") return;
+      setTipIndex((prev) => {
+        const next = (prev + 1) % tips.length;
+        AsyncStorage.setItem(DID_YOU_KNOW_KEY, String(next)).catch(() => null);
+        return prev;
+      });
+    });
+    return () => subscription.remove();
+  }, [tips.length]);
+
+  const nextOpponent = nextSession?.players.find((player) => player.id !== userId);
+  const nextOpponentName = nextOpponent?.displayName ?? t(locale, "opponentLabel");
+  const nextTotalQuestions = nextSession?.quiz.questions?.length ?? 0;
+  const nextMyProgress = nextSession ? nextSession.progress?.[String(userId)] ?? 0 : 0;
+  const nextOpponentProgress =
+    nextSession && nextOpponent ? nextSession.progress?.[String(nextOpponent.id)] ?? 0 : 0;
+  const nextDelta = nextOpponentProgress - nextMyProgress;
+  const nextStatus = t(locale, "yourTurn");
+  const nextMeta =
+    nextSession && nextTotalQuestions
+      ? {
+          category: nextSession.quiz.categoryLabel ?? t(locale, "allCategories"),
+          progress: `Q${Math.min(nextMyProgress, nextTotalQuestions)}/${Math.max(
+            nextTotalQuestions,
+            1
+          )}`,
+          status: nextStatus
+        }
+      : null;
+  const recapTotal = recapStats
+    ? recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties
+    : 0;
+
   return (
     <View style={styles.page}>
       <LinearGradient
@@ -238,38 +348,70 @@ export function LobbyScreen({
             accessibilityRole="button"
             accessibilityLabel={t(locale, "openPersonalLeaderboard")}
             hitSlop={6}
-            style={({ pressed }) => [pressed && styles.cardPressed]}
           >
             <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
               <View style={styles.recapHeader}>
                 <View style={styles.recapHeaderText}>
-                  <Text style={styles.sectionTitle}>{t(locale, "recapTitle")}</Text>
+                  <View style={styles.recapTitleRow}>
+                    <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
+                    <Text style={styles.sectionTitle}>{t(locale, "recapTitle")}</Text>
+                  </View>
                   <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
                 </View>
-                <FontAwesome name="chevron-right" size={14} color={theme.colors.muted} />
+                <View style={styles.recapHeaderAction}>
+                  <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
+                  <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
+                </View>
               </View>
             <View style={styles.recapRow}>
-              <View style={[styles.recapChip, styles.recapChipWin]}>
-                <View style={styles.recapStatRow}>
-                  <FontAwesome name="trophy" size={16} color={theme.colors.success} />
-                  <Text style={styles.recapValue}>{recapStats.totals.wins}</Text>
-                </View>
-                <Text style={styles.recapLabel}>{t(locale, "totalWins")}</Text>
+              <View style={[styles.recapPill, styles.recapPillWin]}>
+                <FontAwesome name="trophy" size={12} color={theme.colors.success} />
+                <Text style={styles.recapPillValue}>{recapStats.totals.wins}</Text>
+                <Text style={styles.recapPillLabel}>{t(locale, "totalWins")}</Text>
               </View>
-              <View style={[styles.recapChip, styles.recapChipLoss]}>
-                <View style={styles.recapStatRow}>
-                  <FontAwesome name="times-circle" size={16} color={theme.colors.danger} />
-                  <Text style={styles.recapValue}>{recapStats.totals.losses}</Text>
-                </View>
-                <Text style={styles.recapLabel}>{t(locale, "totalLosses")}</Text>
+              <View style={[styles.recapPill, styles.recapPillLoss]}>
+                <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
+                <Text style={styles.recapPillValue}>{recapStats.totals.losses}</Text>
+                <Text style={styles.recapPillLabel}>{t(locale, "totalLosses")}</Text>
               </View>
-              <View style={[styles.recapChip, styles.recapChipTie]}>
-                <View style={styles.recapStatRow}>
-                  <FontAwesome name="handshake-o" size={16} color={theme.colors.reward} />
-                  <Text style={styles.recapValue}>{recapStats.totals.ties}</Text>
-                </View>
-                <Text style={styles.recapLabel}>{t(locale, "totalTies")}</Text>
+              <View style={[styles.recapPill, styles.recapPillTie]}>
+                <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
+                <Text style={styles.recapPillValue}>{recapStats.totals.ties}</Text>
+                <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
               </View>
+            </View>
+            <View style={styles.recapBar}>
+              {recapTotal > 0 ? (
+                <>
+                  <View
+                    style={[
+                      styles.recapBarSegment,
+                      styles.recapBarWin,
+                      { flex: recapStats.totals.wins }
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.recapBarSegment,
+                      styles.recapBarLoss,
+                      { flex: recapStats.totals.losses }
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.recapBarSegment,
+                      styles.recapBarTie,
+                      { flex: recapStats.totals.ties }
+                    ]}
+                  />
+                </>
+              ) : (
+                <View style={[styles.recapBarSegment, styles.recapBarEmpty]} />
+              )}
+            </View>
+            <View style={styles.recapStreakRow}>
+              <Text style={styles.recapStreakLabel}>{t(locale, "bestStreak")}</Text>
+              <Text style={styles.recapStreakValue}>—</Text>
             </View>
             {recapStats.opponents.length > 0 ? (
               <View style={styles.opponentList}>
@@ -307,7 +449,56 @@ export function LobbyScreen({
           </Pressable>
         ) : null}
 
-        {sessions.filter((s) => s.status === "active").length > 0 ? (
+        {nextSession ? (
+          <GlassCard style={[styles.introCard, styles.nextActionCard]}>
+            <View style={styles.nextActionHeader}>
+              <View style={styles.nextActionHeaderLeft}>
+                <View style={styles.nextActionMiniAvatar}>
+                  <Text style={styles.nextActionMiniAvatarText}>
+                    {initials(nextOpponentName)}
+                  </Text>
+                </View>
+                <Text style={styles.nextActionLabel}>{t(locale, "nextAction")}</Text>
+              </View>
+            </View>
+            <View style={styles.nextActionHero}>
+              <View style={styles.nextActionCopy}>
+                <Text style={styles.nextActionTitle}>
+                  {t(locale, "continueMatchVs", { name: nextOpponentName })}
+                </Text>
+                {nextMeta ? (
+                  <Text style={styles.nextActionMeta}>
+                    {nextMeta.category} · {nextMeta.progress} ·{" "}
+                    <Text style={[styles.nextActionMeta, styles.nextActionMetaAhead]}>
+                      {nextMeta.status}
+                    </Text>
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            {nextTotalQuestions ? (
+              <View style={styles.nextActionProgress}>
+                <View
+                  style={[
+                    styles.nextActionProgressFill,
+                    { width: `${Math.min((nextMyProgress / Math.max(nextTotalQuestions, 1)) * 100, 100)}%` }
+                  ]}
+                />
+              </View>
+            ) : null}
+            <View style={styles.nextActionButtons}>
+              <PrimaryButton
+                label={t(locale, "continueMatch")}
+                icon="arrow-right"
+                iconPosition="right"
+                onPress={() => onResumeRoom(nextSession.code)}
+                style={styles.nextActionPrimary}
+              />
+            </View>
+          </GlassCard>
+        ) : null}
+
+        {remainingSessions.length > 0 ? (
           <GlassCard style={styles.introCard}>
             <View style={styles.sectionHeading}>
               <View style={[styles.sectionIcon, styles.sectionIconPrimary]}>
@@ -315,8 +506,7 @@ export function LobbyScreen({
               </View>
               <Text style={styles.sectionTitle}>{t(locale, "ongoingMatches")}</Text>
             </View>
-            {sessions
-              .filter((s) => s.status === "active")
+            {remainingSessions
               .slice(0, 3)
               .map((session, index, array) => {
                 const opponent = session.players.find((p) => p.id !== userId);
@@ -455,6 +645,15 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
+        {tips.length ? (
+          <View style={styles.didYouKnow}>
+            <Text style={styles.didYouKnowEmoji}>🦊</Text>
+            <Text style={styles.didYouKnowText}>
+              {t(locale, "didYouKnowLabel")} {tips[tipIndex % tips.length]}
+            </Text>
+          </View>
+        ) : null}
+
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
           <GlassCard style={styles.introCard}>
             <View style={styles.sectionHeading}>
@@ -555,6 +754,26 @@ export function LobbyScreen({
       </ScrollView>
 
       <Animated.View style={[styles.fabWrap, { bottom: theme.spacing.sm + insets.bottom }]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.fabPulse,
+            {
+              transform: [
+                {
+                  scale: continuePulse.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.12]
+                  })
+                }
+              ],
+              opacity: continuePulse.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.35, 0]
+              })
+            }
+          ]}
+        />
         <Pressable
           style={styles.fab}
           onPress={() => {
@@ -608,7 +827,7 @@ export function LobbyScreen({
                   <FontAwesome name="times" size={12} color={theme.colors.muted} />
                 </Pressable>
                 <Text style={styles.dialogTitle}>{t(locale, "createAction")}</Text>
-                <Text style={styles.dialogSubtitle}>{t(locale, "onboardingStep1Body")}</Text>
+                <Text style={styles.dialogSubtitle}>{t(locale, "createGuideSubtitle")}</Text>
                 <PrimaryButton
                   label={t(locale, "newMatch")}
                   icon="plus"
@@ -629,6 +848,7 @@ export function LobbyScreen({
                     setDialogStep("join");
                   }}
                 />
+                <Text style={styles.joinHint}>{t(locale, "joinInviteHint")}</Text>
               </>
             ) : dialogStep === "pick" ? (
               <>
@@ -750,7 +970,7 @@ export function LobbyScreen({
                           <View
                             style={[
                               styles.lengthCard,
-                              isSelected && styles.lengthCardSelected
+                              isSelected && styles.choiceCardSelected
                             ]}
                           >
                             <View style={styles.lengthHeader}>
@@ -765,6 +985,7 @@ export function LobbyScreen({
                               <View
                                 style={[
                                   styles.selectedPill,
+                                  isSelected && styles.selectedPillActive,
                                   !isSelected && styles.selectedPillHidden
                                 ]}
                               >
@@ -828,17 +1049,18 @@ export function LobbyScreen({
                           setSelectedMode("async");
                         }}
                       >
-                        <View
-                          style={[
-                            styles.modeCard,
-                            selectedMode === "async" && styles.modeCardSelected
-                          ]}
-                        >
+                          <View
+                            style={[
+                              styles.modeCard,
+                              selectedMode === "async" && styles.choiceCardSelected
+                            ]}
+                          >
                           <View style={styles.modeHeader}>
                             <Text style={styles.modeTitle}>{t(locale, "asyncDuel")}</Text>
                             <View
                               style={[
                                 styles.selectedPill,
+                                selectedMode === "async" && styles.selectedPillActive,
                                 selectedMode !== "async" && styles.selectedPillHidden
                               ]}
                             >
@@ -856,17 +1078,18 @@ export function LobbyScreen({
                           setSelectedMode("sync");
                         }}
                       >
-                        <View
-                          style={[
-                            styles.modeCard,
-                            selectedMode === "sync" && styles.modeCardSelected
-                          ]}
-                        >
+                          <View
+                            style={[
+                              styles.modeCard,
+                              selectedMode === "sync" && styles.choiceCardSelected
+                            ]}
+                          >
                           <View style={styles.modeHeader}>
                             <Text style={styles.modeTitle}>{t(locale, "syncDuel")}</Text>
                             <View
                               style={[
                                 styles.selectedPill,
+                                selectedMode === "sync" && styles.selectedPillActive,
                                 selectedMode !== "sync" && styles.selectedPillHidden
                               ]}
                             >
@@ -1089,6 +1312,27 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
+  didYouKnow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.08)"
+  },
+  didYouKnowEmoji: {
+    fontSize: 18
+  },
+  didYouKnowText: {
+    flex: 1,
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 18
+  },
   recapHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1097,6 +1341,22 @@ const styles = StyleSheet.create({
   recapHeaderText: {
     flex: 1,
     paddingRight: theme.spacing.sm
+  },
+  recapTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  recapHeaderAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  recapHeaderActionText: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 16
   },
   recapRow: {
     flexDirection: "row",
@@ -1115,26 +1375,184 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 6
   },
-  cardPressed: {
-    opacity: 0.9
+  nextActionCard: {
+    borderColor: "rgba(94, 124, 255, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)"
   },
-  recapChip: {
+  nextActionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  nextActionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  nextActionLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
+  nextActionMiniAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.25)"
+  },
+  nextActionMiniAvatarText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 10,
+    fontWeight: "700"
+  },
+  nextActionHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  nextActionCopy: {
     flex: 1,
+    gap: 4
+  },
+  nextActionTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600"
+  },
+  nextActionMeta: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 18
+  },
+  nextActionMetaAhead: {
+    color: theme.colors.success,
+    fontWeight: "600"
+  },
+  nextActionMetaBehind: {
+    color: theme.colors.danger,
+    fontWeight: "600"
+  },
+  nextActionMetaTied: {
+    color: theme.colors.reward,
+    fontWeight: "600"
+  },
+  nextActionProgress: {
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    overflow: "hidden",
+    marginTop: theme.spacing.xs
+  },
+  nextActionProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: theme.colors.primary
+  },
+  nextActionButtons: {
+    marginTop: theme.spacing.sm,
+    gap: theme.spacing.sm
+  },
+  nextActionPrimary: {
+    width: "100%"
+  },
+  nextActionSecondary: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs
+  },
+  nextActionSecondaryPressed: {
+    opacity: 0.7
+  },
+  nextActionSecondaryText: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  recapPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.sm,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.08)",
-    borderLeftWidth: 3
+    borderColor: "rgba(15, 23, 42, 0.08)"
   },
-  recapChipWin: {
-    borderLeftColor: "rgba(43, 158, 102, 0.9)"
+  recapPillWin: {
+    borderColor: "rgba(43, 158, 102, 0.3)"
   },
-  recapChipLoss: {
-    borderLeftColor: "rgba(235, 87, 87, 0.9)"
+  recapPillLoss: {
+    borderColor: "rgba(235, 87, 87, 0.3)"
   },
-  recapChipTie: {
-    borderLeftColor: "rgba(243, 183, 78, 0.9)"
+  recapPillTie: {
+    borderColor: "rgba(243, 183, 78, 0.3)"
+  },
+  recapPillValue: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "700"
+  },
+  recapPillLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12
+  },
+  recapBar: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    overflow: "hidden",
+    marginTop: theme.spacing.xs
+  },
+  recapBarSegment: {
+    height: "100%"
+  },
+  recapBarWin: {
+    backgroundColor: "rgba(43, 158, 102, 0.5)"
+  },
+  recapBarLoss: {
+    backgroundColor: "rgba(235, 87, 87, 0.5)"
+  },
+  recapBarTie: {
+    backgroundColor: "rgba(243, 183, 78, 0.5)"
+  },
+  recapBarEmpty: {
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    flex: 1
+  },
+  recapStreakRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  recapStreakLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  recapStreakValue: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
   },
   categoryGrid: {
     gap: theme.spacing.sm
@@ -1175,7 +1593,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.08)"
+    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    marginLeft: "auto",
+    marginRight: 6
+  },
+  selectedPillActive: {
+    backgroundColor: "rgba(94, 124, 255, 0.18)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.35)"
   },
   selectedPillHidden: {
     opacity: 0
@@ -1194,10 +1619,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(11, 14, 20, 0.12)",
     backgroundColor: "rgba(255, 255, 255, 0.9)"
-  },
-  lengthCardSelected: {
-    borderColor: "rgba(11, 14, 20, 0.35)",
-    backgroundColor: "rgba(11, 14, 20, 0.04)"
   },
   lengthHeader: {
     flexDirection: "row",
@@ -1231,9 +1652,14 @@ const styles = StyleSheet.create({
     borderColor: "rgba(11, 14, 20, 0.12)",
     backgroundColor: "rgba(255, 255, 255, 0.9)"
   },
-  modeCardSelected: {
-    borderColor: "rgba(11, 14, 20, 0.35)",
-    backgroundColor: "rgba(11, 14, 20, 0.04)"
+  choiceCardSelected: {
+    borderColor: "rgba(94, 124, 255, 0.4)",
+    backgroundColor: "rgba(94, 124, 255, 0.08)",
+    shadowColor: "rgba(94, 124, 255, 0.25)",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
   },
   modeHeader: {
     flexDirection: "row",
@@ -1501,6 +1927,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 10 }
   },
+  fabPulse: {
+    position: "absolute",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(94, 124, 255, 0.35)"
+  },
   fabLabel: {
     color: theme.colors.surface,
     fontFamily: theme.typography.fontFamily,
@@ -1579,6 +2012,13 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  joinHint: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textAlign: "center",
+    marginTop: -4
   },
   dialogDivider: {
     height: 1,
