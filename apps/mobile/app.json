@@ -29,7 +29,8 @@
       }
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      "expo-localization"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

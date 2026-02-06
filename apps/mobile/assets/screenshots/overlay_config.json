@@ -1,0 +1,25 @@
+{
+  "size": { "width": 1242, "height": 2688 },
+  "background": "#F6F7FB",
+  "text": {
+    "color": "#101828",
+    "max_width": 980,
+    "top_padding": 190,
+    "line_spacing": 12,
+    "title_size": 88
+  },
+  "device": {
+    "max_width": 1040,
+    "max_height": 1880,
+    "top": 560,
+    "corner_radius": 56
+  },
+  "screens": {
+    "1-HomePage.png": { "en": "Quick duels, clear focus", "fr": "Duels rapides, focus clair" },
+    "2-Questions.png": { "en": "Answer fast, score instantly", "fr": "Réponds vite, score instantané" },
+    "3-RoomInvite.png": { "en": "Invite friends in 1 link", "fr": "Invite tes amis en 1 lien" },
+    "4-Results.png": { "en": "Results that feel rewarding", "fr": "Des résultats qui comptent" },
+    "5-Leaderboard.png": { "en": "Climb the leaderboards", "fr": "Grimpe dans le classement" },
+    "6-Answers.png": { "en": "Detailed answers, learn more", "fr": "Réponses détaillées, progresse" }
+  }
+}

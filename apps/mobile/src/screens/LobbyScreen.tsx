@@ -769,10 +769,10 @@ export function LobbyScreen({
         ) : null}
 
         <GlassCard style={styles.shareCard}>
-          <View style={styles.shareRow}>
+            <View style={styles.shareRow}>
             <View style={styles.shareTextBlock}>
-              <Text style={styles.shareTitle}>Share the app!</Text>
-              <Text style={styles.shareSubtitle}>Scan to download and play together.</Text>
+              <Text style={styles.shareTitle}>{t(locale, "shareAppTitle")}</Text>
+              <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
             </View>
             <View style={styles.shareArrowWrap}>
               <FontAwesome name="long-arrow-right" size={20} color={theme.colors.muted} />

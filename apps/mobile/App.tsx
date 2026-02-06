@@ -278,6 +278,7 @@ export default function App() {
   const panelTranslateX = useRef(new Animated.Value(0));
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
   const dailyAnswersMap = useMemo(() => {
@@ -672,6 +673,21 @@ export default function App() {
       }
     };
   }, [roomError]);
+
+  useEffect(() => {
+    if (!authError) return;
+    if (authErrorTimeoutRef.current) {
+      clearTimeout(authErrorTimeoutRef.current);
+    }
+    authErrorTimeoutRef.current = setTimeout(() => {
+      setAuthError(null);
+    }, 4200);
+    return () => {
+      if (authErrorTimeoutRef.current) {
+        clearTimeout(authErrorTimeoutRef.current);
+      }
+    };
+  }, [authError]);
 
   useEffect(() => {
     if (!token) return;
