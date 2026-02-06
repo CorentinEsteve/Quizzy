@@ -20,17 +20,10 @@ import { io, Socket } from "socket.io-client";
 import * as Notifications from "expo-notifications";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import * as Sentry from "sentry-expo";
 import Constants from "expo-constants";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import {
-  API_BASE_URL,
-  SUPPORT_EMAIL,
-  SUPPORT_URL,
-  SENTRY_DSN,
-  SENTRY_ENVIRONMENT
-} from "./src/config";
+import { API_BASE_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
 import { theme } from "./src/theme";
 import { Locale, t } from "./src/i18n";
 import { AuthScreen, AuthMode } from "./src/screens/AuthScreen";
@@ -99,14 +92,6 @@ const MAIN_PANELS = ["lobby", "account"] as const;
 const AUTH_TOKEN_KEY = "dq_auth_token";
 const AUTH_USER_KEY = "dq_auth_user";
 
-if (SENTRY_DSN) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    environment: SENTRY_ENVIRONMENT,
-    enableInExpoDevelopment: false,
-    debug: false
-  });
-}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
