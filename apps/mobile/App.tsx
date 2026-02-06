@@ -22,6 +22,7 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import Constants from "expo-constants";
 import * as Localization from "expo-localization";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { API_BASE_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
@@ -64,6 +65,7 @@ import {
   inviteToRoom,
   cancelRoomInvite,
   loginUser,
+  loginWithApple,
   isAuthError,
   confirmPasswordReset,
   requestEmailVerification,
@@ -97,6 +99,14 @@ const LOCALE_KEY = "qwizzy_locale";
 const resolveDeviceLocale = (): Locale => {
   const deviceLocale = Localization.getLocales?.()[0]?.languageCode ?? "en";
   return deviceLocale === "fr" ? "fr" : "en";
+};
+
+const resolveDeviceCountry = (): string => {
+  const region = Localization.getLocales?.()[0]?.regionCode;
+  if (typeof region === "string" && region.trim()) {
+    return region.trim().toUpperCase();
+  }
+  return "US";
 };
 
 Notifications.setNotificationHandler({
@@ -1024,6 +1034,45 @@ export default function App() {
     }
   }
 
+  async function handleAppleSignIn() {
+    if (loading) return;
+    setAuthError(null);
+    setLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL
+        ]
+      });
+      if (!credential.identityToken) {
+        throw new Error(t(locale, "authFailed"));
+      }
+      const response = await loginWithApple({
+        identityToken: credential.identityToken,
+        email: credential.email,
+        fullName: credential.fullName,
+        country: resolveDeviceCountry()
+      });
+      setToken(response.token);
+      setUser(response.user);
+      setPanel("lobby");
+      AsyncStorage.setItem(AUTH_TOKEN_KEY, response.token).catch(() => null);
+      AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user)).catch(() => null);
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: string }).code)
+          : "";
+      if (code === "ERR_CANCELED") {
+        return;
+      }
+      setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleReactivate(email: string, password: string) {
     setAuthError(null);
     if (!email || !password) {
@@ -1528,6 +1577,7 @@ export default function App() {
           onForgotPassword={handleForgotPassword}
           onResetConfirm={handleResetConfirm}
           onReactivate={handleReactivate}
+          onAppleSignIn={handleAppleSignIn}
           error={authError}
           onClearError={() => setAuthError(null)}
           loading={loading}

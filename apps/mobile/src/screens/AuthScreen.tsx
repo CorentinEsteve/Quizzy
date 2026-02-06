@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { InputField } from "../components/InputField";
@@ -31,6 +32,7 @@ type Props = {
   onForgotPassword: (email: string) => void;
   onResetConfirm: (token: string, newPassword: string) => void;
   onReactivate: (email: string, password: string) => void;
+  onAppleSignIn?: () => void;
   error?: string | null;
   onClearError?: () => void;
   loading?: boolean;
@@ -45,6 +47,7 @@ export function AuthScreen({
   onForgotPassword,
   onResetConfirm,
   onReactivate,
+  onAppleSignIn,
   error,
   onClearError,
   loading,
@@ -57,6 +60,7 @@ export function AuthScreen({
   const [displayName, setDisplayName] = useState("");
   const [country, setCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
   const [registerStep, setRegisterStep] = useState(0);
+  const [authMethod, setAuthMethod] = useState<"apple" | "email">("apple");
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetToken, setResetToken] = useState("");
@@ -64,12 +68,14 @@ export function AuthScreen({
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const errorRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (mode === "register") {
       setRegisterStep(0);
     }
+    setAuthMethod("apple");
   }, [mode]);
 
   useEffect(() => {
@@ -81,6 +87,19 @@ export function AuthScreen({
       onClearError?.();
     }
   }, [mode, showReset, onClearError]);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => setAppleAvailable(available))
+      .catch(() => setAppleAvailable(false));
+  }, []);
+
+  useEffect(() => {
+    if (!appleAvailable) {
+      setAuthMethod("email");
+    }
+  }, [appleAvailable]);
 
   const isEmailValid = useMemo(() => email.trim().includes("@") && email.trim().includes("."), [email]);
   const isPasswordValid = useMemo(() => password.length >= 8, [password]);
@@ -139,7 +158,40 @@ export function AuthScreen({
               </View>
             ) : null}
 
-            {mode === "register" && registerStep === 0 ? (
+            {appleAvailable &&
+            !showReset &&
+            authMethod === "apple" &&
+            (mode === "login" || registerStep === 0) ? (
+              <>
+                {locale === "fr" ? (
+                  <Text style={styles.appleCaption}>{t(locale, "authAppleLabel")}</Text>
+                ) : null}
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={14}
+                  style={styles.appleButton}
+                  onPress={() => {
+                    if (loading) return;
+                    onAppleSignIn?.();
+                  }}
+                />
+                <PrimaryButton
+                  label={t(locale, "authUseEmail")}
+                  variant="ghost"
+                  onPress={() => setAuthMethod("email")}
+                />
+              </>
+            ) : null}
+
+            {authMethod === "email" && !showReset && (mode === "login" || registerStep === 0) ? (
+              <Pressable style={styles.backInline} onPress={() => setAuthMethod("apple")}>
+                <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
+                <Text style={styles.backInlineText}>{t(locale, "authBackToMethods")}</Text>
+              </Pressable>
+            ) : null}
+
+            {mode === "register" && registerStep === 0 && authMethod === "email" ? (
               <>
                 <InputField
                   label={t(locale, "displayName")}
@@ -179,7 +231,7 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {mode === "login" && !showReset ? (
+            {mode === "login" && !showReset && authMethod === "email" ? (
               <>
                 <InputField
                   label={t(locale, "email")}
@@ -199,6 +251,7 @@ export function AuthScreen({
                   onPress={() => {
                     setResetEmail(email);
                     setShowReset(true);
+                    setAuthMethod("email");
                   }}
                 >
                   <FontAwesome name="unlock-alt" size={12} color={theme.colors.muted} />
@@ -432,7 +485,7 @@ export function AuthScreen({
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            {mode === "login" && !showReset ? (
+            {mode === "login" && !showReset && authMethod === "email" ? (
               <PrimaryButton
                 label={loading ? t(locale, "pleaseWait") : t(locale, "signIn")}
                 icon="sign-in"
@@ -440,7 +493,7 @@ export function AuthScreen({
                 onPress={() => onSubmit({ email, password, displayName, locale, country })}
                 disabled={!isLoginValid || loading}
               />
-            ) : mode === "login" && showReset ? null : registerStep === 0 ? (
+            ) : mode === "login" && showReset ? null : registerStep === 0 && authMethod === "email" ? (
               <PrimaryButton
                 label={t(locale, "continue")}
                 icon="arrow-right"
@@ -448,7 +501,7 @@ export function AuthScreen({
                 onPress={() => setRegisterStep(1)}
                 disabled={!isRegisterStepOneValid}
               />
-            ) : (
+            ) : registerStep === 1 ? (
               <PrimaryButton
                 label={loading ? t(locale, "pleaseWait") : t(locale, "createAccount")}
                 icon="user-plus"
@@ -456,7 +509,8 @@ export function AuthScreen({
                 onPress={() => onSubmit({ email, password, displayName, locale, country })}
                 disabled={!isRegisterStepTwoValid || loading}
               />
-            )}
+            ) : null}
+
             <Pressable onPress={onToggleMode} style={styles.switchLink}>
               <Text style={styles.switchLinkText}>
                 {mode === "login" ? t(locale, "needAccount") : t(locale, "haveAccount")}
@@ -635,6 +689,16 @@ const styles = StyleSheet.create({
   },
   resetGhostButton: {
     alignSelf: "stretch"
+  },
+  appleButton: {
+    width: "100%",
+    height: 46,
+    marginTop: theme.spacing.xs
+  },
+  appleCaption: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
   },
   languageRow: {
     gap: theme.spacing.xs

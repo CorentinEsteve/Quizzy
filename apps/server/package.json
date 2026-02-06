@@ -12,6 +12,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "jose": "^5.9.6",
     "socket.io": "^4.7.5",
     "better-sqlite3": "^11.5.0",
     "dotenv": "^16.6.0",

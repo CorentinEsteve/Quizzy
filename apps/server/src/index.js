@@ -4,6 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server as SocketServer } from "socket.io";
 import bcrypt from "bcryptjs";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { supabase } from "./db.js";
 import { authMiddleware, signToken, verifyToken } from "./auth.js";
 import { quizzes } from "./quizzes.js";
@@ -26,6 +27,9 @@ const EMAIL_FROM = process.env.EMAIL_FROM || SUPPORT_EMAIL;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const RESEND_FROM = process.env.RESEND_FROM || EMAIL_FROM;
 const resendClient = EMAIL_PROVIDER === "resend" && RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID || "";
+const APPLE_ISSUER = "https://appleid.apple.com";
+const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
@@ -70,6 +74,11 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
 }
 
+function normalizeCountry(value) {
+  if (typeof value !== "string" || !value.trim()) return "US";
+  return value.trim().toUpperCase();
+}
+
 function generateCode() {
   const letters = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -77,6 +86,40 @@ function generateCode() {
     code += letters[Math.floor(Math.random() * letters.length)];
   }
   return code;
+}
+
+function appleEmailVerified(value) {
+  if (value === true) return true;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  return false;
+}
+
+function buildAppleDisplayName(fullName, email) {
+  if (fullName && typeof fullName === "object") {
+    const parts = [
+      fullName.givenName,
+      fullName.middleName,
+      fullName.familyName
+    ]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join(" ");
+  }
+  if (typeof email === "string" && email.includes("@")) {
+    return email.split("@")[0] || "Player";
+  }
+  return "Player";
+}
+
+async function verifyAppleIdentityToken(identityToken) {
+  if (!APPLE_CLIENT_ID) {
+    throw new Error("APPLE_CLIENT_ID not configured");
+  }
+  const { payload } = await jwtVerify(identityToken, APPLE_JWKS, {
+    issuer: APPLE_ISSUER,
+    audience: APPLE_CLIENT_ID
+  });
+  return payload;
 }
 
 async function getCustomQuiz(quizId) {
@@ -1021,6 +1064,100 @@ app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), async (req,
   });
 });
 
+app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  const { identityToken, fullName, email, country } = req.body || {};
+  if (!identityToken || typeof identityToken !== "string") {
+    return res.status(400).json({ error: "Missing identity token" });
+  }
+  if (!APPLE_CLIENT_ID) {
+    return res.status(501).json({ error: "Apple sign-in is not configured" });
+  }
+  let payload;
+  try {
+    payload = await verifyAppleIdentityToken(identityToken);
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid Apple token" });
+  }
+
+  const appleSub = typeof payload.sub === "string" ? payload.sub : "";
+  if (!appleSub) {
+    return res.status(401).json({ error: "Invalid Apple token" });
+  }
+  const tokenEmail = typeof payload.email === "string" ? payload.email : null;
+  const suppliedEmail = typeof email === "string" ? email : null;
+  const effectiveEmail = tokenEmail || suppliedEmail;
+  const emailVerified = appleEmailVerified(payload.email_verified);
+  const normalizedCountry = normalizeCountry(country);
+
+  let user = null;
+  const { data: userByApple } = await supabase
+    .from("users")
+    .select("id, email, display_name, country, email_verified, deleted_at, apple_sub")
+    .eq("apple_sub", appleSub)
+    .maybeSingle();
+  if (userByApple) {
+    user = userByApple;
+  } else if (effectiveEmail) {
+    const { data: userByEmail } = await supabase
+      .from("users")
+      .select("id, email, display_name, country, email_verified, deleted_at, apple_sub")
+      .eq("email", effectiveEmail)
+      .maybeSingle();
+    if (userByEmail) {
+      if (userByEmail.apple_sub && userByEmail.apple_sub !== appleSub) {
+        return res.status(409).json({ error: "Apple account already linked" });
+      }
+      user = userByEmail;
+    }
+  }
+
+  if (!user && !effectiveEmail) {
+    return res.status(400).json({ error: "Email not provided by Apple" });
+  }
+
+  if (!user) {
+    const displayName = buildAppleDisplayName(fullName, effectiveEmail);
+    const { data: created, error } = await supabase
+      .from("users")
+      .insert({
+        email: effectiveEmail,
+        display_name: displayName,
+        password_hash: null,
+        created_at: nowIso(),
+        country: normalizedCountry,
+        email_verified: emailVerified,
+        apple_sub: appleSub
+      })
+      .select("id, email, display_name, country, email_verified")
+      .single();
+    if (error || !created) {
+      return res.status(500).json({ error: "Unable to create user" });
+    }
+    user = created;
+  } else {
+    const updates = {};
+    if (!user.apple_sub) updates.apple_sub = appleSub;
+    if (emailVerified && user.email_verified !== true) updates.email_verified = true;
+    if (user.deleted_at) updates.deleted_at = null;
+    if (Object.keys(updates).length > 0) {
+      await supabase.from("users").update(updates).eq("id", user.id);
+      user = { ...user, ...updates };
+    }
+  }
+
+  const token = signToken(user);
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      country: user.country || "US",
+      emailVerified: user.email_verified === true
+    }
+  });
+});
+
 app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -1036,6 +1173,9 @@ app.post("/auth/login", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
   }
   if (user.deleted_at) {
     return res.status(403).json({ error: "Account deactivated" });
+  }
+  if (!user.password_hash) {
+    return res.status(401).json({ error: "Invalid credentials" });
   }
   const isValid = bcrypt.compareSync(password, user.password_hash);
   if (!isValid) {

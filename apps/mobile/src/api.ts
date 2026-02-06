@@ -67,6 +67,28 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
   return response.json();
 }
 
+export async function loginWithApple(payload: {
+  identityToken: string;
+  email?: string | null;
+  fullName?: {
+    givenName?: string | null;
+    middleName?: string | null;
+    familyName?: string | null;
+    nickname?: string | null;
+    namePrefix?: string | null;
+    nameSuffix?: string | null;
+  } | null;
+  country?: string;
+}) {
+  const response = await fetch(`${API_BASE_URL}/auth/apple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  await ensureOk(response, "Unable to login with Apple");
+  return response.json() as Promise<AuthResponse>;
+}
+
 export async function requestEmailVerification(email: string) {
   const response = await fetch(`${API_BASE_URL}/auth/request-verify`, {
     method: "POST",
