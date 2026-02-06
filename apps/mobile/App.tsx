@@ -21,6 +21,7 @@ import * as Notifications from "expo-notifications";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import Constants from "expo-constants";
+import * as Localization from "expo-localization";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { API_BASE_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
@@ -91,7 +92,12 @@ import {
 const MAIN_PANELS = ["lobby", "account"] as const;
 const AUTH_TOKEN_KEY = "dq_auth_token";
 const AUTH_USER_KEY = "dq_auth_user";
+const LOCALE_KEY = "qwizzy_locale";
 
+const resolveDeviceLocale = (): Locale => {
+  const deviceLocale = Localization.getLocales?.()[0]?.languageCode ?? "en";
+  return deviceLocale === "fr" ? "fr" : "en";
+};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -271,6 +277,7 @@ export default function App() {
   const dragStartXRef = useRef(0);
   const panelTranslateX = useRef(new Animated.Value(0));
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const roomErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
   const dailyAnswersMap = useMemo(() => {
@@ -483,14 +490,20 @@ export default function App() {
     const start = Date.now();
     const bootstrap = async () => {
       try {
-        const [onboardingValue, notificationValue, storedToken, storedUser] = await Promise.all([
+        const [onboardingValue, notificationValue, storedLocale, storedToken, storedUser] = await Promise.all([
           AsyncStorage.getItem("dq_onboarding"),
           AsyncStorage.getItem("dq_notifications"),
+          AsyncStorage.getItem(LOCALE_KEY),
           AsyncStorage.getItem(AUTH_TOKEN_KEY),
           AsyncStorage.getItem(AUTH_USER_KEY)
         ]);
         if (onboardingValue === "seen") setHasSeenOnboarding(true);
         if (notificationValue === "off") setNotificationsEnabled(false);
+        if (storedLocale === "fr" || storedLocale === "en") {
+          setLocale(storedLocale);
+        } else {
+          setLocale(resolveDeviceLocale());
+        }
         if (storedToken && storedUser) {
           try {
             const parsed = JSON.parse(storedUser) as User;
@@ -644,6 +657,21 @@ export default function App() {
       }
     };
   }, [activeNotification]);
+
+  useEffect(() => {
+    if (!roomError) return;
+    if (roomErrorTimeoutRef.current) {
+      clearTimeout(roomErrorTimeoutRef.current);
+    }
+    roomErrorTimeoutRef.current = setTimeout(() => {
+      setRoomError(null);
+    }, 4200);
+    return () => {
+      if (roomErrorTimeoutRef.current) {
+        clearTimeout(roomErrorTimeoutRef.current);
+      }
+    };
+  }, [roomError]);
 
   useEffect(() => {
     if (!token) return;
@@ -930,6 +958,10 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.setItem("dq_notifications", notificationsEnabled ? "on" : "off").catch(() => null);
   }, [notificationsEnabled]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(LOCALE_KEY, locale).catch(() => null);
+  }, [locale]);
 
   useEffect(() => {
     if (!token || !user) return;

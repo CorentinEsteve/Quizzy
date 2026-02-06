@@ -716,38 +716,53 @@ app.get("/legal/privacy", (req, res) => {
   const html = renderLegalPage(
     "Privacy Policy",
     `
-      <p>${APP_NAME} collects the minimum information needed to create your account and run multiplayer matches.</p>
+      <p><strong>Effective date:</strong> ${new Date().getFullYear()}</p>
+      <p>${APP_NAME} collects only the information needed to provide the quiz experience, run multiplayer matches, and keep your account secure. We do not sell personal data and we do not use it for advertising.</p>
       <h2>Information we collect</h2>
       <ul>
-        <li>Email address and display name</li>
-        <li>Country (for leaderboard filtering)</li>
-        <li>Gameplay data such as quiz answers and match results</li>
-        <li>Device notification token if you enable notifications</li>
+        <li><strong>Account data:</strong> email address, display name, and profile preferences.</li>
+        <li><strong>Gameplay data:</strong> quiz answers, match results, scores, badges, and leaderboards.</li>
+        <li><strong>Location (country only):</strong> used for leaderboard filtering.</li>
+        <li><strong>Device data:</strong> notification token if you enable notifications.</li>
+        <li><strong>Support messages:</strong> content you send us when contacting support.</li>
       </ul>
-      <h2>How we use data</h2>
+      <h2>How we use your data</h2>
       <ul>
-        <li>Authenticate your account and secure multiplayer rooms</li>
-        <li>Show stats, badges, and leaderboards</li>
-        <li>Send verification and password reset emails</li>
-        <li>Send match notifications (optional)</li>
+        <li>Create and secure your account.</li>
+        <li>Run multiplayer rooms and show stats, badges, and leaderboards.</li>
+        <li>Send verification, password reset, and security emails.</li>
+        <li>Send match notifications (only if you enable them).</li>
+        <li>Provide customer support and troubleshoot issues.</li>
       </ul>
-      <h2>Third-party services</h2>
+      <h2>Legal bases</h2>
       <ul>
-        <li>Email delivery: Resend</li>
-        <li>Crash reporting: if enabled, we may collect crash diagnostics</li>
+        <li><strong>Contract:</strong> to provide the core service you requested.</li>
+        <li><strong>Legitimate interests:</strong> to keep the service secure and reliable.</li>
+        <li><strong>Consent:</strong> for optional notifications.</li>
+      </ul>
+      <h2>Service providers</h2>
+      <ul>
+        <li><strong>Supabase</strong> (database, authentication).</li>
+        <li><strong>Render</strong> (API hosting).</li>
+        <li><strong>Resend</strong> (transactional email delivery).</li>
       </ul>
       <h2>Data retention</h2>
       <ul>
-        <li>You can delete your account at any time in the app</li>
-        <li>Deactivated accounts can be reactivated on sign-in</li>
-        <li>Account deletion removes profile data and game history</li>
+        <li>You can delete your account in the app at any time.</li>
+        <li>Account deletion removes profile data and game history from our active systems.</li>
+        <li>We may retain limited logs for security and fraud prevention for a short period.</li>
       </ul>
-      <h2>Your choices</h2>
+      <h2>Your choices and rights</h2>
       <ul>
-        <li>You can update your profile from the app</li>
-        <li>You can request account deletion from the app</li>
-        <li>You can export your account data from the app</li>
+        <li>Update your profile in the app.</li>
+        <li>Request an export of your data in the app.</li>
+        <li>Delete your account in the app.</li>
+        <li>For EU/UK users, you have rights of access, correction, deletion, and objection.</li>
       </ul>
+      <h2>International transfers</h2>
+      <p>Your data may be processed outside your country. We use providers with appropriate safeguards for international transfers.</p>
+      <h2>Children</h2>
+      <p>${APP_NAME} is not directed to children under 13. If you believe a child has provided personal data, contact us to remove it.</p>
       <h2>Contact</h2>
       ${supportLine}
     `
