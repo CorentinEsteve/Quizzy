@@ -163,19 +163,20 @@ export function AuthScreen({
             authMethod === "apple" &&
             (mode === "login" || registerStep === 0) ? (
               <>
-                {locale === "fr" ? (
-                  <Text style={styles.appleCaption}>{t(locale, "authAppleLabel")}</Text>
-                ) : null}
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={14}
-                  style={styles.appleButton}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.appleButton,
+                    pressed && styles.appleButtonPressed,
+                    loading && styles.appleButtonDisabled
+                  ]}
                   onPress={() => {
                     if (loading) return;
                     onAppleSignIn?.();
                   }}
-                />
+                >
+                  <FontAwesome name="apple" size={20} color="#FFFFFF" />
+                  <Text style={styles.appleButtonText}>{t(locale, "authAppleAction")}</Text>
+                </Pressable>
                 <PrimaryButton
                   label={t(locale, "authUseEmail")}
                   variant="ghost"
@@ -691,14 +692,28 @@ const styles = StyleSheet.create({
     alignSelf: "stretch"
   },
   appleButton: {
-    width: "100%",
-    height: 46,
-    marginTop: theme.spacing.xs
+    minHeight: 46,
+    borderRadius: 999,
+    marginTop: theme.spacing.xs,
+    backgroundColor: "#000000",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md
   },
-  appleCaption: {
-    color: theme.colors.muted,
+  appleButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }]
+  },
+  appleButtonDisabled: {
+    opacity: 0.6
+  },
+  appleButtonText: {
+    color: "#FFFFFF",
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.body,
+    fontWeight: "600"
   },
   languageRow: {
     gap: theme.spacing.xs

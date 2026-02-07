@@ -21,6 +21,7 @@ import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
+import { localizedCategoryLabel } from "../data/categories";
 import { DailyQuizResults, DailyQuizStatus, QuizSummary, StatsResponse } from "../data/types";
 
 type Props = {
@@ -35,7 +36,13 @@ type Props = {
   sessions: {
     code: string;
     status: string;
-    quiz: { title: string; subtitle: string };
+    quiz: {
+      title: string;
+      subtitle: string;
+      categoryId?: string;
+      categoryLabel?: string;
+      questions?: unknown[];
+    };
     players: { id: number; displayName: string }[];
     scores: Record<string, number>;
     progress: Record<string, number>;
@@ -105,7 +112,7 @@ export function LobbyScreen({
       if (!map.has(quiz.categoryId)) {
         map.set(quiz.categoryId, {
           id: quiz.categoryId,
-          label: quiz.categoryLabel,
+          label: localizedCategoryLabel(locale, quiz.categoryId, quiz.categoryLabel),
           accent: quiz.accent,
           questionCount: quiz.questionCount ?? quiz.rounds ?? 0
         });
@@ -323,7 +330,14 @@ export function LobbyScreen({
   const nextMeta =
     nextSession && nextTotalQuestions
       ? {
-          category: nextSession.quiz.categoryLabel ?? t(locale, "allCategories"),
+          category:
+            nextSession.quiz.categoryId
+              ? localizedCategoryLabel(
+                  locale,
+                  nextSession.quiz.categoryId,
+                  nextSession.quiz.categoryLabel ?? t(locale, "allCategories")
+                )
+              : t(locale, "allCategories"),
           progress: `Q${Math.min(nextMyProgress, nextTotalQuestions)}/${Math.max(
             nextTotalQuestions,
             1

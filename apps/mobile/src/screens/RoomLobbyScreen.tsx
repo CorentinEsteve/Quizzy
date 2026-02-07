@@ -7,6 +7,7 @@ import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { Pill } from "../components/Pill";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { localizedCategoryLabel } from "../data/categories";
 import { RoomState, StatsResponse, User } from "../data/types";
 
 type Props = {
@@ -222,7 +223,9 @@ export function RoomLobbyScreen({
           <Text style={styles.deckTitle}>{room.quiz.title}</Text>
           <Text style={styles.deckSubtitle}>{room.quiz.subtitle}</Text>
           <View style={styles.metaRow}>
-            <Pill label={room.quiz.categoryLabel} />
+            <Pill
+              label={localizedCategoryLabel(locale, room.quiz.categoryId, room.quiz.categoryLabel)}
+            />
             <Pill label={`${room.quiz.questions.length} ${t(locale, "questionsLabel")}`} />
             <Pill label={modeLabel} />
           </View>

@@ -1430,6 +1430,7 @@ export default function App() {
   }
 
   function handleLogout() {
+    setAuthMode("login");
     setToken(null);
     setUser(null);
     setRoom(null);

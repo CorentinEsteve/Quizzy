@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
+import { Locale, t } from "../i18n";
+import { localizedCategoryLabel } from "../data/categories";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Pill } from "../components/Pill";
@@ -11,9 +13,10 @@ import { QuizSummary } from "../data/types";
 type Props = {
   quizzes: QuizSummary[];
   onSelect: (quizId: string) => void;
+  locale?: Locale;
 };
 
-export function HomeScreen({ quizzes, onSelect }: Props) {
+export function HomeScreen({ quizzes, onSelect, locale = "en" }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
@@ -52,13 +55,15 @@ export function HomeScreen({ quizzes, onSelect }: Props) {
         {quizzes.map((quiz) => (
           <GlassCard key={quiz.id} accent={quiz.accent} style={styles.card}>
             <View style={styles.cardPills}>
-              <Pill label={quiz.categoryLabel} />
+              <Pill label={localizedCategoryLabel(locale, quiz.categoryId, quiz.categoryLabel)} />
               <Pill label={`${quiz.rounds} rounds`} />
             </View>
             <Text style={styles.cardTitle}>{quiz.title}</Text>
             <Text style={styles.cardSubtitle}>{quiz.subtitle}</Text>
             <View style={styles.cardFooter}>
-              <Text style={styles.cardMeta}>{quiz.questionCount} questions</Text>
+              <Text style={styles.cardMeta}>
+                {quiz.questionCount} {t(locale, "questionsLabel")}
+              </Text>
               <PrimaryButton
                 label="Open"
                 icon="folder-open"

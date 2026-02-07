@@ -88,6 +88,14 @@ function generateCode() {
   return code;
 }
 
+async function generateUniqueRoomCode() {
+  let code = generateCode();
+  while (await getRoomByCode(code)) {
+    code = generateCode();
+  }
+  return code;
+}
+
 function appleEmailVerified(value) {
   if (value === true) return true;
   if (typeof value === "string") return value.toLowerCase() === "true";
@@ -468,7 +476,7 @@ async function getRoomPlayers(roomId, options = {}) {
       role: row.role
     })) || [];
   if (includeInvited) return players;
-  return players.filter((player) => ACTIVE_ROLES.has(player.role));
+  return players.filter((player) => player.role !== "invited");
 }
 
 async function getRoomInvites(roomId) {
@@ -497,6 +505,78 @@ async function getRoomRematch(roomId) {
     .select("user_id")
     .eq("room_id", roomId);
   return (data || []).map((row) => ({ userId: row.user_id }));
+}
+
+async function startRematchRoom(room, players) {
+  const publicCode = room.code;
+  const archivedCode = await generateUniqueRoomCode();
+  const now = nowIso();
+  const participants = players.filter((player) => player.role !== "invited");
+
+  const { data: archivedRows } = await supabase
+    .from("rooms")
+    .update({ code: archivedCode })
+    .eq("id", room.id)
+    .eq("code", publicCode)
+    .eq("status", "complete")
+    .select("id")
+    .limit(1);
+  if (!archivedRows?.length) {
+    return getRoomByCode(publicCode);
+  }
+
+  const currentQuiz = await getQuiz(room.quiz_id);
+  const nextQuiz = currentQuiz
+    ? buildCategoryQuiz(currentQuiz.categoryId || "all", currentQuiz.questions.length)
+    : null;
+  if (nextQuiz) await saveCustomQuiz(nextQuiz);
+
+  const { data: newRoom, error: createError } = await supabase
+    .from("rooms")
+    .insert({
+      code: publicCode,
+      mode: room.mode,
+      quiz_id: nextQuiz ? nextQuiz.id : room.quiz_id,
+      status: "active",
+      host_user_id: room.host_user_id,
+      created_at: now,
+      started_at: now,
+      current_index: 0,
+      completed_at: null
+    })
+    .select("*")
+    .single();
+  if (createError || !newRoom) {
+    await supabase.from("rooms").update({ code: publicCode }).eq("id", room.id);
+    return room;
+  }
+
+  const roster = participants.map((player) => ({
+    room_id: newRoom.id,
+    user_id: player.id,
+    role:
+      player.id === room.host_user_id
+        ? "host"
+        : ACTIVE_ROLES.has(player.role)
+          ? player.role
+          : "guest",
+    joined_at: now
+  }));
+  if (!roster.length) {
+    await supabase.from("rooms").delete().eq("id", newRoom.id);
+    await supabase.from("rooms").update({ code: publicCode }).eq("id", room.id);
+    return room;
+  }
+
+  const { error: rosterError } = await supabase.from("room_players").insert(roster);
+  if (rosterError) {
+    await supabase.from("rooms").delete().eq("id", newRoom.id);
+    await supabase.from("rooms").update({ code: publicCode }).eq("id", room.id);
+    return room;
+  }
+
+  await supabase.from("room_rematch").delete().eq("room_id", room.id);
+  return newRoom;
 }
 
 async function getAllAnswers() {
@@ -1090,19 +1170,25 @@ app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
   const normalizedCountry = normalizeCountry(country);
 
   let user = null;
-  const { data: userByApple } = await supabase
+  const { data: userByApple, error: userByAppleError } = await supabase
     .from("users")
     .select("id, email, display_name, country, email_verified, deleted_at, apple_sub")
     .eq("apple_sub", appleSub)
     .maybeSingle();
+  if (userByAppleError) {
+    return res.status(500).json({ error: "Unable to load Apple account" });
+  }
   if (userByApple) {
     user = userByApple;
   } else if (effectiveEmail) {
-    const { data: userByEmail } = await supabase
+    const { data: userByEmail, error: userByEmailError } = await supabase
       .from("users")
       .select("id, email, display_name, country, email_verified, deleted_at, apple_sub")
       .eq("email", effectiveEmail)
       .maybeSingle();
+    if (userByEmailError) {
+      return res.status(500).json({ error: "Unable to load account" });
+    }
     if (userByEmail) {
       if (userByEmail.apple_sub && userByEmail.apple_sub !== appleSub) {
         return res.status(409).json({ error: "Apple account already linked" });
@@ -1117,12 +1203,13 @@ app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
 
   if (!user) {
     const displayName = buildAppleDisplayName(fullName, effectiveEmail);
+    const generatedPasswordHash = bcrypt.hashSync(`apple_${appleSub}_${Date.now()}`, 10);
     const { data: created, error } = await supabase
       .from("users")
       .insert({
         email: effectiveEmail,
         display_name: displayName,
-        password_hash: null,
+        password_hash: generatedPasswordHash,
         created_at: nowIso(),
         country: normalizedCountry,
         email_verified: emailVerified,
@@ -1679,10 +1766,7 @@ app.post("/rooms", authMiddleware, async (req, res) => {
   }
   if (!quiz) return res.status(400).json({ error: "Invalid room configuration" });
   const mode = requestedMode === "sync" ? "sync" : "async";
-  let code = generateCode();
-  while (await getRoomByCode(code)) {
-    code = generateCode();
-  }
+  const code = await generateUniqueRoomCode();
   const { data: room, error } = await supabase
     .from("rooms")
     .insert({
@@ -2081,23 +2165,7 @@ io.on("connection", (socket) => {
     const rematch = await getRoomRematch(room.id);
 
     if (rematch.length >= players.length) {
-      const currentQuiz = await getQuiz(room.quiz_id);
-      const nextQuiz = currentQuiz
-        ? buildCategoryQuiz(currentQuiz.categoryId || "all", currentQuiz.questions.length)
-        : null;
-      if (nextQuiz) await saveCustomQuiz(nextQuiz);
-      await supabase.from("room_answers").delete().eq("room_id", room.id);
-      await supabase.from("room_rematch").delete().eq("room_id", room.id);
-      await supabase
-        .from("rooms")
-        .update({
-          status: "active",
-          current_index: 0,
-          started_at: nowIso(),
-          completed_at: null,
-          quiz_id: nextQuiz ? nextQuiz.id : room.quiz_id
-        })
-        .eq("id", room.id);
+      await startRematchRoom(room, players);
     }
 
     const updated = await getRoomByCode(code);
