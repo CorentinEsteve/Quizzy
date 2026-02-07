@@ -1168,6 +1168,7 @@ app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
   const effectiveEmail = tokenEmail || suppliedEmail;
   const emailVerified = appleEmailVerified(payload.email_verified);
   const normalizedCountry = normalizeCountry(country);
+  let isNewUser = false;
 
   let user = null;
   const { data: userByApple, error: userByAppleError } = await supabase
@@ -1221,6 +1222,7 @@ app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
       return res.status(500).json({ error: "Unable to create user" });
     }
     user = created;
+    isNewUser = true;
   } else {
     const updates = {};
     if (!user.apple_sub) updates.apple_sub = appleSub;
@@ -1235,6 +1237,7 @@ app.post("/auth/apple", rateLimit({ windowMs: 60_000, max: 20 }), async (req, re
   const token = signToken(user);
   res.json({
     token,
+    isNewUser,
     user: {
       id: user.id,
       email: user.email,

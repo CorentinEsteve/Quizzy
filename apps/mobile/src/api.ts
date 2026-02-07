@@ -13,7 +13,7 @@ import {
   User
 } from "./data/types";
 
-export type AuthResponse = { token: string; user: User };
+export type AuthResponse = { token: string; user: User; isNewUser?: boolean };
 
 export class AuthError extends Error {
   constructor(message = "Unauthorized") {

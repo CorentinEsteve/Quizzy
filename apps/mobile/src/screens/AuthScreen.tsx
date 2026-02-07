@@ -33,6 +33,15 @@ type Props = {
   onResetConfirm: (token: string, newPassword: string) => void;
   onReactivate: (email: string, password: string) => void;
   onAppleSignIn?: () => void;
+  appleProfileSetup?: {
+    displayName?: string;
+    country?: "US" | "FR" | "GB" | "CA";
+  } | null;
+  onSubmitAppleProfile?: (payload: {
+    displayName: string;
+    country: "US" | "FR" | "GB" | "CA";
+    locale: Locale;
+  }) => void;
   error?: string | null;
   onClearError?: () => void;
   loading?: boolean;
@@ -48,6 +57,8 @@ export function AuthScreen({
   onResetConfirm,
   onReactivate,
   onAppleSignIn,
+  appleProfileSetup,
+  onSubmitAppleProfile,
   error,
   onClearError,
   loading,
@@ -69,6 +80,8 @@ export function AuthScreen({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [appleProfileName, setAppleProfileName] = useState("");
+  const [appleProfileCountry, setAppleProfileCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
   const errorRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -101,12 +114,19 @@ export function AuthScreen({
     }
   }, [appleAvailable]);
 
+  useEffect(() => {
+    if (!appleProfileSetup) return;
+    setAppleProfileName(appleProfileSetup.displayName ?? "");
+    setAppleProfileCountry(appleProfileSetup.country ?? "US");
+  }, [appleProfileSetup]);
+
   const isEmailValid = useMemo(() => email.trim().includes("@") && email.trim().includes("."), [email]);
   const isPasswordValid = useMemo(() => password.length >= 8, [password]);
   const isDisplayNameValid = useMemo(() => displayName.trim().length >= 2, [displayName]);
   const isRegisterStepOneValid = isDisplayNameValid && isEmailValid && isPasswordValid;
   const isLoginValid = email.trim().length > 0 && password.length > 0;
   const isRegisterStepTwoValid = true;
+  const isAppleProfileNameValid = appleProfileName.trim().length >= 2;
 
   const totalSteps = 2;
   const stepProgress = (registerStep + 1) / totalSteps;
@@ -137,20 +157,223 @@ export function AuthScreen({
           <View style={styles.card}>
             <Text style={styles.eyebrow}>{t(locale, "appName")}</Text>
             <Text style={styles.title}>
-              {mode === "login" ? t(locale, "authWelcome") : t(locale, "authCreate")}
+              {appleProfileSetup
+                ? t(locale, "authAppleSetupTitle")
+                : mode === "login"
+                ? t(locale, "authWelcome")
+                : t(locale, "authCreate")}
             </Text>
             <Text style={styles.subtitle}>
-              {mode === "login" ? t(locale, "authSignIn") : t(locale, "authPickName")}
+              {appleProfileSetup
+                ? t(locale, "authAppleSetupBody")
+                : mode === "login"
+                ? t(locale, "authSignIn")
+                : t(locale, "authPickName")}
             </Text>
 
-            {mode === "register" && registerStep === 1 ? (
+            {appleProfileSetup ? (
+              <>
+                <InputField
+                  label={t(locale, "displayName")}
+                  value={appleProfileName}
+                  onChangeText={setAppleProfileName}
+                  placeholder="Nova"
+                  autoCapitalize="words"
+                />
+                <Text
+                  style={
+                    isAppleProfileNameValid || appleProfileName.length === 0
+                      ? styles.helperText
+                      : styles.helperError
+                  }
+                >
+                  {isAppleProfileNameValid || appleProfileName.length === 0
+                    ? t(locale, "authNameHint")
+                    : t(locale, "authNameError")}
+                </Text>
+
+                <View style={styles.languageRow}>
+                  <Text style={styles.languageLabel}>{t(locale, "language")}</Text>
+                  <View style={styles.languageButtons}>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        locale === "en" ? styles.languageOptionActive : styles.languageOptionIdle
+                      ]}
+                      onPress={() => onChangeLocale("en")}
+                    >
+                      <View style={styles.flagUk}>
+                        <View style={styles.flagUkWhiteHorizontal} />
+                        <View style={styles.flagUkWhiteVertical} />
+                        <View style={styles.flagUkRedHorizontal} />
+                        <View style={styles.flagUkRedVertical} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          locale === "en" ? styles.languageTextActive : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "english")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        locale === "fr" ? styles.languageOptionActive : styles.languageOptionIdle
+                      ]}
+                      onPress={() => onChangeLocale("fr")}
+                    >
+                      <View style={styles.flagFr}>
+                        <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
+                        <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
+                        <View style={[styles.flagFrStripe, styles.flagFrRed]} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          locale === "fr" ? styles.languageTextActive : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "french")}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.languageRow}>
+                  <Text style={styles.languageLabel}>{t(locale, "country")}</Text>
+                  <View style={styles.countryGrid}>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        appleProfileCountry === "US"
+                          ? styles.languageOptionActive
+                          : styles.languageOptionIdle
+                      ]}
+                      onPress={() => setAppleProfileCountry("US")}
+                    >
+                      <View style={styles.flagUs}>
+                        <View style={styles.flagUsStars} />
+                        <View style={styles.flagUsStripe} />
+                        <View style={[styles.flagUsStripe, styles.flagUsStripeAlt]} />
+                        <View style={[styles.flagUsStripe, styles.flagUsStripe3]} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          appleProfileCountry === "US"
+                            ? styles.languageTextActive
+                            : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "countryUs")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        appleProfileCountry === "FR"
+                          ? styles.languageOptionActive
+                          : styles.languageOptionIdle
+                      ]}
+                      onPress={() => setAppleProfileCountry("FR")}
+                    >
+                      <View style={styles.flagFr}>
+                        <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
+                        <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
+                        <View style={[styles.flagFrStripe, styles.flagFrRed]} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          appleProfileCountry === "FR"
+                            ? styles.languageTextActive
+                            : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "countryFr")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        appleProfileCountry === "GB"
+                          ? styles.languageOptionActive
+                          : styles.languageOptionIdle
+                      ]}
+                      onPress={() => setAppleProfileCountry("GB")}
+                    >
+                      <View style={styles.flagUk}>
+                        <View style={styles.flagUkWhiteHorizontal} />
+                        <View style={styles.flagUkWhiteVertical} />
+                        <View style={styles.flagUkRedHorizontal} />
+                        <View style={styles.flagUkRedVertical} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          appleProfileCountry === "GB"
+                            ? styles.languageTextActive
+                            : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "countryGb")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.languageOption,
+                        appleProfileCountry === "CA"
+                          ? styles.languageOptionActive
+                          : styles.languageOptionIdle
+                      ]}
+                      onPress={() => setAppleProfileCountry("CA")}
+                    >
+                      <View style={styles.flagCa}>
+                        <View style={[styles.flagCaStripe, styles.flagCaRed]} />
+                        <View style={[styles.flagCaStripe, styles.flagCaWhite]} />
+                        <View style={[styles.flagCaStripe, styles.flagCaRed]} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.languageText,
+                          appleProfileCountry === "CA"
+                            ? styles.languageTextActive
+                            : styles.languageTextIdle
+                        ]}
+                      >
+                        {t(locale, "countryCa")}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <PrimaryButton
+                  label={loading ? t(locale, "pleaseWait") : t(locale, "authAppleSetupDone")}
+                  icon="arrow-right"
+                  iconPosition="right"
+                  onPress={() =>
+                    onSubmitAppleProfile?.({
+                      displayName: appleProfileName.trim(),
+                      country: appleProfileCountry,
+                      locale
+                    })
+                  }
+                  disabled={!isAppleProfileNameValid || loading}
+                />
+              </>
+            ) : null}
+
+            {!appleProfileSetup && mode === "register" && registerStep === 1 ? (
               <Pressable style={styles.backInline} onPress={() => setRegisterStep(0)}>
                 <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
                 <Text style={styles.backInlineText}>{t(locale, "back")}</Text>
               </Pressable>
             ) : null}
 
-            {mode === "register" ? (
+            {!appleProfileSetup && mode === "register" ? (
               <View style={styles.progressRow}>
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { width: `${Math.round(stepProgress * 100)}%` }]} />
@@ -160,6 +383,7 @@ export function AuthScreen({
 
             {appleAvailable &&
             !showReset &&
+            !appleProfileSetup &&
             authMethod === "apple" &&
             (mode === "login" || registerStep === 0) ? (
               <>
@@ -185,14 +409,17 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {authMethod === "email" && !showReset && (mode === "login" || registerStep === 0) ? (
+            {!appleProfileSetup &&
+            authMethod === "email" &&
+            !showReset &&
+            (mode === "login" || registerStep === 0) ? (
               <Pressable style={styles.backInline} onPress={() => setAuthMethod("apple")}>
                 <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
                 <Text style={styles.backInlineText}>{t(locale, "authBackToMethods")}</Text>
               </Pressable>
             ) : null}
 
-            {mode === "register" && registerStep === 0 && authMethod === "email" ? (
+            {!appleProfileSetup && mode === "register" && registerStep === 0 && authMethod === "email" ? (
               <>
                 <InputField
                   label={t(locale, "displayName")}
@@ -232,7 +459,7 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {mode === "login" && !showReset && authMethod === "email" ? (
+            {!appleProfileSetup && mode === "login" && !showReset && authMethod === "email" ? (
               <>
                 <InputField
                   label={t(locale, "email")}
@@ -261,7 +488,7 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {mode === "login" && showReset ? (
+            {!appleProfileSetup && mode === "login" && showReset ? (
               <>
                 <Text style={styles.subtitle}>{t(locale, "resetPasswordBody")}</Text>
                 <InputField
@@ -339,7 +566,7 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {mode === "register" && registerStep === 1 && (
+            {!appleProfileSetup && mode === "register" && registerStep === 1 && (
               <View style={styles.languageRow}>
                 <Text style={styles.languageLabel}>{t(locale, "language")}</Text>
                 <View style={styles.languageButtons}>
@@ -390,7 +617,7 @@ export function AuthScreen({
               </View>
             )}
 
-            {mode === "register" && registerStep === 1 && (
+            {!appleProfileSetup && mode === "register" && registerStep === 1 && (
               <View style={styles.languageRow}>
                 <Text style={styles.languageLabel}>{t(locale, "country")}</Text>
                 <View style={styles.countryGrid}>
@@ -484,9 +711,9 @@ export function AuthScreen({
               </View>
             )}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {!appleProfileSetup && error ? <Text style={styles.error}>{error}</Text> : null}
 
-            {mode === "login" && !showReset && authMethod === "email" ? (
+            {!appleProfileSetup && mode === "login" && !showReset && authMethod === "email" ? (
               <PrimaryButton
                 label={loading ? t(locale, "pleaseWait") : t(locale, "signIn")}
                 icon="sign-in"
@@ -512,11 +739,13 @@ export function AuthScreen({
               />
             ) : null}
 
-            <Pressable onPress={onToggleMode} style={styles.switchLink}>
-              <Text style={styles.switchLinkText}>
-                {mode === "login" ? t(locale, "needAccount") : t(locale, "haveAccount")}
-              </Text>
-            </Pressable>
+            {!appleProfileSetup ? (
+              <Pressable onPress={onToggleMode} style={styles.switchLink}>
+                <Text style={styles.switchLinkText}>
+                  {mode === "login" ? t(locale, "needAccount") : t(locale, "haveAccount")}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

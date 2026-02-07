@@ -95,6 +95,7 @@ const MAIN_PANELS = ["lobby", "account"] as const;
 const AUTH_TOKEN_KEY = "dq_auth_token";
 const AUTH_USER_KEY = "dq_auth_user";
 const LOCALE_KEY = "qwizzy_locale";
+const AUTH_FIRST_OPEN_KEY = "qwizzy_auth_first_open_done";
 
 const resolveDeviceLocale = (): Locale => {
   const deviceLocale = Localization.getLocales?.()[0]?.languageCode ?? "en";
@@ -133,6 +134,13 @@ type RoomSnapshot = {
 type RoomNotificationPayload = {
   roomCode: string;
   roomStatus: RoomSnapshot["status"];
+};
+
+type ApplePendingProfile = {
+  token: string;
+  user: User;
+  displayName: string;
+  country: "US" | "FR" | "GB" | "CA";
 };
 
 function parseRoomCodeFromUrl(url: string | null) {
@@ -202,6 +210,7 @@ export default function App() {
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locale, setLocale] = useState<Locale>("en");
+  const [applePendingProfile, setApplePendingProfile] = useState<ApplePendingProfile | null>(null);
 
   const [quizzes, setQuizzes] = useState<QuizSummary[]>([]);
   const [room, setRoom] = useState<RoomState | null>(null);
@@ -501,12 +510,20 @@ export default function App() {
     const start = Date.now();
     const bootstrap = async () => {
       try {
-        const [onboardingValue, notificationValue, storedLocale, storedToken, storedUser] = await Promise.all([
+        const [
+          onboardingValue,
+          notificationValue,
+          storedLocale,
+          storedToken,
+          storedUser,
+          authFirstOpenDone
+        ] = await Promise.all([
           AsyncStorage.getItem("dq_onboarding"),
           AsyncStorage.getItem("dq_notifications"),
           AsyncStorage.getItem(LOCALE_KEY),
           AsyncStorage.getItem(AUTH_TOKEN_KEY),
-          AsyncStorage.getItem(AUTH_USER_KEY)
+          AsyncStorage.getItem(AUTH_USER_KEY),
+          AsyncStorage.getItem(AUTH_FIRST_OPEN_KEY)
         ]);
         if (onboardingValue === "seen") setHasSeenOnboarding(true);
         if (notificationValue === "off") setNotificationsEnabled(false);
@@ -525,6 +542,9 @@ export default function App() {
           } catch {
             // ignore invalid cached user
           }
+        } else if (authFirstOpenDone !== "yes") {
+          setAuthMode("register");
+          AsyncStorage.setItem(AUTH_FIRST_OPEN_KEY, "yes").catch(() => null);
         }
       } catch {
         // ignore bootstrap errors
@@ -1054,6 +1074,21 @@ export default function App() {
         fullName: credential.fullName,
         country: resolveDeviceCountry()
       });
+      if (response.isNewUser) {
+        const deviceCountry = resolveDeviceCountry();
+        const normalizedCountry =
+          deviceCountry === "US" || deviceCountry === "FR" || deviceCountry === "GB" || deviceCountry === "CA"
+            ? deviceCountry
+            : "US";
+        setApplePendingProfile({
+          token: response.token,
+          user: response.user,
+          displayName: response.user.displayName || "",
+          country: normalizedCountry
+        });
+        return;
+      }
+
       setToken(response.token);
       setUser(response.user);
       setPanel("lobby");
@@ -1067,6 +1102,40 @@ export default function App() {
       if (code === "ERR_CANCELED") {
         return;
       }
+      setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAppleProfileSetup(payload: {
+    displayName: string;
+    country: "US" | "FR" | "GB" | "CA";
+    locale: Locale;
+  }) {
+    if (!applePendingProfile) return;
+    setAuthError(null);
+    setLoading(true);
+    try {
+      const response = await updateProfile(applePendingProfile.token, {
+        displayName: payload.displayName,
+        country: payload.country
+      });
+      const updatedUser = response?.user ?? {
+        ...applePendingProfile.user,
+        displayName: payload.displayName,
+        country: payload.country
+      };
+      setLocale(payload.locale);
+      setToken(applePendingProfile.token);
+      setUser(updatedUser);
+      setPanel("lobby");
+      setApplePendingProfile(null);
+      AsyncStorage.setItem(AUTH_TOKEN_KEY, applePendingProfile.token).catch(() => null);
+      AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser)).catch(() => null);
+      AsyncStorage.setItem(LOCALE_KEY, payload.locale).catch(() => null);
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
       setAuthError(err instanceof Error ? err.message : t(locale, "authFailed"));
     } finally {
       setLoading(false);
@@ -1431,6 +1500,7 @@ export default function App() {
 
   function handleLogout() {
     setAuthMode("login");
+    setApplePendingProfile(null);
     setToken(null);
     setUser(null);
     setRoom(null);
@@ -1579,6 +1649,8 @@ export default function App() {
           onResetConfirm={handleResetConfirm}
           onReactivate={handleReactivate}
           onAppleSignIn={handleAppleSignIn}
+          appleProfileSetup={applePendingProfile}
+          onSubmitAppleProfile={handleAppleProfileSetup}
           error={authError}
           onClearError={() => setAuthError(null)}
           loading={loading}
