@@ -86,9 +86,10 @@ export function LobbyScreen({
   onOpenDailyResults
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const [code, setCode] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isQrPreviewOpen, setIsQrPreviewOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
   const [selectedMode, setSelectedMode] = useState<"sync" | "async">("async");
@@ -103,6 +104,7 @@ export function LobbyScreen({
     height * 0.88
   );
   const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
+  const qrPreviewSize = Math.min(width - theme.spacing.xl * 2 - 32, 360);
 
   const categories = useMemo(() => {
     const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
@@ -740,7 +742,7 @@ export function LobbyScreen({
         ) : null}
 
         <GlassCard style={styles.shareCard}>
-            <View style={styles.shareRow}>
+          <View style={styles.shareRow}>
             <View style={styles.shareTextBlock}>
               <Text style={styles.shareTitle}>{t(locale, "shareAppTitle")}</Text>
               <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
@@ -748,9 +750,18 @@ export function LobbyScreen({
             <View style={styles.shareArrowWrap}>
               <FontAwesome name="long-arrow-right" size={20} color={theme.colors.muted} />
             </View>
-            <View style={styles.qrWrap}>
+            <Pressable
+              style={styles.qrWrap}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setIsQrPreviewOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t(locale, "shareAppTitle")}
+              accessibilityHint={t(locale, "shareAppSubtitle")}
+            >
               <Image source={require("../../assets/qrcode.png")} style={styles.qrImage} />
-            </View>
+            </Pressable>
           </View>
         </GlassCard>
 
@@ -1286,6 +1297,36 @@ export function LobbyScreen({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        transparent
+        visible={isQrPreviewOpen}
+        animationType="fade"
+        onRequestClose={() => setIsQrPreviewOpen(false)}
+      >
+        <Pressable
+          style={styles.qrOverlay}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setIsQrPreviewOpen(false);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t(locale, "close")}
+        >
+          <Pressable onPress={() => {}} style={styles.qrDialogTouch}>
+            <View style={styles.qrDialog}>
+              <Text style={styles.qrDialogTitle}>{t(locale, "shareAppTitle")}</Text>
+              <Text style={styles.qrDialogSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
+              <View style={styles.qrDialogFrame}>
+                <Image
+                  source={require("../../assets/qrcode.png")}
+                  style={[styles.qrDialogImage, { width: qrPreviewSize, height: qrPreviewSize }]}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1456,7 +1497,7 @@ const styles = StyleSheet.create({
   shareSubtitle: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
+    fontSize: theme.typography.small,
     marginTop: theme.spacing.xs
   },
   shareArrowWrap: {
@@ -1476,6 +1517,49 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 12
+  },
+  qrOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 17, 24, 0.6)",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xl
+  },
+  qrDialogTouch: {
+    alignSelf: "center"
+  },
+  qrDialog: {
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(229, 231, 236, 0.8)",
+    padding: theme.spacing.lg,
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  qrDialogTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600",
+    textAlign: "center"
+  },
+  qrDialogSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textAlign: "center"
+  },
+  qrDialogFrame: {
+    marginTop: theme.spacing.sm,
+    padding: 12,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border
+  },
+  qrDialogImage: {
+    borderRadius: 16
   },
   recapHeader: {
     flexDirection: "row",
