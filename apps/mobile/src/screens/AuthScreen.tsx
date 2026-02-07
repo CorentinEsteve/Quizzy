@@ -80,6 +80,7 @@ export function AuthScreen({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [appleAvailabilityResolved, setAppleAvailabilityResolved] = useState(false);
   const [appleProfileName, setAppleProfileName] = useState("");
   const [appleProfileCountry, setAppleProfileCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
   const errorRef = useRef<string | null>(null);
@@ -102,17 +103,22 @@ export function AuthScreen({
   }, [mode, showReset, onClearError]);
 
   useEffect(() => {
-    if (Platform.OS !== "ios") return;
+    if (Platform.OS !== "ios") {
+      setAppleAvailable(false);
+      setAppleAvailabilityResolved(true);
+      return;
+    }
     AppleAuthentication.isAvailableAsync()
       .then((available) => setAppleAvailable(available))
-      .catch(() => setAppleAvailable(false));
+      .catch(() => setAppleAvailable(false))
+      .finally(() => setAppleAvailabilityResolved(true));
   }, []);
 
   useEffect(() => {
-    if (!appleAvailable) {
+    if (appleAvailabilityResolved && !appleAvailable) {
       setAuthMethod("email");
     }
-  }, [appleAvailable]);
+  }, [appleAvailabilityResolved, appleAvailable]);
 
   useEffect(() => {
     if (!appleProfileSetup) return;
@@ -127,13 +133,6 @@ export function AuthScreen({
   const isLoginValid = email.trim().length > 0 && password.length > 0;
   const isRegisterStepTwoValid = true;
   const isAppleProfileNameValid = appleProfileName.trim().length >= 2;
-
-  const totalSteps = 2;
-  const stepProgress = (registerStep + 1) / totalSteps;
-  const stepLabel =
-    locale === "fr"
-      ? `Etape ${registerStep + 1} sur ${totalSteps}`
-      : `Step ${registerStep + 1} of ${totalSteps}`;
 
   return (
     <View style={[styles.container, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
@@ -371,14 +370,6 @@ export function AuthScreen({
                 <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
                 <Text style={styles.backInlineText}>{t(locale, "back")}</Text>
               </Pressable>
-            ) : null}
-
-            {!appleProfileSetup && mode === "register" ? (
-              <View style={styles.progressRow}>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${Math.round(stepProgress * 100)}%` }]} />
-                </View>
-              </View>
             ) : null}
 
             {appleAvailable &&
@@ -823,20 +814,6 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body
-  },
-  progressRow: {
-    gap: theme.spacing.xs
-  },
-  progressTrack: {
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
-    overflow: "hidden"
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: theme.colors.ink,
-    borderRadius: 999
   },
   progressLabel: {
     color: theme.colors.muted,

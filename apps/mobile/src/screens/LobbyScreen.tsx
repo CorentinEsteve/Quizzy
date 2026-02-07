@@ -56,7 +56,6 @@ type Props = {
   dailyLoading: boolean;
   onOpenDailyQuiz: () => void;
   onOpenDailyResults: () => void;
-  dailyBestStreak: number;
 };
 
 const ALL_CATEGORY_ID = "all";
@@ -84,8 +83,7 @@ export function LobbyScreen({
   dailyResults,
   dailyLoading,
   onOpenDailyQuiz,
-  onOpenDailyResults,
-  dailyBestStreak
+  onOpenDailyResults
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -345,10 +343,6 @@ export function LobbyScreen({
           status: nextStatus
         }
       : null;
-  const recapTotal = recapStats
-    ? recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties
-    : 0;
-
   return (
     <View style={styles.page}>
       <LinearGradient
@@ -403,7 +397,7 @@ export function LobbyScreen({
                 <View style={styles.recapHeaderText}>
                   <View style={styles.recapTitleRow}>
                     <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
-                    <Text style={styles.sectionTitle}>{t(locale, "recapTitle")}</Text>
+                    <Text style={styles.recapTitleText}>{t(locale, "recapTitle")}</Text>
                   </View>
                   <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
                 </View>
@@ -429,43 +423,6 @@ export function LobbyScreen({
                 <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
               </View>
             </View>
-            <View style={styles.recapBar}>
-              {recapTotal > 0 ? (
-                <>
-                  <View
-                    style={[
-                      styles.recapBarSegment,
-                      styles.recapBarWin,
-                      { flex: recapStats.totals.wins }
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.recapBarSegment,
-                      styles.recapBarLoss,
-                      { flex: recapStats.totals.losses }
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.recapBarSegment,
-                      styles.recapBarTie,
-                      { flex: recapStats.totals.ties }
-                    ]}
-                  />
-                </>
-              ) : (
-                <View style={[styles.recapBarSegment, styles.recapBarEmpty]} />
-              )}
-            </View>
-          <View style={styles.recapStreakRow}>
-            <Text style={styles.recapStreakLabel}>{t(locale, "bestDailyStreak")}</Text>
-            <View style={styles.recapStreakPill}>
-              <Text style={styles.recapStreakPillText}>
-                {dailyBestStreak > 0 ? dailyBestStreak : "—"}
-              </Text>
-            </View>
-          </View>
             {recapStats.opponents.length > 0 ? (
               <View style={styles.opponentList}>
                 <Text style={styles.recapMetaLabel}>{t(locale, "topRivals")}</Text>
@@ -1534,6 +1491,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6
   },
+  recapTitleText: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
+    letterSpacing: 1.1
+  },
   recapHeaderAction: {
     flexDirection: "row",
     alignItems: "center",
@@ -1838,55 +1802,6 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: 12
-  },
-  recapBar: {
-    flexDirection: "row",
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
-    overflow: "hidden",
-    marginTop: theme.spacing.xs
-  },
-  recapBarSegment: {
-    height: "100%"
-  },
-  recapBarWin: {
-    backgroundColor: "rgba(43, 158, 102, 0.5)"
-  },
-  recapBarLoss: {
-    backgroundColor: "rgba(235, 87, 87, 0.5)"
-  },
-  recapBarTie: {
-    backgroundColor: "rgba(243, 183, 78, 0.5)"
-  },
-  recapBarEmpty: {
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
-    flex: 1
-  },
-  recapStreakRow: {
-    marginTop: theme.spacing.xs,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  recapStreakLabel: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
-  recapStreakPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(243, 183, 78, 0.24)",
-    borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.55)"
-  },
-  recapStreakPillText: {
-    color: "#7A5A1F",
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "600"
   },
   categoryGrid: {
     gap: theme.spacing.sm

@@ -1610,7 +1610,6 @@ export default function App() {
       dailyLoading={dailyLoading}
       onOpenDailyQuiz={handleOpenDailyQuiz}
       onOpenDailyResults={handleOpenDailyResults}
-      dailyBestStreak={dailyStreaks.best}
     />
   ) : null;
 
