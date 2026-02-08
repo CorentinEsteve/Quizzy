@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
@@ -51,6 +52,8 @@ function countryLabel(locale: Locale, code: string) {
   }
 }
 
+const DID_YOU_KNOW_KEY = "dq_did_you_know_tip";
+
 export function AccountScreen({
   user,
   onBack,
@@ -84,6 +87,33 @@ export function AccountScreen({
   const [newEmail, setNewEmail] = useState(user.email);
   const [emailPassword, setEmailPassword] = useState("");
   const [emailSubmitting, setEmailSubmitting] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
+
+  const tips = useMemo(
+    () => [
+      t(locale, "didYouKnow1"),
+      t(locale, "didYouKnow2"),
+      t(locale, "didYouKnow3"),
+      t(locale, "didYouKnow4"),
+      t(locale, "didYouKnow5"),
+      t(locale, "didYouKnow6"),
+      t(locale, "didYouKnow7"),
+      t(locale, "didYouKnow8"),
+      t(locale, "didYouKnow9"),
+      t(locale, "didYouKnow10"),
+      t(locale, "didYouKnow11"),
+      t(locale, "didYouKnow12"),
+      t(locale, "didYouKnow13"),
+      t(locale, "didYouKnow14"),
+      t(locale, "didYouKnow15"),
+      t(locale, "didYouKnow16"),
+      t(locale, "didYouKnow17"),
+      t(locale, "didYouKnow18"),
+      t(locale, "didYouKnow19"),
+      t(locale, "didYouKnow20")
+    ],
+    [locale]
+  );
 
   const resetEmailForm = (email?: string) => {
     setNewEmail(email ?? user.email);
@@ -93,6 +123,35 @@ export function AccountScreen({
   useEffect(() => {
     setNewEmail(user.email);
   }, [user.email]);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(DID_YOU_KNOW_KEY)
+      .then((value) => {
+        if (!active) return;
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+          setTipIndex(parsed);
+        }
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tips.length) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") return;
+      setTipIndex((prev) => {
+        const next = (prev + 1) % tips.length;
+        AsyncStorage.setItem(DID_YOU_KNOW_KEY, String(next)).catch(() => null);
+        return next;
+      });
+    });
+    return () => subscription.remove();
+  }, [tips.length]);
 
   const resetPasswordForm = () => {
     setCurrentPassword("");
@@ -528,6 +587,16 @@ export function AccountScreen({
           />
         </GlassCard>
 
+        {tips.length ? (
+          <GlassCard style={styles.didYouKnowCard}>
+            <View style={styles.didYouKnowHeader}>
+              <Text style={styles.didYouKnowEmoji}>🦊</Text>
+              <Text style={styles.didYouKnowLabel}>{t(locale, "didYouKnowLabel")}</Text>
+            </View>
+            <Text style={styles.didYouKnowText}>{tips[tipIndex % tips.length]}</Text>
+          </GlassCard>
+        ) : null}
+
         {!emailVerified ? (
           <View style={styles.sectionBlock}>
             <Text style={styles.sectionTitle}>{t(locale, "verifyEmail")}</Text>
@@ -749,6 +818,31 @@ const styles = StyleSheet.create({
   },
   profileButton: {
     marginTop: theme.spacing.sm
+  },
+  didYouKnowCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    borderColor: "rgba(243, 183, 78, 0.35)"
+  },
+  didYouKnowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs
+  },
+  didYouKnowEmoji: {
+    fontSize: 18
+  },
+  didYouKnowLabel: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "700"
+  },
+  didYouKnowText: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 18
   },
   sectionCard: {
     gap: theme.spacing.xs

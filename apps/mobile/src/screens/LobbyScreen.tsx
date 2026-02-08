@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  AppState,
+  Easing,
   Image,
   Modal,
   Pressable,
@@ -14,7 +14,6 @@ import {
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
@@ -59,7 +58,6 @@ type Props = {
 };
 
 const ALL_CATEGORY_ID = "all";
-const DID_YOU_KNOW_KEY = "dq_did_you_know_tip";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -93,12 +91,12 @@ export function LobbyScreen({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
   const [selectedMode, setSelectedMode] = useState<"sync" | "async">("async");
-  const [tipIndex, setTipIndex] = useState(0);
   const [dialogStep, setDialogStep] = useState<"menu" | "pick" | "join">("menu");
   const [pickStep, setPickStep] = useState<"category" | "count" | "mode">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
   const continuePulse = useRef(new Animated.Value(0)).current;
+  const mascotFloat = useRef(new Animated.Value(0)).current;
   const dialogMaxHeight = Math.min(
     height - insets.top - insets.bottom - theme.spacing.xl * 2,
     height * 0.88
@@ -137,32 +135,6 @@ export function LobbyScreen({
       ...Array.from(map.values())
     ];
   }, [locale, quizzes]);
-
-  const tips = useMemo(
-    () => [
-      t(locale, "didYouKnow1"),
-      t(locale, "didYouKnow2"),
-      t(locale, "didYouKnow3"),
-      t(locale, "didYouKnow4"),
-      t(locale, "didYouKnow5"),
-      t(locale, "didYouKnow6"),
-      t(locale, "didYouKnow7"),
-      t(locale, "didYouKnow8"),
-      t(locale, "didYouKnow9"),
-      t(locale, "didYouKnow10"),
-      t(locale, "didYouKnow11"),
-      t(locale, "didYouKnow12"),
-      t(locale, "didYouKnow13"),
-      t(locale, "didYouKnow14"),
-      t(locale, "didYouKnow15"),
-      t(locale, "didYouKnow16"),
-      t(locale, "didYouKnow17"),
-      t(locale, "didYouKnow18"),
-      t(locale, "didYouKnow19"),
-      t(locale, "didYouKnow20")
-    ],
-    [locale]
-  );
 
   const activeSessions = useMemo(
     () => sessions.filter((session) => session.status === "active"),
@@ -291,33 +263,25 @@ export function LobbyScreen({
   }, [continuePulse]);
 
   useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(DID_YOU_KNOW_KEY)
-      .then((value) => {
-        if (!active) return;
-        const parsed = Number(value);
-        if (!Number.isNaN(parsed)) {
-          setTipIndex(parsed);
-        }
-      })
-      .catch(() => null);
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!tips.length) return;
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") return;
-      setTipIndex((prev) => {
-        const next = (prev + 1) % tips.length;
-        AsyncStorage.setItem(DID_YOU_KNOW_KEY, String(next)).catch(() => null);
-        return prev;
-      });
-    });
-    return () => subscription.remove();
-  }, [tips.length]);
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(mascotFloat, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(mascotFloat, {
+          toValue: 0,
+          duration: 2400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [mascotFloat]);
 
   const nextOpponent = nextSession?.players.find((player) => player.id !== userId);
   const nextOpponentName = nextOpponent?.displayName ?? t(locale, "opponentLabel");
@@ -349,6 +313,20 @@ export function LobbyScreen({
     recapStats &&
       recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties > 0
   );
+  const mascotBob = mascotFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [4, -4]
+  });
+  const mascotGlow = mascotFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1]
+  });
+
+  const openCreateDialog = () => {
+    Haptics.selectionAsync();
+    setIsDialogOpen(true);
+  };
+
   return (
     <View style={styles.page}>
       <LinearGradient
@@ -390,6 +368,63 @@ export function LobbyScreen({
             </Pressable>
           </View>
         </View>
+
+        <GlassCard style={styles.heroCard} accent={theme.colors.secondary}>
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.14)", "rgba(255, 255, 255, 0.8)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroGradient}
+          />
+          <View style={[styles.heroSparkle, styles.heroSparkleOne]} />
+          <View style={[styles.heroSparkle, styles.heroSparkleTwo]} />
+          <View style={[styles.heroSparkle, styles.heroSparkleThree]} />
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroKicker}>Qwizzy</Text>
+              <Text style={styles.heroTitle}>Quiz. Laugh. Rematch.</Text>
+              <Text style={styles.heroBody}>{t(locale, "createGuideSubtitle")}</Text>
+            </View>
+            <Animated.View
+              style={[
+                styles.mascotWrap,
+                {
+                  transform: [{ translateY: mascotBob }],
+                  opacity: mascotGlow
+                }
+              ]}
+            >
+              <View style={styles.mascotGlow} />
+              <View style={styles.mascotBody}>
+                <View style={styles.mascotEyeRow}>
+                  <View style={styles.mascotEye} />
+                  <View style={styles.mascotEye} />
+                </View>
+                <View style={styles.mascotSmile} />
+              </View>
+              <View style={styles.mascotEarLeft} />
+              <View style={styles.mascotEarRight} />
+            </Animated.View>
+          </View>
+          <View style={styles.heroActions}>
+            <PrimaryButton
+              label={t(locale, "newMatch")}
+              icon="bolt"
+              iconPosition="right"
+              onPress={openCreateDialog}
+              style={styles.heroActionPrimary}
+            />
+            <PrimaryButton
+              label={dailyCompleted ? t(locale, "dailyQuizResults") : t(locale, "dailyQuizTitle")}
+              variant="ghost"
+              icon="calendar"
+              iconPosition="right"
+              onPress={handleDailyPress}
+              disabled={dailyLoading || !dailyQuiz}
+              style={styles.heroActionSecondary}
+            />
+          </View>
+        </GlassCard>
 
         {recapStats && hasRecapData ? (
           <Pressable
@@ -736,15 +771,6 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
-        {tips.length ? (
-          <View style={styles.didYouKnow}>
-            <Text style={styles.didYouKnowEmoji}>🦊</Text>
-            <Text style={styles.didYouKnowText}>
-              {t(locale, "didYouKnowLabel")} {tips[tipIndex % tips.length]}
-            </Text>
-          </View>
-        ) : null}
-
         <GlassCard style={styles.shareCard}>
           <View style={styles.shareRow}>
             <View style={styles.shareTextBlock}>
@@ -893,10 +919,7 @@ export function LobbyScreen({
         />
         <Pressable
           style={styles.fab}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setIsDialogOpen(true);
-          }}
+          onPress={openCreateDialog}
         >
           <FontAwesome name="plus" size={14} color={theme.colors.surface} />
           <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
@@ -1422,6 +1445,148 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
+  heroCard: {
+    gap: theme.spacing.md,
+    overflow: "hidden",
+    borderColor: "rgba(94, 124, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)"
+  },
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject
+  },
+  heroSparkle: {
+    position: "absolute",
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.85)"
+  },
+  heroSparkleOne: {
+    width: 10,
+    height: 10,
+    top: 22,
+    right: 120
+  },
+  heroSparkleTwo: {
+    width: 7,
+    height: 7,
+    top: 58,
+    right: 42
+  },
+  heroSparkleThree: {
+    width: 6,
+    height: 6,
+    top: 24,
+    right: 24
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 4
+  },
+  heroKicker: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1.2
+  },
+  heroTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 28,
+    fontWeight: "700",
+    lineHeight: 31
+  },
+  heroBody: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 19
+  },
+  mascotWrap: {
+    width: 82,
+    height: 82,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  mascotGlow: {
+    position: "absolute",
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "rgba(94, 124, 255, 0.16)"
+  },
+  mascotBody: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#FFF6D6",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2
+  },
+  mascotEarLeft: {
+    position: "absolute",
+    top: 18,
+    left: 15,
+    width: 13,
+    height: 13,
+    borderRadius: 4,
+    transform: [{ rotate: "-24deg" }],
+    backgroundColor: "#F7D17D",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.6)"
+  },
+  mascotEarRight: {
+    position: "absolute",
+    top: 18,
+    right: 15,
+    width: 13,
+    height: 13,
+    borderRadius: 4,
+    transform: [{ rotate: "24deg" }],
+    backgroundColor: "#F7D17D",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.6)"
+  },
+  mascotEyeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginTop: -2
+  },
+  mascotEye: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.ink
+  },
+  mascotSmile: {
+    width: 18,
+    height: 10,
+    borderBottomWidth: 2,
+    borderColor: theme.colors.ink,
+    borderRadius: 10,
+    marginTop: 4
+  },
+  heroActions: {
+    alignItems: "stretch",
+    gap: theme.spacing.sm
+  },
+  heroActionPrimary: {
+    width: "100%",
+    minHeight: 46
+  },
+  heroActionSecondary: {
+    width: "100%",
+    minHeight: 46
+  },
   introCard: {
     gap: theme.spacing.sm
   },
@@ -1458,27 +1623,6 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
-  },
-  didYouKnow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15, 23, 42, 0.08)"
-  },
-  didYouKnowEmoji: {
-    fontSize: 18
-  },
-  didYouKnowText: {
-    flex: 1,
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    lineHeight: 18
   },
   shareCard: {
     marginTop: theme.spacing.md,
