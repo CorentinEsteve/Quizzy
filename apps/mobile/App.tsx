@@ -143,6 +143,17 @@ type ApplePendingProfile = {
   country: "US" | "FR" | "GB" | "CA";
 };
 
+function buildDisplayNameFromAppleFullName(fullName?: {
+  givenName?: string | null;
+  middleName?: string | null;
+  familyName?: string | null;
+} | null) {
+  const parts = [fullName?.givenName, fullName?.middleName, fullName?.familyName]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean);
+  return parts.join(" ").trim();
+}
+
 function parseRoomCodeFromUrl(url: string | null) {
   if (!url) return null;
   const queryMatch = /[?&]code=([^&]+)/i.exec(url);
@@ -1074,16 +1085,19 @@ export default function App() {
         fullName: credential.fullName,
         country: resolveDeviceCountry()
       });
-      if (response.isNewUser) {
+      // In register mode, keep UX consistent with email signup and collect profile preferences.
+      if (response.isNewUser || authMode === "register") {
         const deviceCountry = resolveDeviceCountry();
         const normalizedCountry =
           deviceCountry === "US" || deviceCountry === "FR" || deviceCountry === "GB" || deviceCountry === "CA"
             ? deviceCountry
             : "US";
+        const preferredName =
+          buildDisplayNameFromAppleFullName(credential.fullName) || response.user.displayName || "";
         setApplePendingProfile({
           token: response.token,
           user: response.user,
-          displayName: response.user.displayName || "",
+          displayName: preferredName,
           country: normalizedCountry
         });
         return;

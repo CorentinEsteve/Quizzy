@@ -88,6 +88,56 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const totalQuestions = Math.max(quiz.questions.length, 1);
   const myProgressRatio = Math.min(myProgress / totalQuestions, 1);
   const otherProgressRatio = Math.min(otherProgress / totalQuestions, 1);
+  const progressBlock = (
+    <View style={styles.statusProgressBlock}>
+      <View style={styles.statusRow}>
+        <View style={styles.statusDot} />
+        <Text style={styles.statusLabel}>{t(locale, "youLabel")}</Text>
+        <View style={styles.statusValueGroup}>
+          <View style={styles.statusScore}>
+            <View style={styles.scoreBadge}>
+              <FontAwesome name="check" size={9} color={theme.colors.success} />
+              <Text style={[styles.scoreValue, styles.scoreCorrect]}>{myCorrect}</Text>
+            </View>
+            <Text style={styles.scoreDivider}>·</Text>
+            <View style={styles.scoreBadge}>
+              <FontAwesome name="times" size={9} color={theme.colors.danger} />
+              <Text style={[styles.scoreValue, styles.scoreWrong]}>{myWrong}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      <View style={styles.statusTrack}>
+        <View style={[styles.statusFill, { width: `${myProgressRatio * 100}%` }]} />
+      </View>
+      <View style={styles.statusRow}>
+        <View style={[styles.statusDot, styles.statusDotMuted]} />
+        <Text style={styles.statusLabel}>{opponentName}</Text>
+        <View style={styles.statusValueGroup}>
+          <View style={styles.statusScore}>
+            <View style={styles.scoreBadge}>
+              <FontAwesome name="check" size={9} color={theme.colors.success} />
+              <Text style={[styles.scoreValue, styles.scoreCorrect]}>{otherCorrect}</Text>
+            </View>
+            <Text style={styles.scoreDivider}>·</Text>
+            <View style={styles.scoreBadge}>
+              <FontAwesome name="times" size={9} color={theme.colors.danger} />
+              <Text style={[styles.scoreValue, styles.scoreWrong]}>{otherWrong}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      <View style={styles.statusTrack}>
+        <View
+          style={[
+            styles.statusFill,
+            styles.statusFillMuted,
+            { width: `${otherProgressRatio * 100}%` }
+          ]}
+        />
+      </View>
+    </View>
+  );
 
   const timerKeyForQuestion = (questionId: string) =>
     `dq_timer:${room.code}:${userId}:${questionId}`;
@@ -250,14 +300,12 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
           <Pill label={`${quiz.questions.length} / ${quiz.questions.length}`} />
         </View>
 
-        <GlassCard style={[styles.statusCard, styles.doneCard]}>
-          <View style={styles.doneHeader}>
-            <View style={styles.doneBadge}>
-              <FontAwesome name="check" size={12} color={theme.colors.success} />
-            </View>
-            <Text style={styles.statusTitle}>{t(locale, "asyncDoneTitle")}</Text>
+        <GlassCard style={styles.statusCard}>
+          <View style={styles.statusMessageBlock}>
+            <Text style={styles.statusTitle}>{t(locale, "sessionWaiting")}</Text>
+            <Text style={styles.statusBody}>{t(locale, "asyncDoneBody")}</Text>
           </View>
-          <Text style={styles.statusBody}>{t(locale, "asyncDoneBody")}</Text>
+          {progressBlock}
         </GlassCard>
 
         <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
@@ -286,56 +334,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
               {waitingSubtitle ? <Text style={styles.statusBody}>{waitingSubtitle}</Text> : null}
             </View>
           </View>
-          <View style={styles.statusProgressBlock}>
-          <View style={styles.statusRow}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusLabel}>{t(locale, "youLabel")}</Text>
-            <View style={styles.statusValueGroup}>
-              <View style={styles.statusScore}>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="check" size={9} color={theme.colors.success} />
-                  <Text style={[styles.scoreValue, styles.scoreCorrect]}>{myCorrect}</Text>
-                </View>
-                <Text style={styles.scoreDivider}>·</Text>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="times" size={9} color={theme.colors.danger} />
-                  <Text style={[styles.scoreValue, styles.scoreWrong]}>{myWrong}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-            <View style={styles.statusTrack}>
-              <View
-                style={[styles.statusFill, { width: `${myProgressRatio * 100}%` }]}
-              />
-            </View>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, styles.statusDotMuted]} />
-            <Text style={styles.statusLabel}>{opponentName}</Text>
-            <View style={styles.statusValueGroup}>
-              <View style={styles.statusScore}>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="check" size={9} color={theme.colors.success} />
-                  <Text style={[styles.scoreValue, styles.scoreCorrect]}>{otherCorrect}</Text>
-                </View>
-                <Text style={styles.scoreDivider}>·</Text>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="times" size={9} color={theme.colors.danger} />
-                  <Text style={[styles.scoreValue, styles.scoreWrong]}>{otherWrong}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-            <View style={styles.statusTrack}>
-              <View
-                style={[
-                  styles.statusFill,
-                  styles.statusFillMuted,
-                  { width: `${otherProgressRatio * 100}%` }
-                ]}
-              />
-            </View>
-          </View>
+          {progressBlock}
         </GlassCard>
         <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
           <PrimaryButton label={t(locale, "backHome")} icon="home" variant="ghost" onPress={onExit} />
@@ -457,54 +456,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
             {waitingSubtitle ? <Text style={styles.statusBody}>{waitingSubtitle}</Text> : null}
           </View>
         </View>
-        <View style={styles.statusProgressBlock}>
-          <View style={styles.statusRow}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusLabel}>{t(locale, "youLabel")}</Text>
-            <View style={styles.statusValueGroup}>
-              <View style={styles.statusScore}>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="check" size={9} color={theme.colors.success} />
-                  <Text style={[styles.scoreValue, styles.scoreCorrect]}>{myCorrect}</Text>
-                </View>
-                <Text style={styles.scoreDivider}>·</Text>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="times" size={9} color={theme.colors.danger} />
-                  <Text style={[styles.scoreValue, styles.scoreWrong]}>{myWrong}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-          <View style={styles.statusTrack}>
-            <View style={[styles.statusFill, { width: `${myProgressRatio * 100}%` }]} />
-          </View>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, styles.statusDotMuted]} />
-            <Text style={styles.statusLabel}>{opponentName}</Text>
-            <View style={styles.statusValueGroup}>
-              <View style={styles.statusScore}>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="check" size={9} color={theme.colors.success} />
-                  <Text style={[styles.scoreValue, styles.scoreCorrect]}>{otherCorrect}</Text>
-                </View>
-                <Text style={styles.scoreDivider}>·</Text>
-                <View style={styles.scoreBadge}>
-                  <FontAwesome name="times" size={9} color={theme.colors.danger} />
-                  <Text style={[styles.scoreValue, styles.scoreWrong]}>{otherWrong}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-          <View style={styles.statusTrack}>
-            <View
-              style={[
-                styles.statusFill,
-                styles.statusFillMuted,
-                { width: `${otherProgressRatio * 100}%` }
-              ]}
-            />
-          </View>
-        </View>
+        {progressBlock}
       </GlassCard>
 
       <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
@@ -615,25 +567,10 @@ const styles = StyleSheet.create({
   },
   statusCard: {
     marginTop: theme.spacing.md,
-    gap: theme.spacing.sm
+    gap: theme.spacing.md
   },
-  doneCard: {
-    borderColor: "rgba(43, 158, 102, 0.2)"
-  },
-  doneHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm
-  },
-  doneBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(43, 158, 102, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(43, 158, 102, 0.24)"
+  statusMessageBlock: {
+    gap: theme.spacing.xs
   },
   statusHeader: {
     flexDirection: "row",
@@ -642,7 +579,7 @@ const styles = StyleSheet.create({
   },
   statusHeaderText: {
     flex: 1,
-    gap: 2
+    gap: 4
   },
   statusTitle: {
     color: theme.colors.ink,
@@ -651,12 +588,14 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   statusBody: {
-    color: theme.colors.muted,
+    color: "rgba(47, 56, 70, 0.82)",
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    lineHeight: 22,
+    flexShrink: 1
   },
   statusProgressBlock: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.sm
   },
   statusRow: {
     flexDirection: "row",
@@ -676,7 +615,8 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
-    fontWeight: "600"
+    fontWeight: "600",
+    flexShrink: 1
   },
   statusValueGroup: {
     marginLeft: "auto",

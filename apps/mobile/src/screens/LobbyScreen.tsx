@@ -345,6 +345,10 @@ export function LobbyScreen({
           status: nextStatus
         }
       : null;
+  const hasRecapData = Boolean(
+    recapStats &&
+      recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties > 0
+  );
   return (
     <View style={styles.page}>
       <LinearGradient
@@ -387,7 +391,7 @@ export function LobbyScreen({
           </View>
         </View>
 
-        {recapStats ? (
+        {recapStats && hasRecapData ? (
           <Pressable
             onPress={onOpenPersonalLeaderboard}
             accessibilityRole="button"
