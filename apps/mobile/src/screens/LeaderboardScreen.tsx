@@ -50,14 +50,20 @@ export function LeaderboardScreen({
     const localeTag = locale === "fr" ? "fr-FR" : "en-US";
     return new Date(value).toLocaleDateString(localeTag, { month: "short", day: "numeric" });
   };
+  const topGlobalThree = globalEntries.slice(0, 3);
 
   return (
     <View style={styles.page}>
       <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <View style={styles.backgroundOrbTop} pointerEvents="none" />
+      <View style={styles.backgroundOrbBottom} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: theme.spacing.lg + insets.bottom }
+          {
+            paddingTop: theme.spacing.lg + insets.top,
+            paddingBottom: theme.spacing.lg + insets.bottom
+          }
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -73,9 +79,44 @@ export function LeaderboardScreen({
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "leaderboards")}</Text>
-            <Text style={styles.title}>{t(locale, "topGlobal")}</Text>
+            <Text style={styles.title}>Hall of Fame</Text>
           </View>
         </View>
+
+        <GlassCard style={styles.heroCard}>
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.86)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroBackdrop}
+          />
+          <View style={styles.heroHeader}>
+            <View style={styles.heroTitleRow}>
+              <View style={styles.heroBadge}>
+                <FontAwesome name="trophy" size={13} color={theme.colors.reward} />
+              </View>
+              <Text style={styles.heroTitle}>{t(locale, "topGlobal")}</Text>
+            </View>
+            <Text style={styles.heroSubtitle}>{t(locale, "recapSubtitle")}</Text>
+          </View>
+          {topGlobalThree.length > 0 ? (
+            <View style={styles.podiumRow}>
+              {topGlobalThree.map((entry) => (
+                <View key={`podium-${entry.userId}`} style={styles.podiumItem}>
+                  <View style={[styles.podiumRankPill, entry.rank === 1 && styles.podiumRankTop]}>
+                    <Text style={styles.podiumRank}>#{entry.rank}</Text>
+                  </View>
+                  <Text numberOfLines={1} style={styles.podiumName}>
+                    {entry.displayName}
+                  </Text>
+                  <Text style={styles.podiumScore}>{entry.score}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.sectionMeta}>{loading ? t(locale, "pleaseWait") : "-"}</Text>
+          )}
+        </GlassCard>
 
         <GlassCard style={[styles.sectionCard, styles.recapCard]}>
           <View style={styles.recapHeader}>
@@ -187,7 +228,14 @@ export function LeaderboardScreen({
         </View>
 
         <GlassCard style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t(locale, "topGlobal")}</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIconBubble, styles.sectionIconGlobal]}>
+                <FontAwesome name="globe" size={12} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.sectionTitle}>{t(locale, "topGlobal")}</Text>
+            </View>
+          </View>
           {loading ? (
             <Text style={styles.sectionMeta}>{t(locale, "pleaseWait")}</Text>
           ) : (
@@ -210,7 +258,9 @@ export function LeaderboardScreen({
                       entry.rank <= 3 ? styles.rankBadgeTop : null
                     ]}
                   >
-                    <Text style={styles.rowRank}>#{entry.rank}</Text>
+                    <Text style={styles.rowRank}>
+                      {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`}
+                    </Text>
                   </View>
                   <View style={styles.rowNameBlock}>
                     <Text style={styles.rowText}>{entry.displayName}</Text>
@@ -227,7 +277,14 @@ export function LeaderboardScreen({
         </GlassCard>
 
         <GlassCard style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t(locale, "topLocal")}</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIconBubble, styles.sectionIconLocal]}>
+                <FontAwesome name="map-marker" size={12} color={theme.colors.secondary} />
+              </View>
+              <Text style={styles.sectionTitle}>{t(locale, "topLocal")}</Text>
+            </View>
+          </View>
           {loading ? (
             <Text style={styles.sectionMeta}>{t(locale, "pleaseWait")}</Text>
           ) : (
@@ -250,7 +307,9 @@ export function LeaderboardScreen({
                       entry.rank <= 3 ? styles.rankBadgeTop : null
                     ]}
                   >
-                    <Text style={styles.rowRank}>#{entry.rank}</Text>
+                    <Text style={styles.rowRank}>
+                      {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`}
+                    </Text>
                   </View>
                   <View style={styles.rowNameBlock}>
                     <Text style={styles.rowText}>{entry.displayName}</Text>
@@ -309,6 +368,24 @@ const styles = StyleSheet.create({
   page: {
     flex: 1
   },
+  backgroundOrbTop: {
+    position: "absolute",
+    top: -220,
+    right: -140,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: "rgba(94, 124, 255, 0.14)"
+  },
+  backgroundOrbBottom: {
+    position: "absolute",
+    bottom: -220,
+    left: -160,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: "rgba(46, 196, 182, 0.11)"
+  },
   container: {
     padding: theme.spacing.lg,
     gap: theme.spacing.lg
@@ -342,6 +419,88 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.display,
     fontWeight: "700"
   },
+  heroCard: {
+    overflow: "hidden",
+    borderColor: "rgba(94, 124, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    gap: theme.spacing.sm
+  },
+  heroBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  heroHeader: {
+    gap: 4
+  },
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  heroBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.4)"
+  },
+  heroTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "700"
+  },
+  heroSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  podiumRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
+  podiumItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.08)"
+  },
+  podiumRankPill: {
+    minWidth: 34,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(11, 14, 20, 0.06)"
+  },
+  podiumRankTop: {
+    backgroundColor: "rgba(243, 183, 78, 0.22)"
+  },
+  podiumRank: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  podiumName: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  podiumScore: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
+  },
   summaryRow: {
     flexDirection: "row",
     gap: theme.spacing.md
@@ -372,6 +531,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing.sm
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  sectionIconBubble: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1
+  },
+  sectionIconGlobal: {
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderColor: "rgba(94, 124, 255, 0.3)"
+  },
+  sectionIconLocal: {
+    backgroundColor: "rgba(46, 196, 182, 0.16)",
+    borderColor: "rgba(46, 196, 182, 0.34)"
   },
   sectionTitle: {
     color: theme.colors.muted,
@@ -447,9 +627,10 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body
   },
   rowMeta: {
-    color: theme.colors.muted,
+    color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body
+    fontSize: theme.typography.body,
+    fontWeight: "700"
   },
   rowSubtle: {
     color: theme.colors.muted,

@@ -9,7 +9,6 @@ import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
-import { Pill } from "../components/Pill";
 import { User } from "../data/types";
 
 function initials(name: string) {
@@ -170,7 +169,10 @@ export function AccountScreen({
         <ScrollView
           contentContainerStyle={[
             styles.container,
-            { paddingBottom: theme.spacing.lg + insets.bottom }
+            {
+              paddingTop: theme.spacing.lg + insets.top,
+              paddingBottom: theme.spacing.lg + insets.bottom
+            }
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -530,10 +532,15 @@ export function AccountScreen({
   return (
     <View style={styles.page}>
       <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <View style={styles.backgroundOrbTop} pointerEvents="none" />
+      <View style={styles.backgroundOrbBottom} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: theme.spacing.lg + insets.bottom }
+          {
+            paddingTop: theme.spacing.lg + insets.top,
+            paddingBottom: theme.spacing.lg + insets.bottom
+          }
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -547,10 +554,19 @@ export function AccountScreen({
           >
             <FontAwesome name="arrow-left" size={16} color={theme.colors.ink} />
           </Pressable>
-          <Text style={styles.title}>{t(locale, "account")}</Text>
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.title}>{t(locale, "account")}</Text>
+            <Text style={styles.headerSubtitle}>{t(locale, "profile")}</Text>
+          </View>
         </View>
 
         <GlassCard style={styles.profileCard}>
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.82)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.profileBackdrop}
+          />
           <View style={styles.profileTop}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initials(user.displayName || "Player")}</Text>
@@ -558,18 +574,25 @@ export function AccountScreen({
             <View style={styles.profileText}>
               <Text style={styles.name}>{user.displayName}</Text>
               <Text style={styles.email}>{user.email}</Text>
-              <Text style={styles.country}>
-                {t(locale, "country")}: {countryLabel(locale, user.country || "US")}
-              </Text>
-              <View style={styles.profileBadgeRow}>
-                <Pill
-                  label={
-                    emailVerified
+              <View style={styles.profileMetaRow}>
+                <View style={styles.profileMetaPill}>
+                  <FontAwesome name="map-marker" size={12} color={theme.colors.primary} />
+                  <Text style={styles.profileMetaText}>
+                    {countryLabel(locale, user.country || "US")}
+                  </Text>
+                </View>
+                <View style={styles.profileMetaPill}>
+                  <FontAwesome
+                    name={emailVerified ? "check-circle" : "times-circle"}
+                    size={12}
+                    color={emailVerified ? theme.colors.success : theme.colors.danger}
+                  />
+                  <Text style={styles.profileMetaText}>
+                    {emailVerified
                       ? t(locale, "emailVerifiedLabel")
-                      : t(locale, "emailUnverifiedLabel")
-                  }
-                  tone={emailVerified ? "success" : "default"}
-                />
+                      : t(locale, "emailUnverifiedLabel")}
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
@@ -619,9 +642,14 @@ export function AccountScreen({
           <Text style={styles.sectionTitle}>{t(locale, "preferences")}</Text>
           <GlassCard style={[styles.sectionCard, styles.listCard]}>
             <View style={[styles.listRow, styles.listRowDivider]}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "notifications")}</Text>
-                <Text style={styles.rowSubtitle}>{t(locale, "notificationsBody")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconBlue]}>
+                  <FontAwesome name="bell-o" size={12} color={theme.colors.primary} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "notifications")}</Text>
+                  <Text style={styles.rowSubtitle}>{t(locale, "notificationsBody")}</Text>
+                </View>
               </View>
               <Pressable
                 style={[
@@ -635,11 +663,16 @@ export function AccountScreen({
               </Pressable>
             </View>
             <Pressable style={styles.listRow} onPress={() => setRoute("language")}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "language")}</Text>
-                <Text style={styles.rowSubtitle}>
-                  {locale === "en" ? t(locale, "english") : t(locale, "french")}
-                </Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconMint]}>
+                  <FontAwesome name="language" size={12} color={theme.colors.secondary} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "language")}</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {locale === "en" ? t(locale, "english") : t(locale, "french")}
+                  </Text>
+                </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
@@ -653,11 +686,16 @@ export function AccountScreen({
               style={[styles.listRow, styles.listRowDivider]}
               onPress={() => setRoute("security")}
             >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "securityAndLogin")}</Text>
-                <Text style={styles.rowSubtitle}>
-                  {t(locale, "changeEmail")}, {t(locale, "changePassword")}
-                </Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconBlue]}>
+                  <FontAwesome name="key" size={12} color={theme.colors.primary} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "securityAndLogin")}</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {t(locale, "changeEmail")}, {t(locale, "changePassword")}
+                  </Text>
+                </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
@@ -665,9 +703,14 @@ export function AccountScreen({
               style={[styles.listRow, styles.listRowDivider]}
               onPress={() => setRoute("data")}
             >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "privacyAndData")}</Text>
-                <Text style={styles.rowSubtitle}>{t(locale, "exportData")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconAmber]}>
+                  <FontAwesome name="shield" size={12} color={theme.colors.reward} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "privacyAndData")}</Text>
+                  <Text style={styles.rowSubtitle}>{t(locale, "exportData")}</Text>
+                </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
@@ -675,30 +718,50 @@ export function AccountScreen({
               style={[styles.listRow, styles.listRowDivider]}
               onPress={() => setRoute("legal")}
             >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "legal")}</Text>
-                <Text style={styles.rowSubtitle}>
-                  {t(locale, "privacyPolicy")}, {t(locale, "termsOfService")}
-                </Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconMint]}>
+                  <FontAwesome name="gavel" size={12} color={theme.colors.secondary} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "legal")}</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {t(locale, "privacyPolicy")}, {t(locale, "termsOfService")}
+                  </Text>
+                </View>
               </View>
-              <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
+              <FontAwesome
+                name="angle-right"
+                size={18}
+                color={theme.colors.muted}
+                style={styles.legalChevron}
+              />
             </Pressable>
             <Pressable
               style={[styles.listRow, styles.listRowDivider]}
               onPress={() => setRoute("danger")}
             >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "accountActions")}</Text>
-                <Text style={styles.rowSubtitle}>
-                  {t(locale, "deactivateAccount")}, {t(locale, "deleteAccount")}
-                </Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconRose]}>
+                  <FontAwesome name="warning" size={12} color={theme.colors.danger} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "accountActions")}</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {t(locale, "deactivateAccount")}, {t(locale, "deleteAccount")}
+                  </Text>
+                </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
             <Pressable style={styles.listRow} onPress={onContactSupport}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{t(locale, "support")}</Text>
-                <Text style={styles.rowSubtitle}>{t(locale, "contactSupport")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconBlue]}>
+                  <FontAwesome name="life-ring" size={12} color={theme.colors.primary} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>{t(locale, "support")}</Text>
+                  <Text style={styles.rowSubtitle}>{t(locale, "contactSupport")}</Text>
+                </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
             </Pressable>
@@ -709,15 +772,30 @@ export function AccountScreen({
           <Text style={styles.sectionTitle}>{t(locale, "activity")}</Text>
           <GlassCard style={[styles.sectionCard, styles.listCard]}>
             <View style={[styles.listRow, styles.listRowDivider]}>
-              <Text style={styles.rowTitle}>{t(locale, "statsBody")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconAmber]}>
+                  <FontAwesome name="bar-chart" size={12} color={theme.colors.reward} />
+                </View>
+                <Text style={styles.rowTitle}>{t(locale, "statsBody")}</Text>
+              </View>
               <Text style={styles.sectionMetaStrong}>0</Text>
             </View>
             <View style={[styles.listRow, styles.listRowDivider]}>
-              <Text style={styles.rowTitle}>{t(locale, "statsMeta")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconMint]}>
+                  <FontAwesome name="line-chart" size={12} color={theme.colors.secondary} />
+                </View>
+                <Text style={styles.rowTitle}>{t(locale, "statsMeta")}</Text>
+              </View>
               <Text style={styles.sectionMetaStrong}>0</Text>
             </View>
             <View style={styles.listRow}>
-              <Text style={styles.rowTitle}>{t(locale, "sessionsBody")}</Text>
+              <View style={styles.rowLead}>
+                <View style={[styles.rowIconBubble, styles.rowIconBlue]}>
+                  <FontAwesome name="calendar-o" size={12} color={theme.colors.primary} />
+                </View>
+                <Text style={styles.rowTitle}>{t(locale, "sessionsBody")}</Text>
+              </View>
               <Text style={styles.sectionMetaStrong}>
                 {new Date().toLocaleDateString()}
               </Text>
@@ -743,6 +821,24 @@ const styles = StyleSheet.create({
   page: {
     flex: 1
   },
+  backgroundOrbTop: {
+    position: "absolute",
+    top: -180,
+    right: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "rgba(94, 124, 255, 0.12)"
+  },
+  backgroundOrbBottom: {
+    position: "absolute",
+    bottom: -180,
+    left: -120,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "rgba(46, 196, 182, 0.1)"
+  },
   container: {
     padding: theme.spacing.lg,
     gap: theme.spacing.lg
@@ -751,6 +847,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm
+  },
+  headerTextBlock: {
+    gap: 2
   },
   backButton: {
     width: 44,
@@ -766,8 +865,19 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
+  headerSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12
+  },
   profileCard: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderColor: "rgba(94, 124, 255, 0.22)"
+  },
+  profileBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   profileTop: {
     flexDirection: "row",
@@ -779,12 +889,14 @@ const styles = StyleSheet.create({
     gap: 4
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(94, 124, 255, 0.18)",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(94, 124, 255, 0.22)",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.25)"
   },
   avatarText: {
     color: theme.colors.ink,
@@ -803,13 +915,28 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
-  country: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+  profileMetaRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
-  profileBadgeRow: {
-    marginTop: theme.spacing.xs
+  profileMetaPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.08)"
+  },
+  profileMetaText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "600"
   },
   profileDivider: {
     height: 1,
@@ -821,7 +948,7 @@ const styles = StyleSheet.create({
   },
   didYouKnowCard: {
     gap: theme.spacing.xs,
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     borderColor: "rgba(243, 183, 78, 0.35)"
   },
   didYouKnowHeader: {
@@ -845,7 +972,9 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   sectionCard: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    borderColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)"
   },
   listRow: {
     flexDirection: "row",
@@ -855,6 +984,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     backgroundColor: "rgba(255, 255, 255, 0.45)"
+  },
+  rowLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 0
+  },
+  rowIconBubble: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1
+  },
+  rowIconBlue: {
+    backgroundColor: "rgba(94, 124, 255, 0.16)",
+    borderColor: "rgba(94, 124, 255, 0.3)"
+  },
+  rowIconMint: {
+    backgroundColor: "rgba(46, 196, 182, 0.18)",
+    borderColor: "rgba(46, 196, 182, 0.35)"
+  },
+  rowIconAmber: {
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    borderColor: "rgba(243, 183, 78, 0.38)"
+  },
+  rowIconRose: {
+    backgroundColor: "rgba(235, 87, 87, 0.14)",
+    borderColor: "rgba(235, 87, 87, 0.32)"
+  },
+  legalChevron: {
+    marginRight: 6
   },
   listRowDivider: {
     borderBottomWidth: 1,

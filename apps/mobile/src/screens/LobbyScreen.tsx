@@ -58,6 +58,44 @@ type Props = {
 };
 
 const ALL_CATEGORY_ID = "all";
+const ACCOUNT_SUN_PALETTE = [
+  {
+    background: "rgba(255, 188, 66, 0.22)",
+    border: "rgba(245, 158, 11, 0.4)",
+    core: "#FBBF24",
+    ray: "#F59E0B",
+    face: "#7C2D12"
+  },
+  {
+    background: "rgba(251, 146, 60, 0.2)",
+    border: "rgba(234, 88, 12, 0.36)",
+    core: "#FB923C",
+    ray: "#F97316",
+    face: "#7C2D12"
+  },
+  {
+    background: "rgba(250, 204, 21, 0.22)",
+    border: "rgba(234, 179, 8, 0.4)",
+    core: "#FACC15",
+    ray: "#EAB308",
+    face: "#713F12"
+  },
+  {
+    background: "rgba(253, 186, 116, 0.24)",
+    border: "rgba(249, 115, 22, 0.34)",
+    core: "#FDBA74",
+    ray: "#FB923C",
+    face: "#7C2D12"
+  },
+  {
+    background: "rgba(255, 215, 128, 0.24)",
+    border: "rgba(245, 158, 11, 0.38)",
+    core: "#FDE68A",
+    ray: "#F59E0B",
+    face: "#78350F"
+  }
+];
+const SUN_RAY_COUNT = 10;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -76,7 +114,7 @@ export function LobbyScreen({
   sessions,
   onOpenRecap,
   onResumeRoom,
-  recapStats,
+  recapStats: _recapStats,
   dailyQuiz,
   dailyResults,
   dailyLoading,
@@ -91,18 +129,23 @@ export function LobbyScreen({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
   const [selectedMode, setSelectedMode] = useState<"sync" | "async">("async");
-  const [dialogStep, setDialogStep] = useState<"menu" | "pick" | "join">("menu");
+  const [dialogStep, setDialogStep] = useState<"pick" | "join">("pick");
   const [pickStep, setPickStep] = useState<"category" | "count" | "mode">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
   const continuePulse = useRef(new Animated.Value(0)).current;
   const mascotFloat = useRef(new Animated.Value(0)).current;
+  const fabFloat = useRef(new Animated.Value(0)).current;
   const dialogMaxHeight = Math.min(
     height - insets.top - insets.bottom - theme.spacing.xl * 2,
     height * 0.88
   );
   const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
   const qrPreviewSize = Math.min(width - theme.spacing.xl * 2 - 32, 360);
+  const accountSunStyle = useMemo(() => {
+    const paletteIndex = Math.abs(userId) % ACCOUNT_SUN_PALETTE.length;
+    return ACCOUNT_SUN_PALETTE[paletteIndex];
+  }, [userId]);
 
   const categories = useMemo(() => {
     const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
@@ -283,6 +326,27 @@ export function LobbyScreen({
     return () => animation.stop();
   }, [mascotFloat]);
 
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fabFloat, {
+          toValue: 1,
+          duration: 1900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(fabFloat, {
+          toValue: 0,
+          duration: 1900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [fabFloat]);
+
   const nextOpponent = nextSession?.players.find((player) => player.id !== userId);
   const nextOpponentName = nextOpponent?.displayName ?? t(locale, "opponentLabel");
   const nextTotalQuestions = nextSession?.quiz.questions?.length ?? 0;
@@ -309,10 +373,6 @@ export function LobbyScreen({
           status: nextStatus
         }
       : null;
-  const hasRecapData = Boolean(
-    recapStats &&
-      recapStats.totals.wins + recapStats.totals.losses + recapStats.totals.ties > 0
-  );
   const mascotBob = mascotFloat.interpolate({
     inputRange: [0, 1],
     outputRange: [4, -4]
@@ -321,9 +381,27 @@ export function LobbyScreen({
     inputRange: [0, 1],
     outputRange: [0.82, 1]
   });
+  const fabLift = fabFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -4]
+  });
+  const fabIdleScale = fabFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.015]
+  });
 
   const openCreateDialog = () => {
     Haptics.selectionAsync();
+    setDialogStep("pick");
+    setPickStep("category");
+    setSelectedQuestionCount(null);
+    setIsDialogOpen(true);
+  };
+
+  const openJoinDialog = () => {
+    Haptics.selectionAsync();
+    setDialogStep("join");
+    setCode("");
     setIsDialogOpen(true);
   };
 
@@ -363,8 +441,42 @@ export function LobbyScreen({
             <Text style={styles.subtitle}>{t(locale, "lobbySubtitle")}</Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable style={styles.accountButton} onPress={onOpenAccount}>
-              <Text style={styles.accountInitials}>{initials(userName || "Player")}</Text>
+            <Pressable
+              style={[
+                styles.accountButton,
+                {
+                  backgroundColor: accountSunStyle.background,
+                  borderColor: accountSunStyle.border
+                }
+              ]}
+              onPress={onOpenAccount}
+            >
+              <View style={styles.sunAvatar}>
+                {Array.from({ length: SUN_RAY_COUNT }).map((_, index) => {
+                  const angle = (Math.PI * 2 * index) / SUN_RAY_COUNT;
+                  const x = Math.cos(angle) * 10;
+                  const y = Math.sin(angle) * 10;
+                  return (
+                    <View
+                      key={`sun-ray-${index}`}
+                      style={[
+                        styles.sunRay,
+                        {
+                          backgroundColor: accountSunStyle.ray,
+                          transform: [{ translateX: x }, { translateY: y }]
+                        }
+                      ]}
+                    />
+                  );
+                })}
+                <View style={[styles.sunCore, { backgroundColor: accountSunStyle.core }]}>
+                  <View style={styles.sunEyesRow}>
+                    <View style={[styles.sunEye, { backgroundColor: accountSunStyle.face }]} />
+                    <View style={[styles.sunEye, { backgroundColor: accountSunStyle.face }]} />
+                  </View>
+                  <View style={[styles.sunSmile, { borderColor: accountSunStyle.face }]} />
+                </View>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -396,14 +508,23 @@ export function LobbyScreen({
             >
               <View style={styles.mascotGlow} />
               <View style={styles.mascotBody}>
+                <View style={styles.mascotForehead} />
                 <View style={styles.mascotEyeRow}>
                   <View style={styles.mascotEye} />
                   <View style={styles.mascotEye} />
                 </View>
-                <View style={styles.mascotSmile} />
+                <View style={styles.mascotMuzzle}>
+                  <View style={styles.mascotNose} />
+                  <View style={styles.mascotMouthRow}>
+                    <View style={[styles.mascotSmile, styles.mascotSmileLeft]} />
+                    <View style={[styles.mascotSmile, styles.mascotSmileRight]} />
+                  </View>
+                </View>
               </View>
               <View style={styles.mascotEarLeft} />
               <View style={styles.mascotEarRight} />
+              <View style={[styles.mascotEarInner, styles.mascotEarInnerLeft]} />
+              <View style={[styles.mascotEarInner, styles.mascotEarInnerRight]} />
             </Animated.View>
           </View>
           <View style={styles.heroActions}>
@@ -426,82 +547,35 @@ export function LobbyScreen({
           </View>
         </GlassCard>
 
-        {recapStats && hasRecapData ? (
-          <Pressable
-            onPress={onOpenPersonalLeaderboard}
-            accessibilityRole="button"
-            accessibilityLabel={t(locale, "openPersonalLeaderboard")}
-            hitSlop={6}
-          >
-            <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
-              <View style={styles.recapHeader}>
-                <View style={styles.recapHeaderText}>
-                  <View style={styles.recapTitleRow}>
-                    <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
-                    <Text style={styles.recapTitleText}>{t(locale, "recapTitle")}</Text>
-                  </View>
-                  <Text style={styles.sectionSubtitle}>{t(locale, "recapSubtitle")}</Text>
-                </View>
-                <View style={styles.recapHeaderAction}>
-                  <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
-                  <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
+        <Pressable
+          onPress={onOpenPersonalLeaderboard}
+          accessibilityRole="button"
+          accessibilityLabel={t(locale, "openPersonalLeaderboard")}
+          hitSlop={6}
+        >
+          <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
+            <View style={styles.recapHeader}>
+              <View style={styles.recapHeaderText}>
+                <View style={styles.recapTitleRow}>
+                  <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
+                  <Text style={styles.recapTitleText}>{t(locale, "topGlobal")}</Text>
                 </View>
               </View>
-            <View style={styles.recapRow}>
-              <View style={[styles.recapPill, styles.recapPillWin]}>
-                <FontAwesome name="trophy" size={12} color={theme.colors.success} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.wins}</Text>
-                <Text style={styles.recapPillLabel}>{t(locale, "totalWins")}</Text>
-              </View>
-              <View style={[styles.recapPill, styles.recapPillLoss]}>
-                <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.losses}</Text>
-                <Text style={styles.recapPillLabel}>{t(locale, "totalLosses")}</Text>
-              </View>
-              <View style={[styles.recapPill, styles.recapPillTie]}>
-                <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
-                <Text style={styles.recapPillValue}>{recapStats.totals.ties}</Text>
-                <Text style={styles.recapPillLabel}>{t(locale, "totalTies")}</Text>
+              <View style={styles.recapHeaderAction}>
+                <FontAwesome name="chevron-right" size={14} color={theme.colors.muted} />
               </View>
             </View>
-            {recapStats.opponents.length > 0 ? (
-              <View style={styles.opponentList}>
-                <Text style={styles.recapMetaLabel}>{t(locale, "topRivals")}</Text>
-                {recapStats.opponents.slice(0, 2).map((opponent) => (
-                  <View key={opponent.opponentId} style={styles.opponentRow}>
-                    <Text style={styles.opponentName}>
-                      {t(locale, "vsLabel")} {opponent.opponentName}
-                    </Text>
-                    <View style={styles.opponentRecord}>
-                      <View style={styles.recordItem}>
-                        <FontAwesome name="trophy" size={12} color={theme.colors.success} />
-                        <Text style={[styles.recordValue, styles.recordValueWin]}>
-                          {opponent.wins}
-                        </Text>
-                      </View>
-                      <View style={styles.recordItem}>
-                        <FontAwesome name="times-circle" size={12} color={theme.colors.danger} />
-                        <Text style={[styles.recordValue, styles.recordValueLoss]}>
-                          {opponent.losses}
-                        </Text>
-                      </View>
-                      <View style={styles.recordItem}>
-                        <FontAwesome name="handshake-o" size={12} color={theme.colors.reward} />
-                        <Text style={[styles.recordValue, styles.recordValueTie]}>
-                          {opponent.ties}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            </GlassCard>
-          </Pressable>
-        ) : null}
+          </GlassCard>
+        </Pressable>
 
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
+            <LinearGradient
+              colors={["rgba(94, 124, 255, 0.18)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.86)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.nextActionBackdrop}
+            />
             <View style={styles.nextActionHeader}>
               <View style={styles.nextActionHeaderLeft}>
                 <View style={styles.nextActionMiniAvatar}>
@@ -511,6 +585,9 @@ export function LobbyScreen({
                 </View>
                 <Text style={styles.nextActionLabel}>{t(locale, "nextAction")}</Text>
               </View>
+              <View style={styles.nextActionHeaderBadge}>
+                <Text style={styles.nextActionHeaderBadgeText}>🎯</Text>
+              </View>
             </View>
             <View style={styles.nextActionHero}>
               <View style={styles.nextActionCopy}>
@@ -518,12 +595,16 @@ export function LobbyScreen({
                   {t(locale, "continueMatchVs", { name: nextOpponentName })}
                 </Text>
                 {nextMeta ? (
-                  <Text style={styles.nextActionMeta}>
-                    {nextMeta.category} · {nextMeta.progress} ·{" "}
-                    <Text style={[styles.nextActionMeta, styles.nextActionMetaAhead]}>
-                      {nextMeta.status}
-                    </Text>
-                  </Text>
+                  <View style={styles.nextActionMetaRow}>
+                    <Text style={styles.nextActionMeta}>{nextMeta.category}</Text>
+                    <Text style={styles.nextActionMetaDot}>•</Text>
+                    <Text style={styles.nextActionMeta}>{nextMeta.progress}</Text>
+                    <View style={styles.nextActionTurnPill}>
+                      <Text style={[styles.nextActionMeta, styles.nextActionMetaAhead]}>
+                        {nextMeta.status}
+                      </Text>
+                    </View>
+                  </View>
                 ) : null}
               </View>
             </View>
@@ -772,13 +853,23 @@ export function LobbyScreen({
         ) : null}
 
         <GlassCard style={styles.shareCard}>
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.16)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.82)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.shareCardBackdrop}
+          />
           <View style={styles.shareRow}>
             <View style={styles.shareTextBlock}>
+              <View style={styles.shareBadge}>
+                <FontAwesome name="share-alt" size={12} color={theme.colors.primary} />
+                <Text style={styles.shareBadgeText}>QR</Text>
+              </View>
               <Text style={styles.shareTitle}>{t(locale, "shareAppTitle")}</Text>
               <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
             </View>
-            <View style={styles.shareArrowWrap}>
-              <FontAwesome name="long-arrow-right" size={20} color={theme.colors.muted} />
+            <View style={styles.shareArrowPill}>
+              <FontAwesome name="arrow-right" size={13} color={theme.colors.primary} />
             </View>
             <Pressable
               style={styles.qrWrap}
@@ -917,14 +1008,38 @@ export function LobbyScreen({
             }
           ]}
         />
-        <Pressable
-          style={styles.fab}
-          onPress={openCreateDialog}
+        <Animated.View
+          style={{
+            transform: [{ translateY: fabLift }, { scale: fabIdleScale }]
+          }}
         >
-          <FontAwesome name="plus" size={14} color={theme.colors.surface} />
-          <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
-        </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+            onPress={openCreateDialog}
+          >
+            <FontAwesome name="plus" size={14} color={theme.colors.surface} />
+            <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
+          </Pressable>
+        </Animated.View>
       </Animated.View>
+      <Pressable
+        style={({ pressed }) => [
+          styles.joinFab,
+          { bottom: theme.spacing.sm + insets.bottom, right: theme.spacing.lg },
+          pressed && styles.joinFabPressed
+        ]}
+        onPress={openJoinDialog}
+        accessibilityRole="button"
+        accessibilityLabel={t(locale, "joinWithInvite")}
+        accessibilityHint={t(locale, "joinInviteHint")}
+      >
+        <View style={styles.joinFabIconBubble}>
+          <FontAwesome name="bolt" size={13} color="#CC8B23" />
+        </View>
+        <Text style={styles.joinFabCode}>JOIN</Text>
+        <View style={[styles.joinFabSpark, styles.joinFabSparkA]} />
+        <View style={[styles.joinFabSpark, styles.joinFabSparkB]} />
+      </Pressable>
 
       <Modal
         transparent
@@ -936,7 +1051,7 @@ export function LobbyScreen({
           style={styles.overlay}
           onPress={() => {
             setIsDialogOpen(false);
-            setDialogStep("menu");
+            setDialogStep("pick");
             setPickStep("category");
           }}
         >
@@ -953,45 +1068,19 @@ export function LobbyScreen({
                 }
               ]}
             >
-            {dialogStep === "menu" ? (
+            {dialogStep === "pick" ? (
               <>
                 <Pressable
                   style={styles.dialogClose}
                   hitSlop={8}
                   onPress={() => {
                     setIsDialogOpen(false);
-                    setDialogStep("menu");
+                    setDialogStep("pick");
                     setPickStep("category");
                   }}
                 >
                   <FontAwesome name="times" size={12} color={theme.colors.muted} />
                 </Pressable>
-                <Text style={styles.dialogTitle}>{t(locale, "createAction")}</Text>
-                <Text style={styles.dialogSubtitle}>{t(locale, "createGuideSubtitle")}</Text>
-                <PrimaryButton
-                  label={t(locale, "newMatch")}
-                  icon="plus"
-                  iconPosition="right"
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setDialogStep("pick");
-                    setPickStep("category");
-                  }}
-                />
-                <PrimaryButton
-                  label={t(locale, "joinWithInvite")}
-                  icon="ticket"
-                  iconPosition="right"
-                  style={styles.joinButton}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setDialogStep("join");
-                  }}
-                />
-                <Text style={styles.joinHint}>{t(locale, "joinInviteHint")}</Text>
-              </>
-            ) : dialogStep === "pick" ? (
-              <>
                 <View style={styles.dialogHeaderCentered}>
                   <Text style={styles.dialogTitle}>{t(locale, "newMatch")}</Text>
                 </View>
@@ -1074,8 +1163,7 @@ export function LobbyScreen({
                         variant="ghost"
                         icon="arrow-left"
                         onPress={() => {
-                          Haptics.selectionAsync();
-                          setDialogStep("menu");
+                          setIsDialogOpen(false);
                           setPickStep("category");
                         }}
                       />
@@ -1252,7 +1340,7 @@ export function LobbyScreen({
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           onCreateRoom(selectedCategoryId, selectedQuestionCount, selectedMode);
                           setIsDialogOpen(false);
-                          setDialogStep("menu");
+                          setDialogStep("pick");
                           setPickStep("category");
                         }}
                         style={
@@ -1281,7 +1369,7 @@ export function LobbyScreen({
                   hitSlop={8}
                   onPress={() => {
                     setIsDialogOpen(false);
-                    setDialogStep("menu");
+                    setDialogStep("pick");
                     setPickStep("category");
                   }}
                 >
@@ -1306,7 +1394,7 @@ export function LobbyScreen({
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onJoinRoom(code);
                     setIsDialogOpen(false);
-                    setDialogStep("menu");
+                    setDialogStep("pick");
                   }}
                 />
                 <PrimaryButton
@@ -1314,8 +1402,8 @@ export function LobbyScreen({
                   variant="ghost"
                   icon="arrow-left"
                   onPress={() => {
-                    Haptics.selectionAsync();
-                    setDialogStep("menu");
+                    setIsDialogOpen(false);
+                    setDialogStep("pick");
                   }}
                 />
               </>
@@ -1417,17 +1505,47 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(11, 14, 20, 0.06)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)"
+    borderWidth: 1
   },
-  accountInitials: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "700"
+  sunAvatar: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  sunRay: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    left: 12,
+    top: 12,
+    borderRadius: 2
+  },
+  sunCore: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  sunEyesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4
+  },
+  sunEye: {
+    width: 3,
+    height: 3,
+    borderRadius: 2
+  },
+  sunSmile: {
+    width: 9,
+    height: 5,
+    marginTop: 2,
+    borderBottomWidth: 1.5,
+    borderRadius: 6
   },
   headerActions: {
     flexDirection: "row",
@@ -1524,56 +1642,110 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: "#FFF6D6",
+    backgroundColor: "#F38B3D",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.5)",
+    borderColor: "rgba(169, 87, 30, 0.5)",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     zIndex: 2
+  },
+  mascotForehead: {
+    position: "absolute",
+    top: 6,
+    width: 22,
+    height: 10,
+    borderRadius: 7,
+    backgroundColor: "rgba(255, 215, 186, 0.92)"
   },
   mascotEarLeft: {
     position: "absolute",
-    top: 18,
-    left: 15,
-    width: 13,
-    height: 13,
+    top: 14,
+    left: 13,
+    width: 15,
+    height: 15,
     borderRadius: 4,
-    transform: [{ rotate: "-24deg" }],
-    backgroundColor: "#F7D17D",
+    transform: [{ rotate: "-34deg" }],
+    backgroundColor: "#F38B3D",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.6)"
+    borderColor: "rgba(169, 87, 30, 0.6)"
   },
   mascotEarRight: {
     position: "absolute",
-    top: 18,
-    right: 15,
-    width: 13,
-    height: 13,
+    top: 14,
+    right: 13,
+    width: 15,
+    height: 15,
     borderRadius: 4,
-    transform: [{ rotate: "24deg" }],
-    backgroundColor: "#F7D17D",
+    transform: [{ rotate: "34deg" }],
+    backgroundColor: "#F38B3D",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.6)"
+    borderColor: "rgba(169, 87, 30, 0.6)"
+  },
+  mascotEarInner: {
+    position: "absolute",
+    top: 18,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(252, 192, 177, 0.92)",
+    zIndex: 3
+  },
+  mascotEarInnerLeft: {
+    left: 17
+  },
+  mascotEarInnerRight: {
+    right: 17
   },
   mascotEyeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
-    marginTop: -2
+    gap: 11,
+    marginTop: 15
   },
   mascotEye: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
     backgroundColor: theme.colors.ink
   },
+  mascotMuzzle: {
+    marginTop: 6,
+    width: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 4,
+    paddingBottom: 2,
+    borderRadius: 12,
+    backgroundColor: "#FFF7E8"
+  },
+  mascotNose: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#2F2A29"
+  },
+  mascotMouthRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2
+  },
   mascotSmile: {
-    width: 18,
-    height: 10,
+    width: 9,
+    height: 6,
     borderBottomWidth: 2,
     borderColor: theme.colors.ink,
-    borderRadius: 10,
-    marginTop: 4
+    borderRadius: 8
+  },
+  mascotSmileLeft: {
+    transform: [{ rotate: "-8deg" }]
+  },
+  mascotSmileRight: {
+    transform: [{ rotate: "8deg" }]
   },
   heroActions: {
     alignItems: "stretch",
@@ -1626,7 +1798,13 @@ const styles = StyleSheet.create({
   },
   shareCard: {
     marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg
+    marginBottom: theme.spacing.lg,
+    overflow: "hidden",
+    borderColor: "rgba(94, 124, 255, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)"
+  },
+  shareCardBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   shareRow: {
     flexDirection: "row",
@@ -1635,6 +1813,27 @@ const styles = StyleSheet.create({
   },
   shareTextBlock: {
     flex: 1
+  },
+  shareBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.2)",
+    marginBottom: 6
+  },
+  shareBadgeText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8
   },
   shareTitle: {
     color: theme.colors.ink,
@@ -1648,22 +1847,34 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     marginTop: theme.spacing.xs
   },
-  shareArrowWrap: {
-    paddingHorizontal: theme.spacing.xs
+  shareArrowPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.26)"
   },
   qrWrap: {
-    width: 76,
-    height: 76,
-    borderRadius: 16,
+    width: 84,
+    height: 84,
+    borderRadius: 20,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: "rgba(94, 124, 255, 0.24)",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    shadowColor: "#1B1E2B",
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
   },
   qrImage: {
-    width: 64,
-    height: 64,
+    width: 70,
+    height: 70,
     borderRadius: 12
   },
   qrOverlay: {
@@ -1761,7 +1972,11 @@ const styles = StyleSheet.create({
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
-    padding: theme.spacing.md
+    padding: theme.spacing.md,
+    overflow: "hidden"
+  },
+  nextActionBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   nextActionHeader: {
     flexDirection: "row",
@@ -1779,6 +1994,19 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     textTransform: "uppercase",
     letterSpacing: 1.1
+  },
+  nextActionHeaderBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.2)"
+  },
+  nextActionHeaderBadgeText: {
+    fontSize: 12
   },
   nextActionMiniAvatar: {
     width: 18,
@@ -1817,6 +2045,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16
   },
+  nextActionMetaRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6
+  },
+  nextActionMetaDot: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12
+  },
+  nextActionTurnPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "rgba(43, 158, 102, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(43, 158, 102, 0.28)"
+  },
   nextActionMetaAhead: {
     color: theme.colors.success,
     fontWeight: "600"
@@ -1830,9 +2078,9 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   nextActionProgress: {
-    height: 3,
+    height: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(11, 14, 20, 0.1)",
     overflow: "hidden",
     marginTop: theme.spacing.xs
   },
@@ -2404,9 +2652,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
     shadowColor: "#000000",
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 }
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 }
+  },
+  fabPressed: {
+    transform: [{ scale: 0.97 }]
   },
   fabPulse: {
     position: "absolute",
@@ -2425,6 +2676,60 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.medium,
     fontWeight: "600",
     letterSpacing: 0.2
+  },
+  joinFab: {
+    position: "absolute",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 248, 236, 0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.42)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 4,
+    zIndex: 3,
+    overflow: "hidden"
+  },
+  joinFabPressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  joinFabIconBubble: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.35)"
+  },
+  joinFabCode: {
+    marginTop: 1,
+    color: "#C78217",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.8
+  },
+  joinFabSpark: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.55)"
+  },
+  joinFabSparkA: {
+    top: 8,
+    right: 10
+  },
+  joinFabSparkB: {
+    bottom: 9,
+    left: 10
   },
   overlay: {
     flex: 1,

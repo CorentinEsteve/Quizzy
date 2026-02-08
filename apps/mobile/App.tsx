@@ -1635,7 +1635,7 @@ export default function App() {
           edges={
             splashVisible
               ? []
-              : lobbyIsActive
+              : panelSwipeEnabled || panel === "leaderboard"
               ? ["left", "right"]
               : ["top", "left", "right"]
           }
@@ -1874,7 +1874,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "transparent"
+    backgroundColor: "#F4F6FB"
   },
   gestureRoot: {
     flex: 1

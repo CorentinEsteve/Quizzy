@@ -196,7 +196,7 @@ const dictionaries: Dictionaries = {
     waitingNext: "Waiting for the next question.",
     yourTurn: "Your turn",
     youAnswered: "You answered.",
-    asyncNote: "Async duel: you can continue at your pace.",
+    asyncNote: "Async duel: continue at your pace.",
     youWon: "You won",
     youLost: "You lost",
     youTied: "Tie game",

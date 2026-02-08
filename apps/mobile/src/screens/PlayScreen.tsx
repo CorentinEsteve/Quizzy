@@ -51,6 +51,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const question = quiz.questions[questionIndex];
   const prompt = question?.prompt?.[locale] ?? question?.prompt?.en ?? "";
   const options = question?.options?.[locale] ?? question?.options?.en ?? [];
+  const questionNumber = Math.min(questionIndex + 1, quiz.questions.length);
   const answeredCount = Object.keys(selectedAnswers).length;
   const progressLabel =
     room.mode === "sync"
@@ -347,14 +348,28 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   return (
     <View style={containerStyle}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerMain}>
           <Text style={styles.title}>{quiz.title}</Text>
-          <Text style={styles.subtitle}>
-            {room.mode === "sync" ? t(locale, "syncDuel") : t(locale, "asyncDuel")}
-          </Text>
+          <View style={styles.headerMetaRow}>
+            <View style={styles.modeChip}>
+              <FontAwesome
+                name={room.mode === "sync" ? "bolt" : "clock-o"}
+                size={10}
+                color={theme.colors.primary}
+              />
+              <Text style={styles.modeChipText}>
+                {room.mode === "sync" ? t(locale, "syncDuel") : t(locale, "asyncDuel")}
+              </Text>
+            </View>
+            <Text numberOfLines={1} style={styles.subtitle}>
+              vs {opponentName}
+            </Text>
+          </View>
         </View>
         <View style={styles.headerPills}>
-          <Pill label={progressLabel} />
+          <View style={styles.progressPill}>
+            <Text style={styles.progressPillText}>{progressLabel}</Text>
+          </View>
         </View>
       </View>
 
@@ -393,6 +408,14 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
       </View>
 
       <GlassCard accent={quiz.accent} style={styles.card}>
+        <View style={styles.questionBadgeRow}>
+          <View style={styles.questionBadge}>
+            <Text style={styles.questionBadgeText}>
+              Q{questionNumber}/{quiz.questions.length}
+            </Text>
+          </View>
+          <Text style={styles.questionHint}>{t(locale, "questionsLabel")}</Text>
+        </View>
         <Text style={styles.prompt}>{prompt}</Text>
         <View style={styles.options}>
           {options.map((option, index) => {
@@ -404,7 +427,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
             return (
               <PrimaryButton
                 key={`${question.id}-${index}`}
-                label={option}
+                label={`${String.fromCharCode(65 + index)}. ${option}`}
                 onPress={() => {
                   if (hasAnsweredCurrent || feedbackActive) return;
                   sentRef.current.add(question.id);
@@ -484,14 +507,54 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: theme.spacing.lg
+    marginBottom: theme.spacing.md
+  },
+  headerMain: {
+    flex: 1,
+    gap: 6
+  },
+  headerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  modeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.26)"
+  },
+  modeChipText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "700"
   },
   headerPills: {
     alignItems: "flex-end",
     gap: theme.spacing.xs
   },
+  progressPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 14, 20, 0.12)"
+  },
+  progressPillText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
+  },
   timerTrack: {
-    height: 5,
+    height: 7,
     borderRadius: 999,
     backgroundColor: "rgba(11, 14, 20, 0.1)",
     overflow: "hidden",
@@ -513,22 +576,50 @@ const styles = StyleSheet.create({
   subtitle: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    flexShrink: 1
   },
   card: {
-    gap: theme.spacing.lg
+    gap: theme.spacing.md
+  },
+  questionBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  questionBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "rgba(46, 196, 182, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(46, 196, 182, 0.3)"
+  },
+  questionBadgeText: {
+    color: theme.colors.secondary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  questionHint: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12
   },
   prompt: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontSize: 28,
+    fontWeight: "700",
+    lineHeight: 34
   },
   options: {
     gap: theme.spacing.sm
   },
   optionButton: {
-    width: "100%"
+    width: "100%",
+    minHeight: 52
   },
   optionFeedback: {
     borderWidth: 1,
@@ -560,7 +651,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
-    backgroundColor: "rgba(245, 246, 248, 0.92)"
+    backgroundColor: "rgba(245, 246, 248, 0.84)"
   },
   leaveButton: {
     width: "100%"
