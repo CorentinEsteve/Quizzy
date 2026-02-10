@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,27 +42,37 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
     styles.container,
     { paddingTop: theme.spacing.lg + insets.top, paddingBottom: footerInset }
   ];
-
-  let questionIndex = room.currentIndex;
-  if (room.mode === "async") {
-    const nextIndex = quiz.questions.findIndex(
-      (question) => selectedAnswers[question.id] === undefined
-    );
-    questionIndex = nextIndex === -1 ? quiz.questions.length - 1 : nextIndex;
-  }
-
-  const question = quiz.questions[questionIndex];
-  const prompt = question?.prompt?.[locale] ?? question?.prompt?.en ?? "";
-  const options = question?.options?.[locale] ?? question?.options?.en ?? [];
-  const questionNumber = Math.min(questionIndex + 1, quiz.questions.length);
-  const answeredCount = Object.keys(selectedAnswers).length;
-  const progressLabel =
-    room.mode === "sync"
-      ? `${room.currentIndex + 1} / ${quiz.questions.length}`
-      : `${answeredCount} / ${quiz.questions.length}`;
   const myProgress = room.progress.find((item) => item.userId === userId)?.answeredCount ?? 0;
   const myCorrect = room.progress.find((item) => item.userId === userId)?.correctCount ?? 0;
   const myWrong = room.progress.find((item) => item.userId === userId)?.wrongCount ?? 0;
+  const totalQuestions = Math.max(quiz.questions.length, 1);
+  const safeMyProgress = Math.max(0, Math.min(myProgress, quiz.questions.length));
+
+  let questionIndex = room.currentIndex;
+  if (room.mode === "async") {
+    questionIndex = Math.min(safeMyProgress, quiz.questions.length - 1);
+  } else {
+    questionIndex = Math.min(Math.max(room.currentIndex, 0), quiz.questions.length - 1);
+  }
+
+  const question = quiz.questions[questionIndex];
+  if (!question) {
+    return (
+      <View style={styles.screen}>
+        <View style={containerStyle}>
+          <GlassCard style={styles.statusCard}>
+            <Text style={styles.statusTitle}>{t(locale, "pleaseWait")}</Text>
+          </GlassCard>
+        </View>
+      </View>
+    );
+  }
+  const prompt = question?.prompt?.[locale] ?? question?.prompt?.en ?? "";
+  const options = question?.options?.[locale] ?? question?.options?.en ?? [];
+  const progressLabel =
+    room.mode === "sync"
+      ? `${Math.min(room.currentIndex + 1, quiz.questions.length)} / ${quiz.questions.length}`
+      : `${safeMyProgress} / ${quiz.questions.length}`;
   const opponent = room.players.find((player) => player.id !== userId);
   const opponentName = opponent?.displayName ?? t(locale, "opponentLabel");
   const opponentProgressItem = room.progress.find((item) => item.userId !== userId);
@@ -71,7 +81,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const otherWrong = opponentProgressItem?.wrongCount ?? 0;
   const hasAnsweredCurrent =
     selectedAnswers[question.id] !== undefined ||
-    (room.mode === "sync" && myProgress > room.currentIndex);
+    myProgress > questionIndex;
   const feedbackActive = feedback?.questionId === question.id;
   const isSyncDone = room.mode === "sync" && myProgress >= quiz.questions.length;
   const isAsyncDone = room.mode === "async" && myProgress >= quiz.questions.length;
@@ -89,7 +99,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
       : t(locale, "asyncNote");
   const waitingSubtitle =
     room.mode === "sync" && hasAnsweredCurrent ? t(locale, "youAnswered") : null;
-  const totalQuestions = Math.max(quiz.questions.length, 1);
   const myProgressRatio = Math.min(myProgress / totalQuestions, 1);
   const otherProgressRatio = Math.min(otherProgress / totalQuestions, 1);
   const progressBlock = (
@@ -349,7 +358,12 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
 
 
   return (
-    <View style={containerStyle}>
+    <View style={styles.screen}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={containerStyle}
+        contentInsetAdjustmentBehavior="never"
+      >
       <View style={styles.header}>
         <View style={styles.headerMain}>
           <Text style={styles.title}>{quiz.title}</Text>
@@ -376,49 +390,46 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         </View>
       </View>
 
-      <View
-        style={[
-          styles.timerTrack,
-          !hasAnsweredCurrent && !feedbackActive ? null : styles.timerTrackInactive
-        ]}
-        onLayout={(event) => setTimerWidth(event.nativeEvent.layout.width)}
-      >
-        {!hasAnsweredCurrent && !feedbackActive ? (
-          <Animated.View
-            style={[
-              styles.timerFill,
-              {
-                width:
-                  timerWidth > 0
-                    ? timerProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, timerWidth]
-                      })
-                    : "100%",
-                backgroundColor: timerProgress.interpolate({
-                  inputRange: [0, 0.2, 0.45, 1],
-                  outputRange: [
-                    "rgba(235, 87, 87, 0.85)",
-                    "rgba(243, 183, 78, 0.85)",
-                    "rgba(118, 214, 174, 0.85)",
-                    "rgba(118, 214, 174, 0.85)"
-                  ]
-                })
-              }
-            ]}
-          />
-        ) : null}
+      <View style={[styles.timerShell, !hasAnsweredCurrent && !feedbackActive ? null : styles.timerShellInactive]}>
+        <View style={styles.timerIconBubble}>
+          <FontAwesome name="bolt" size={10} color={theme.colors.primary} />
+        </View>
+        <View
+          style={[
+            styles.timerTrack,
+            !hasAnsweredCurrent && !feedbackActive ? null : styles.timerTrackInactive
+          ]}
+          onLayout={(event) => setTimerWidth(event.nativeEvent.layout.width)}
+        >
+          {!hasAnsweredCurrent && !feedbackActive ? (
+            <Animated.View
+              style={[
+                styles.timerFill,
+                {
+                  width:
+                    timerWidth > 0
+                      ? timerProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, timerWidth]
+                        })
+                      : "100%",
+                  backgroundColor: timerProgress.interpolate({
+                    inputRange: [0, 0.2, 0.45, 1],
+                    outputRange: [
+                      "rgba(235, 87, 87, 0.9)",
+                      "rgba(243, 183, 78, 0.9)",
+                      "rgba(118, 214, 174, 0.92)",
+                      "rgba(118, 214, 174, 0.92)"
+                    ]
+                  })
+                }
+              ]}
+            />
+          ) : null}
+        </View>
       </View>
 
       <GlassCard accent={quiz.accent} style={styles.card}>
-        <View style={styles.questionBadgeRow}>
-          <View style={styles.questionBadge}>
-            <Text style={styles.questionBadgeText}>
-              Q{questionNumber}/{quiz.questions.length}
-            </Text>
-          </View>
-          <Text style={styles.questionHint}>{t(locale, "questionsLabel")}</Text>
-        </View>
         <Text style={styles.prompt}>{prompt}</Text>
         <View style={styles.options}>
           {options.map((option, index) => {
@@ -484,6 +495,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         </View>
         {progressBlock}
       </GlassCard>
+      </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
         <PrimaryButton
@@ -499,12 +511,40 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1
+  },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     backgroundColor: "transparent"
+  },
+  timerShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.18)",
+    marginBottom: theme.spacing.md
+  },
+  timerShellInactive: {
+    opacity: 0.62
+  },
+  timerIconBubble: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.3)"
   },
   header: {
     flexDirection: "row",
@@ -557,11 +597,12 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   timerTrack: {
+    flex: 1,
     height: 7,
     borderRadius: 999,
     backgroundColor: "rgba(11, 14, 20, 0.1)",
     overflow: "hidden",
-    marginBottom: theme.spacing.md
+    marginBottom: 0
   },
   timerTrackInactive: {
     opacity: 0.35
@@ -584,31 +625,6 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: theme.spacing.md
-  },
-  questionBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.sm
-  },
-  questionBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: "rgba(46, 196, 182, 0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(46, 196, 182, 0.3)"
-  },
-  questionBadgeText: {
-    color: theme.colors.secondary,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  questionHint: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: 12
   },
   prompt: {
     color: theme.colors.ink,

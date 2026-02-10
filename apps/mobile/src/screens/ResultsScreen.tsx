@@ -120,15 +120,15 @@ export function ResultsScreen({
     ? {
         win: {
           accent: theme.colors.success,
-          surface: "rgba(43, 158, 102, 0.12)"
+          surface: "rgba(43, 158, 102, 0.24)"
         },
         tie: {
           accent: theme.colors.reward,
-          surface: "rgba(243, 183, 78, 0.18)"
+          surface: "rgba(243, 183, 78, 0.28)"
         },
         loss: {
           accent: theme.colors.danger,
-          surface: "rgba(235, 87, 87, 0.12)"
+          surface: "rgba(235, 87, 87, 0.24)"
         }
       }[resultState]
     : null;
@@ -270,18 +270,45 @@ export function ResultsScreen({
         { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
       ]}
     >
-      <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={["#DCEBFF", "#E8FBF7", "#FFF2DE"]}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={["rgba(94, 124, 255, 0.3)", "rgba(94, 124, 255, 0)"]}
+        start={{ x: 0.1, y: 0.1 }}
+        end={{ x: 0.7, y: 0.7 }}
+        style={styles.backgroundSweep}
+      />
+      <LinearGradient
+        colors={["rgba(255, 184, 92, 0.22)", "rgba(255, 184, 92, 0)"]}
+        start={{ x: 0.95, y: 0.05 }}
+        end={{ x: 0.25, y: 0.65 }}
+        style={styles.backgroundWarmSweep}
+      />
+      <View style={styles.backgroundOrbTop} pointerEvents="none" />
+      <View style={styles.backgroundOrbBottom} pointerEvents="none" />
+      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
+      <View style={styles.backgroundRibbon} pointerEvents="none" />
+      <View style={styles.backgroundGlow} pointerEvents="none" />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: theme.spacing.lg }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg }
+        ]}
       >
         <View style={styles.content}>
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>{t(locale, "results")}</Text>
-              <Text style={styles.subtitle}>{t(locale, "resultsSubtitle")}</Text>
+              <Text style={styles.subtitle}>
+                {locale === "fr" ? "Beau duel, encore plus fort au prochain !" : "Great duel, even stronger next round!"}
+              </Text>
             </View>
-            <View style={styles.awardDot} />
+            <View style={styles.awardDot}>
+              <Text style={styles.awardDotEmoji}>✨</Text>
+            </View>
           </View>
 
           {resultLabel ? (
@@ -596,8 +623,60 @@ const styles = StyleSheet.create({
   container: {
     flex: 1
   },
+  backgroundOrbTop: {
+    position: "absolute",
+    top: -190,
+    right: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "rgba(94, 124, 255, 0.18)"
+  },
+  backgroundOrbBottom: {
+    position: "absolute",
+    bottom: -210,
+    left: -160,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: "rgba(46, 196, 182, 0.16)"
+  },
+  backgroundOrbWarm: {
+    position: "absolute",
+    top: 120,
+    right: -120,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(255, 196, 112, 0.2)"
+  },
+  backgroundRibbon: {
+    position: "absolute",
+    top: 210,
+    left: -90,
+    width: 280,
+    height: 160,
+    borderRadius: 44,
+    transform: [{ rotate: "-16deg" }],
+    backgroundColor: "rgba(109, 174, 255, 0.12)"
+  },
+  backgroundGlow: {
+    position: "absolute",
+    top: "36%",
+    alignSelf: "center",
+    width: 430,
+    height: 430,
+    borderRadius: 215,
+    backgroundColor: "rgba(255, 255, 255, 0.56)"
+  },
+  backgroundSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundWarmSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
   scrollContent: {
-    padding: theme.spacing.lg
+    paddingHorizontal: theme.spacing.lg
   },
   content: {
     gap: theme.spacing.lg
@@ -619,14 +698,21 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body
   },
   awardDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: theme.colors.reward,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(243, 183, 78, 0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.42)",
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: theme.colors.reward,
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.32,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 }
+  },
+  awardDotEmoji: {
+    fontSize: 13
   },
   rewardCard: {
     borderRadius: theme.radius.lg,
@@ -672,7 +758,14 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   resultCard: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    shadowColor: "rgba(61, 79, 219, 0.22)",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
   },
   resultHero: {
     alignSelf: "center",

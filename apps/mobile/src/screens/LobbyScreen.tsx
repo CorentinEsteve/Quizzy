@@ -2048,8 +2048,8 @@ const styles = StyleSheet.create({
   },
   recapCard: {
     gap: 6,
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
-    borderColor: "rgba(94, 124, 255, 0.34)",
+    backgroundColor: "rgba(94, 124, 255, 0.2)",
+    borderColor: "rgba(94, 124, 255, 0.4)",
     shadowColor: "rgba(94, 124, 255, 0.36)",
     shadowOpacity: 0.22,
     shadowRadius: 20,
