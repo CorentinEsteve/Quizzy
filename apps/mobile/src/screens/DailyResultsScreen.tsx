@@ -35,20 +35,10 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
         typeof question.answer === "number"
           ? options[question.answer] ?? t(locale, "noAnswer")
           : t(locale, "noAnswer");
-      const myAnswerText =
-        typeof question.myAnswer === "number"
-          ? options[question.myAnswer] ?? t(locale, "noAnswer")
-          : t(locale, "noAnswer");
-      const isCorrect =
-        typeof question.answer === "number" &&
-        typeof question.myAnswer === "number" &&
-        question.answer === question.myAnswer;
       return {
         id: question.id,
         prompt,
-        correctText,
-        myAnswerText,
-        isCorrect
+        correctText
       };
     });
   }, [results.questions, locale]);
@@ -87,6 +77,7 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "dailyQuizResultsTitle")}</Text>
             <Text style={styles.title}>{dateLabel}</Text>
+            <Text style={styles.subtitle}>{t(locale, "dailyQuizResultsSubtitle")}</Text>
           </View>
           <View style={styles.awardDot}>
             <Text style={styles.awardDotEmoji}>✨</Text>
@@ -244,18 +235,6 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
                       <Text style={styles.correctPillText}>{item.correctText}</Text>
                     </View>
                   </View>
-                  <View style={styles.answerRow}>
-                    <Text style={styles.answerLabel}>{t(locale, "wrongAnswers")}</Text>
-                    <View style={styles.wrongWrap}>
-                      {item.isCorrect ? (
-                        <Text style={styles.answerEmpty}>{t(locale, "noWrongAnswers")}</Text>
-                      ) : (
-                        <View style={styles.wrongPill}>
-                          <Text style={styles.wrongPillText}>{item.myAnswerText}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
                 </View>
               ))}
             </View>
@@ -332,8 +311,13 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontSize: theme.typography.display,
+    fontWeight: "700"
+  },
+  subtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body
   },
   awardDot: {
     width: 34,
@@ -566,7 +550,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   reviewCard: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     backgroundColor: "rgba(255, 252, 244, 0.9)",
     borderColor: "rgba(223, 154, 31, 0.24)"
   },
@@ -576,8 +560,8 @@ const styles = StyleSheet.create({
   reviewTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "700"
+    fontSize: theme.typography.title,
+    fontWeight: "600"
   },
   reviewSubtitle: {
     color: theme.colors.muted,
@@ -585,23 +569,26 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   reviewList: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.md
   },
   questionItem: {
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(15, 23, 42, 0.08)",
-    paddingTop: theme.spacing.sm
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(245, 247, 251, 0.9)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    gap: theme.spacing.sm
   },
   questionHeader: {
     flexDirection: "row",
-    gap: 8
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
   },
   questionIndex: {
-    color: theme.colors.reward,
+    color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "700"
+    fontSize: theme.typography.body,
+    fontWeight: "600"
   },
   questionPrompt: {
     flex: 1,
@@ -612,50 +599,27 @@ const styles = StyleSheet.create({
   },
   answerRow: {
     flexDirection: "row",
-    gap: 8,
-    alignItems: "center"
+    alignItems: "center",
+    gap: theme.spacing.sm
   },
   answerLabel: {
     width: 110,
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    lineHeight: 18
   },
   correctPill: {
+    backgroundColor: "rgba(43, 158, 102, 0.14)",
     borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(43, 158, 102, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(43, 158, 102, 0.35)"
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(43, 158, 102, 0.3)",
+    flexShrink: 1
   },
   correctPillText: {
     color: theme.colors.success,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "600"
-  },
-  wrongWrap: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6
-  },
-  answerEmpty: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
-  wrongPill: {
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(235, 87, 87, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(235, 87, 87, 0.35)"
-  },
-  wrongPillText: {
-    color: theme.colors.danger,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"

@@ -571,20 +571,18 @@ export function ResultsScreen({
                         <Text style={styles.correctPillText}>{item.correctText}</Text>
                       </View>
                     </View>
-                    <View style={styles.answerRow}>
-                      <Text style={styles.answerLabel}>{t(locale, "wrongAnswers")}</Text>
-                      <View style={styles.wrongWrap}>
-                        {item.wrongLabels.length ? (
-                          item.wrongLabels.map((wrong) => (
+                    {item.wrongLabels.length > 0 ? (
+                      <View style={styles.answerRow}>
+                        <Text style={styles.answerLabel}>{t(locale, "wrongAnswers")}</Text>
+                        <View style={styles.wrongWrap}>
+                          {item.wrongLabels.map((wrong) => (
                             <View key={wrong.key} style={styles.wrongPill}>
                               <Text style={styles.wrongPillText}>{wrong.label}</Text>
                             </View>
-                          ))
-                        ) : (
-                          <Text style={styles.answerEmpty}>{t(locale, "noWrongAnswers")}</Text>
-                        )}
+                          ))}
+                        </View>
                       </View>
-                    </View>
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -973,11 +971,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
-  },
-  answerEmpty: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
   },
   row: {
     flexDirection: "row",
