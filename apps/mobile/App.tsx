@@ -1615,6 +1615,7 @@ export default function App() {
       userName={user.displayName}
       locale={locale}
       userId={user.id}
+      leaderboardGlobal={leaderboardGlobal}
       sessions={myRooms}
       recapStats={stats}
       onOpenRecap={handleOpenRecap}

@@ -21,7 +21,13 @@ import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
 import { localizedCategoryLabel } from "../data/categories";
-import { DailyQuizResults, DailyQuizStatus, QuizSummary, StatsResponse } from "../data/types";
+import {
+  DailyQuizResults,
+  DailyQuizStatus,
+  LeaderboardResponse,
+  QuizSummary,
+  StatsResponse
+} from "../data/types";
 
 type Props = {
   quizzes: QuizSummary[];
@@ -32,6 +38,7 @@ type Props = {
   userName: string;
   locale: Locale;
   userId: number;
+  leaderboardGlobal: LeaderboardResponse | null;
   sessions: {
     code: string;
     status: string;
@@ -111,6 +118,7 @@ export function LobbyScreen({
   userName,
   locale,
   userId,
+  leaderboardGlobal,
   sessions,
   onOpenRecap,
   onResumeRoom,
@@ -222,6 +230,9 @@ export function LobbyScreen({
   const showDailyCard = Boolean(dailyQuiz) || dailyLoading;
   const handleDailyPress = dailyCompleted ? onOpenDailyResults : onOpenDailyQuiz;
   const dailyProgressRatio = Math.min(dailyAnswered / Math.max(dailyTotal, 1), 1);
+  const topGlobalEntries = (leaderboardGlobal?.entries ?? []).slice(0, 3);
+  const topGlobalPreview = Array.from({ length: 3 }, (_, index) => topGlobalEntries[index] ?? null);
+  const myGlobalRank = leaderboardGlobal?.me?.rank ?? null;
 
   const selectedCategory = useMemo(
     () => categories.find((category) => category.id === selectedCategoryId) || null,
@@ -567,6 +578,28 @@ export function LobbyScreen({
               </View>
               <View style={styles.recapHeaderAction}>
                 <FontAwesome name="chevron-right" size={14} color={theme.colors.muted} />
+              </View>
+            </View>
+            <View style={styles.recapTopList}>
+              {topGlobalPreview.map((entry, index) => (
+                <View key={entry ? `global-${entry.userId}` : `global-placeholder-${index}`} style={styles.recapTopRow}>
+                  <View style={styles.recapTopBadge}>
+                    <Text style={styles.recapTopBadgeText}>
+                      {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
+                    </Text>
+                  </View>
+                  <Text numberOfLines={1} style={styles.recapTopName}>
+                    {entry?.displayName ?? (locale === "fr" ? "À venir" : "Coming soon")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.recapYouRow}>
+              <Text style={styles.recapYouLabel}>{locale === "fr" ? "Toi" : "You"}</Text>
+              <View style={styles.recapYouPill}>
+                <Text style={styles.recapYouRank}>
+                  {myGlobalRank ? `#${myGlobalRank}` : "—"}
+                </Text>
               </View>
             </View>
           </GlassCard>
@@ -1037,8 +1070,6 @@ export function LobbyScreen({
           style={styles.overlay}
           onPress={() => {
             setIsDialogOpen(false);
-            setDialogStep("pick");
-            setPickStep("category");
           }}
         >
           <Pressable onPress={() => {}} style={styles.dialogTouch}>
@@ -1061,8 +1092,6 @@ export function LobbyScreen({
                   hitSlop={8}
                   onPress={() => {
                     setIsDialogOpen(false);
-                    setDialogStep("pick");
-                    setPickStep("category");
                   }}
                 >
                   <FontAwesome name="times" size={12} color={theme.colors.muted} />
@@ -1148,9 +1177,8 @@ export function LobbyScreen({
                         label={t(locale, "back")}
                         variant="ghost"
                         icon="arrow-left"
-                        onPress={() => {
+                      onPress={() => {
                           setIsDialogOpen(false);
-                          setPickStep("category");
                         }}
                       />
                     </View>
@@ -1326,8 +1354,6 @@ export function LobbyScreen({
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           onCreateRoom(selectedCategoryId, selectedQuestionCount, selectedMode);
                           setIsDialogOpen(false);
-                          setDialogStep("pick");
-                          setPickStep("category");
                         }}
                         style={
                           !selectedCategoryId || !selectedQuestionCount
@@ -1355,8 +1381,6 @@ export function LobbyScreen({
                   hitSlop={8}
                   onPress={() => {
                     setIsDialogOpen(false);
-                    setDialogStep("pick");
-                    setPickStep("category");
                   }}
                 >
                   <FontAwesome name="times" size={12} color={theme.colors.muted} />
@@ -1380,7 +1404,6 @@ export function LobbyScreen({
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onJoinRoom(code);
                     setIsDialogOpen(false);
-                    setDialogStep("pick");
                   }}
                 />
                 <PrimaryButton
@@ -1389,7 +1412,6 @@ export function LobbyScreen({
                   icon="arrow-left"
                   onPress={() => {
                     setIsDialogOpen(false);
-                    setDialogStep("pick");
                   }}
                 />
               </>
@@ -1909,6 +1931,72 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6
   },
+  recapTopList: {
+    marginTop: 4,
+    flexDirection: "row",
+    gap: 6
+  },
+  recapTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.58)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.1)"
+  },
+  recapTopBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.8)"
+  },
+  recapTopBadgeText: {
+    fontSize: 10
+  },
+  recapTopName: {
+    flex: 1,
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "600"
+  },
+  recapYouRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255, 255, 255, 0.42)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  recapYouLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  recapYouPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.28)"
+  },
+  recapYouRank: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "700"
+  },
   recapHeaderActionText: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
@@ -1925,6 +2013,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   recapCard: {
+    gap: 6,
     backgroundColor: "rgba(94, 124, 255, 0.12)",
     borderColor: "rgba(94, 124, 255, 0.28)",
     shadowColor: "rgba(94, 124, 255, 0.32)",

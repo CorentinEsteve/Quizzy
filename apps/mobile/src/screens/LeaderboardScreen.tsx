@@ -85,7 +85,7 @@ export function LeaderboardScreen({
 
         <GlassCard style={styles.heroCard}>
           <LinearGradient
-            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.86)"]}
+            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.14)", "rgba(255, 255, 255, 0.9)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroBackdrop}
@@ -97,19 +97,18 @@ export function LeaderboardScreen({
               </View>
               <Text style={styles.heroTitle}>{t(locale, "topGlobal")}</Text>
             </View>
-            <Text style={styles.heroSubtitle}>{t(locale, "recapSubtitle")}</Text>
           </View>
           {topGlobalThree.length > 0 ? (
             <View style={styles.podiumRow}>
               {topGlobalThree.map((entry) => (
                 <View key={`podium-${entry.userId}`} style={styles.podiumItem}>
-                  <View style={[styles.podiumRankPill, entry.rank === 1 && styles.podiumRankTop]}>
-                    <Text style={styles.podiumRank}>#{entry.rank}</Text>
-                  </View>
+                  <Text style={styles.podiumMedal}>
+                    {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : "🥉"}
+                  </Text>
                   <Text numberOfLines={1} style={styles.podiumName}>
                     {entry.displayName}
                   </Text>
-                  <Text style={styles.podiumScore}>{entry.score}</Text>
+                  <Text style={styles.podiumScore}>{entry.score} pts</Text>
                 </View>
               ))}
             </View>
@@ -216,16 +215,24 @@ export function LeaderboardScreen({
           ) : null}
         </GlassCard>
 
-        <View style={styles.summaryRow}>
-          <GlassCard style={[styles.summaryCard, styles.summaryHighlight]}>
-            <Text style={styles.summaryTitle}>{t(locale, "globalRank")}</Text>
-            <Text style={styles.summaryValue}>{myGlobalRank ? `#${myGlobalRank}` : "-"}</Text>
-          </GlassCard>
-          <GlassCard style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>{t(locale, "localRank")}</Text>
-            <Text style={styles.summaryValue}>{myLocalRank ? `#${myLocalRank}` : "-"}</Text>
-          </GlassCard>
-        </View>
+        <GlassCard style={[styles.sectionCard, styles.yourRankCard]}>
+          <View style={styles.yourRankHeader}>
+            <View style={[styles.sectionIconBubble, styles.sectionIconGlobal]}>
+              <FontAwesome name="user" size={12} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.sectionTitle}>{t(locale, "yourRank")}</Text>
+          </View>
+          <View style={styles.yourRankGrid}>
+            <View style={[styles.yourRankPill, styles.summaryHighlight]}>
+              <Text style={styles.summaryTitle}>{t(locale, "globalRank")}</Text>
+              <Text style={styles.summaryValue}>{myGlobalRank ? `#${myGlobalRank}` : "-"}</Text>
+            </View>
+            <View style={styles.yourRankPill}>
+              <Text style={styles.summaryTitle}>{t(locale, "localRank")}</Text>
+              <Text style={styles.summaryValue}>{myLocalRank ? `#${myLocalRank}` : "-"}</Text>
+            </View>
+          </View>
+        </GlassCard>
 
         <GlassCard style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
@@ -235,6 +242,9 @@ export function LeaderboardScreen({
               </View>
               <Text style={styles.sectionTitle}>{t(locale, "topGlobal")}</Text>
             </View>
+            <Text style={styles.sectionTag}>
+              {locale === "fr" ? "Monde" : "World"}
+            </Text>
           </View>
           {loading ? (
             <Text style={styles.sectionMeta}>{t(locale, "pleaseWait")}</Text>
@@ -284,6 +294,9 @@ export function LeaderboardScreen({
               </View>
               <Text style={styles.sectionTitle}>{t(locale, "topLocal")}</Text>
             </View>
+            <Text style={styles.sectionTag}>
+              {locale === "fr" ? "Pays" : "Country"}
+            </Text>
           </View>
           {loading ? (
             <Text style={styles.sectionMeta}>{t(locale, "pleaseWait")}</Text>
@@ -327,7 +340,12 @@ export function LeaderboardScreen({
 
         <GlassCard style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>{t(locale, "badges")}</Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIconBubble, styles.sectionIconAccent]}>
+                <FontAwesome name="certificate" size={12} color={theme.colors.reward} />
+              </View>
+              <Text style={styles.sectionTitle}>{t(locale, "badges")}</Text>
+            </View>
             <Text style={styles.sectionTag}>{t(locale, "earnedBadges")}</Text>
           </View>
           {badgesLoading ? (
@@ -423,7 +441,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderColor: "rgba(94, 124, 255, 0.2)",
     backgroundColor: "rgba(255, 255, 255, 0.95)",
-    gap: theme.spacing.sm
+    gap: 8
   },
   heroBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -452,62 +470,56 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: "700"
   },
-  heroSubtitle: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
   podiumRow: {
     flexDirection: "row",
-    gap: theme.spacing.sm
+    gap: 6
   },
   podiumItem: {
     flex: 1,
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)"
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 7,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)"
   },
-  podiumRankPill: {
-    minWidth: 34,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.06)"
-  },
-  podiumRankTop: {
-    backgroundColor: "rgba(243, 183, 78, 0.22)"
-  },
-  podiumRank: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: 12,
-    fontWeight: "700"
+  podiumMedal: {
+    fontSize: 12
   },
   podiumName: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
+    fontSize: 12,
     fontWeight: "600"
   },
   podiumScore: {
     color: theme.colors.primary,
     fontFamily: theme.typography.fontFamily,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700"
   },
-  summaryRow: {
-    flexDirection: "row",
-    gap: theme.spacing.md
+  yourRankCard: {
+    gap: 8
   },
-  summaryCard: {
+  yourRankHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  yourRankGrid: {
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
+  yourRankPill: {
     flex: 1,
-    gap: theme.spacing.xs
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.86)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    gap: 2
   },
   summaryHighlight: {
     borderColor: "rgba(94, 124, 255, 0.35)"
@@ -520,11 +532,13 @@ const styles = StyleSheet.create({
   summaryValue: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontSize: 22,
+    fontWeight: "700"
   },
   sectionCard: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderColor: "rgba(15, 23, 42, 0.08)"
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -553,12 +567,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(46, 196, 182, 0.16)",
     borderColor: "rgba(46, 196, 182, 0.34)"
   },
+  sectionIconAccent: {
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    borderColor: "rgba(243, 183, 78, 0.35)"
+  },
   sectionTitle: {
-    color: theme.colors.muted,
+    color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    textTransform: "uppercase",
-    letterSpacing: 1.1
+    fontSize: theme.typography.body,
+    fontWeight: "700"
   },
   sectionMeta: {
     color: theme.colors.muted,
@@ -573,7 +590,8 @@ const styles = StyleSheet.create({
   sectionTag: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: 12,
+    fontWeight: "600"
   },
   rowHeader: {
     flexDirection: "row",
@@ -587,18 +605,24 @@ const styles = StyleSheet.create({
   rowHeaderText: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: 12,
+    fontWeight: "600"
   },
   leaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm
+    paddingVertical: 7,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    marginTop: 6
   },
   leaderRowHighlight: {
-    backgroundColor: "rgba(94, 124, 255, 0.08)",
-    borderRadius: theme.radius.md
+    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    borderColor: "rgba(94, 124, 255, 0.3)"
   },
   rankBadge: {
     width: 40,
@@ -629,7 +653,7 @@ const styles = StyleSheet.create({
   rowMeta: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
+    fontSize: theme.typography.small,
     fontWeight: "700"
   },
   rowSubtle: {
@@ -668,7 +692,7 @@ const styles = StyleSheet.create({
   recapHeaderActionText: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
+    fontSize: 12,
     lineHeight: 16
   },
   recapRow: {
