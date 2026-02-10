@@ -41,7 +41,11 @@ type Props = {
   leaderboardGlobal: LeaderboardResponse | null;
   sessions: {
     code: string;
+    mode: "sync" | "async";
     status: string;
+    createdAt?: string;
+    updatedAt?: string;
+    invitedAt?: string;
     quiz: {
       title: string;
       subtitle: string;
@@ -49,10 +53,11 @@ type Props = {
       categoryLabel?: string;
       questions?: unknown[];
     };
-    players: { id: number; displayName: string }[];
+    players: { id: number; displayName: string; role?: string }[];
     scores: Record<string, number>;
     progress: Record<string, number>;
     rematchReady: number[];
+    myRole?: string;
   }[];
   onOpenRecap: (code: string) => void;
   onResumeRoom: (code: string) => void;
@@ -109,6 +114,22 @@ function initials(name: string) {
   return parts.map((part) => part[0]?.toUpperCase()).join("");
 }
 
+function parseInviteTimestamp(value?: string | null) {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function formatInviteRelative(locale: Locale, fromMs: number, nowMs: number) {
+  const deltaSec = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
+  if (deltaSec < 5) return locale === "fr" ? "à l'instant" : "just now";
+  if (deltaSec < 60) return locale === "fr" ? `il y a ${deltaSec} s` : `${deltaSec}s ago`;
+  const deltaMin = Math.floor(deltaSec / 60);
+  if (deltaMin < 60) return locale === "fr" ? `il y a ${deltaMin} min` : `${deltaMin}m ago`;
+  const deltaHours = Math.floor(deltaMin / 60);
+  return locale === "fr" ? `il y a ${deltaHours} h` : `${deltaHours}h ago`;
+}
+
 export function LobbyScreen({
   quizzes,
   onCreateRoom,
@@ -144,6 +165,9 @@ export function LobbyScreen({
   const continuePulse = useRef(new Animated.Value(0)).current;
   const mascotFloat = useRef(new Animated.Value(0)).current;
   const fabFloat = useRef(new Animated.Value(0)).current;
+  const invitePulse = useRef(new Animated.Value(0)).current;
+  const inviteFirstSeenRef = useRef<Map<string, number>>(new Map());
+  const [inviteNowMs, setInviteNowMs] = useState(() => Date.now());
   const dialogMaxHeight = Math.min(
     height - insets.top - insets.bottom - theme.spacing.xl * 2,
     height * 0.88
@@ -214,6 +238,42 @@ export function LobbyScreen({
   const remainingSessions = nextSession
     ? activeSessions.filter((session) => session.code !== nextSession.code)
     : activeSessions;
+  const invitedSession = useMemo(
+    () => sessions.find((session) => session.status === "lobby" && session.myRole === "invited") ?? null,
+    [sessions]
+  );
+  const invitedHostName = useMemo(() => {
+    if (!invitedSession) return locale === "fr" ? "un joueur" : "a player";
+    return (
+      invitedSession.players.find((player) => player.role === "host")?.displayName ||
+      invitedSession.players.find((player) => player.id !== userId)?.displayName ||
+      (locale === "fr" ? "un joueur" : "a player")
+    );
+  }, [invitedSession, locale, userId]);
+  useEffect(() => {
+    if (!invitedSession) return;
+    if (!inviteFirstSeenRef.current.has(invitedSession.code)) {
+      inviteFirstSeenRef.current.set(invitedSession.code, Date.now());
+    }
+  }, [invitedSession]);
+  const invitedSentAtMs = useMemo(() => {
+    if (!invitedSession) return null;
+    return (
+      parseInviteTimestamp(invitedSession.invitedAt) ??
+      parseInviteTimestamp(invitedSession.updatedAt) ??
+      parseInviteTimestamp(invitedSession.createdAt) ??
+      inviteFirstSeenRef.current.get(invitedSession.code) ??
+      null
+    );
+  }, [invitedSession]);
+  const inviteExpiresAtMs = invitedSentAtMs ? invitedSentAtMs + 24 * 60 * 60 * 1000 : null;
+  const inviteIsExpired = inviteExpiresAtMs ? inviteNowMs >= inviteExpiresAtMs : false;
+  const showInvitedCard = Boolean(invitedSession) && !inviteIsExpired;
+  const invitedSentAgoLabel = invitedSentAtMs
+    ? formatInviteRelative(locale, invitedSentAtMs, inviteNowMs)
+    : locale === "fr"
+      ? "nouveau"
+      : "new";
   const dailyAnswered = dailyQuiz?.answeredCount ?? 0;
   const dailyTotal = dailyQuiz?.totalQuestions ?? 10;
   const dailyCompleted = dailyQuiz?.completed ?? false;
@@ -353,6 +413,35 @@ export function LobbyScreen({
     return () => animation.stop();
   }, [fabFloat]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setInviteNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!showInvitedCard) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(invitePulse, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(invitePulse, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [invitePulse, showInvitedCard]);
+
   const nextOpponent = nextSession?.players.find((player) => player.id !== userId);
   const nextOpponentName = nextOpponent?.displayName ?? t(locale, "opponentLabel");
   const nextTotalQuestions = nextSession?.quiz.questions?.length ?? 0;
@@ -394,6 +483,22 @@ export function LobbyScreen({
   const fabIdleScale = fabFloat.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 1.015]
+  });
+  const inviteNudge = invitePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -2]
+  });
+  const inviteGlow = invitePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.02]
+  });
+  const invitePingScale = invitePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1.8]
+  });
+  const invitePingOpacity = invitePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0]
   });
 
   const openCreateDialog = () => {
@@ -564,6 +669,59 @@ export function LobbyScreen({
             />
           </View>
         </GlassCard>
+
+        {showInvitedCard && invitedSession ? (
+          <Pressable
+            onPress={() => onResumeRoom(invitedSession.code)}
+            accessibilityRole="button"
+            accessibilityLabel={t(locale, "homeInviteA11y")}
+            hitSlop={6}
+          >
+            <Animated.View style={{ transform: [{ translateY: inviteNudge }, { scale: inviteGlow }] }}>
+              <GlassCard style={[styles.introCard, styles.homeInviteCard]} accent={theme.colors.secondary}>
+                <LinearGradient
+                  colors={["rgba(94, 124, 255, 0.22)", "rgba(46, 196, 182, 0.2)", "rgba(255, 255, 255, 0.95)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.homeInviteBackdrop}
+                />
+                <View style={styles.homeInviteHeader}>
+                  <View style={styles.homeInviteBadge}>
+                    <View style={styles.homeInvitePingWrap}>
+                      <Animated.View
+                        style={[
+                          styles.homeInvitePing,
+                          {
+                            opacity: invitePingOpacity,
+                            transform: [{ scale: invitePingScale }]
+                          }
+                        ]}
+                      />
+                      <View style={styles.homeInvitePingDot} />
+                    </View>
+                    <Text style={styles.homeInviteBadgeText}>{t(locale, "notificationInviteTitle")}</Text>
+                  </View>
+                  <View style={styles.homeInviteAgePill}>
+                    <FontAwesome name="clock-o" size={10} color={theme.colors.muted} />
+                    <Text style={styles.homeInviteAgeText}>{invitedSentAgoLabel}</Text>
+                  </View>
+                </View>
+                <Text style={styles.homeInviteTitle}>{t(locale, "homeInviteTitle", { name: invitedHostName })}</Text>
+                <Text style={styles.homeInviteBody}>{t(locale, "homeInviteBody")}</Text>
+                <View style={styles.homeInviteCtaRow}>
+                  <View style={styles.homeInviteCodePill}>
+                    <FontAwesome name="hashtag" size={11} color={theme.colors.primary} />
+                    <Text style={styles.homeInviteCodeText}>{invitedSession.code}</Text>
+                  </View>
+                  <View style={styles.homeInviteActionPill}>
+                    <Text style={styles.homeInviteActionText}>{t(locale, "homeInviteAction")}</Text>
+                    <FontAwesome name="chevron-right" size={11} color={theme.colors.primary} />
+                  </View>
+                </View>
+              </GlassCard>
+            </Animated.View>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={onOpenPersonalLeaderboard}
@@ -2055,6 +2213,131 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 7
+  },
+  homeInviteCard: {
+    overflow: "hidden",
+    gap: 6,
+    borderColor: "rgba(94, 124, 255, 0.2)",
+    backgroundColor: "rgba(245, 251, 255, 0.95)"
+  },
+  homeInviteBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  homeInviteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  homeInviteBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.24)"
+  },
+  homeInvitePingWrap: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  homeInvitePing: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "rgba(34, 197, 94, 0.45)"
+  },
+  homeInvitePingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(34, 197, 94, 0.98)"
+  },
+  homeInviteBadgeText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  homeInviteAgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.76)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)"
+  },
+  homeInviteAgeText: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  homeInviteTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 24
+  },
+  homeInviteBody: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  homeInviteCtaRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  homeInviteCodePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.3)"
+  },
+  homeInviteCodeText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6
+  },
+  homeInviteActionPill: {
+    minHeight: 32,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(94, 124, 255, 0.28)"
+  },
+  homeInviteActionText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
   },
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",

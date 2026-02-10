@@ -1639,6 +1639,7 @@ export default function App() {
               : panelSwipeEnabled ||
                 panel === "leaderboard" ||
                 dailyStage === "quiz" ||
+                room?.status === "lobby" ||
                 room?.status === "active" ||
                 room?.status === "complete" ||
                 Boolean(recapRoom)
