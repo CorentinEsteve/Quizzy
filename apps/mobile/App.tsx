@@ -1635,7 +1635,10 @@ export default function App() {
           edges={
             splashVisible
               ? []
-              : panelSwipeEnabled || panel === "leaderboard"
+              : panelSwipeEnabled ||
+                panel === "leaderboard" ||
+                dailyStage === "quiz" ||
+                room?.status === "active"
               ? ["left", "right"]
               : ["top", "left", "right"]
           }

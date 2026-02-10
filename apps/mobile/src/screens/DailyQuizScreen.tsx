@@ -48,7 +48,15 @@ export function DailyQuizScreen({
   const progressLabel = `${answeredCount} / ${Math.max(totalQuestions, 1)}`;
 
   return (
-    <View style={[styles.container, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: theme.spacing.lg + insets.top,
+          paddingBottom: theme.spacing.lg + insets.bottom
+        }
+      ]}
+    >
       <LinearGradient
         colors={["#FFFFFF", "#F1F3F8"]}
         start={{ x: 0, y: 0 }}

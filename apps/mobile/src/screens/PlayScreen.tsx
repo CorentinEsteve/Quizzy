@@ -38,7 +38,10 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const timerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerProgress = useRef(new Animated.Value(1)).current;
   const footerInset = theme.spacing.lg + insets.bottom + 96;
-  const containerStyle = [styles.container, { paddingBottom: footerInset }];
+  const containerStyle = [
+    styles.container,
+    { paddingTop: theme.spacing.lg + insets.top, paddingBottom: footerInset }
+  ];
 
   let questionIndex = room.currentIndex;
   if (room.mode === "async") {

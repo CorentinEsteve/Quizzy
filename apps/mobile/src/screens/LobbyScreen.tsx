@@ -442,20 +442,23 @@ export function LobbyScreen({
           </View>
           <View style={styles.headerActions}>
             <Pressable
-              style={[
+              style={({ pressed }) => [
                 styles.accountButton,
                 {
                   backgroundColor: accountSunStyle.background,
                   borderColor: accountSunStyle.border
-                }
+                },
+                pressed && styles.accountButtonPressed
               ]}
               onPress={onOpenAccount}
+              accessibilityRole="button"
+              accessibilityLabel={locale === "fr" ? "Profil" : "Profile"}
             >
               <View style={styles.sunAvatar}>
                 {Array.from({ length: SUN_RAY_COUNT }).map((_, index) => {
                   const angle = (Math.PI * 2 * index) / SUN_RAY_COUNT;
-                  const x = Math.cos(angle) * 10;
-                  const y = Math.sin(angle) * 10;
+                  const x = Math.cos(angle) * 11;
+                  const y = Math.sin(angle) * 11;
                   return (
                     <View
                       key={`sun-ray-${index}`}
@@ -470,11 +473,7 @@ export function LobbyScreen({
                   );
                 })}
                 <View style={[styles.sunCore, { backgroundColor: accountSunStyle.core }]}>
-                  <View style={styles.sunEyesRow}>
-                    <View style={[styles.sunEye, { backgroundColor: accountSunStyle.face }]} />
-                    <View style={[styles.sunEye, { backgroundColor: accountSunStyle.face }]} />
-                  </View>
-                  <View style={[styles.sunSmile, { borderColor: accountSunStyle.face }]} />
+                  <FontAwesome name="user" size={12} color={accountSunStyle.face} />
                 </View>
               </View>
             </Pressable>
@@ -483,7 +482,12 @@ export function LobbyScreen({
 
         <GlassCard style={styles.heroCard} accent={theme.colors.secondary}>
           <LinearGradient
-            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.14)", "rgba(255, 255, 255, 0.8)"]}
+            colors={[
+              "rgba(78, 104, 255, 0.24)",
+              "rgba(72, 207, 193, 0.2)",
+              "rgba(255, 201, 128, 0.2)",
+              "rgba(255, 255, 255, 0.9)"
+            ]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroGradient}
@@ -627,81 +631,6 @@ export function LobbyScreen({
                 style={styles.nextActionPrimary}
               />
             </View>
-          </GlassCard>
-        ) : null}
-
-        {showDailyCard ? (
-          <GlassCard
-            accent={theme.colors.reward}
-            style={[styles.introCard, styles.dailyQuizCard, dailyCompleted && styles.dailyQuizCardCompact]}
-          >
-            <View style={styles.dailyQuizHeader}>
-              <View style={styles.dailyQuizHeaderLeft}>
-                <View style={styles.dailyQuizBadge}>
-                  <FontAwesome name="calendar" size={12} color={theme.colors.reward} />
-                </View>
-                <Text style={styles.dailyQuizLabel}>{t(locale, "dailyQuizTitle")}</Text>
-              </View>
-              {!dailyCompleted ? (
-                <Text style={styles.dailyQuizNew}>{t(locale, "dailyQuizNew")}</Text>
-              ) : null}
-            </View>
-
-            {dailyCompleted ? (
-              <View style={styles.dailyQuizCompactRow}>
-                <View style={styles.dailyQuizCompactCopy}>
-                  <Text style={styles.dailyQuizTitleCompact}>
-                    {t(locale, "dailyQuizCompleted")}
-                  </Text>
-                  <Text style={styles.dailyQuizMetaCompact}>
-                    {dailyPercentile !== null
-                      ? t(locale, "dailyQuizPercentile", { percent: dailyPercentile })
-                      : t(locale, "dailyQuizParticipants", { count: dailyResults?.participants ?? 0 })}
-                  </Text>
-                </View>
-                <View style={styles.dailyQuizCompactAction}>
-                  <Pressable
-                    onPress={onOpenDailyResults}
-                    style={({ pressed }) => [
-                      styles.dailyQuizMiniButton,
-                      pressed && styles.dailyQuizMiniButtonPressed,
-                      (dailyLoading || !dailyResults) && styles.dailyQuizMiniButtonDisabled
-                    ]}
-                    disabled={dailyLoading || !dailyResults}
-                  >
-                    <Text style={styles.dailyQuizMiniButtonText}>
-                      {t(locale, "dailyQuizResultsShort")}
-                    </Text>
-                    <FontAwesome name="chevron-right" size={12} color={theme.colors.reward} />
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <>
-                <View style={styles.dailyQuizHero}>
-                  <Text style={styles.nextActionTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
-                  <Text style={styles.dailyQuizMeta}>{dailyProgressLabel}</Text>
-                </View>
-                <View style={styles.dailyQuizProgress}>
-                  <View
-                    style={[
-                      styles.dailyQuizProgressFill,
-                      { width: `${Math.min(dailyProgressRatio * 100, 100)}%` }
-                    ]}
-                  />
-                </View>
-                <View style={styles.dailyQuizButtons}>
-                  <PrimaryButton
-                    label={dailyActionLabel}
-                    icon="arrow-right"
-                    iconPosition="right"
-                    onPress={handleDailyPress}
-                    style={styles.dailyQuizPrimary}
-                    disabled={dailyLoading || !dailyQuiz}
-                  />
-                </View>
-              </>
-            )}
           </GlassCard>
         ) : null}
 
@@ -861,10 +790,6 @@ export function LobbyScreen({
           />
           <View style={styles.shareRow}>
             <View style={styles.shareTextBlock}>
-              <View style={styles.shareBadge}>
-                <FontAwesome name="share-alt" size={12} color={theme.colors.primary} />
-                <Text style={styles.shareBadgeText}>QR</Text>
-              </View>
               <Text style={styles.shareTitle}>{t(locale, "shareAppTitle")}</Text>
               <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
             </View>
@@ -885,6 +810,81 @@ export function LobbyScreen({
             </Pressable>
           </View>
         </GlassCard>
+
+        {showDailyCard ? (
+          <GlassCard
+            accent={theme.colors.reward}
+            style={[styles.introCard, styles.dailyQuizCard, dailyCompleted && styles.dailyQuizCardCompact]}
+          >
+            <View style={styles.dailyQuizHeader}>
+              <View style={styles.dailyQuizHeaderLeft}>
+                <View style={styles.dailyQuizBadge}>
+                  <FontAwesome name="calendar" size={12} color={theme.colors.reward} />
+                </View>
+                <Text style={styles.dailyQuizLabel}>{t(locale, "dailyQuizTitle")}</Text>
+              </View>
+              {!dailyCompleted ? (
+                <Text style={styles.dailyQuizNew}>{t(locale, "dailyQuizNew")}</Text>
+              ) : null}
+            </View>
+
+            {dailyCompleted ? (
+              <View style={styles.dailyQuizCompactRow}>
+                <View style={styles.dailyQuizCompactCopy}>
+                  <Text style={styles.dailyQuizTitleCompact}>
+                    {t(locale, "dailyQuizCompleted")}
+                  </Text>
+                  <Text style={styles.dailyQuizMetaCompact}>
+                    {dailyPercentile !== null
+                      ? t(locale, "dailyQuizPercentile", { percent: dailyPercentile })
+                      : t(locale, "dailyQuizParticipants", { count: dailyResults?.participants ?? 0 })}
+                  </Text>
+                </View>
+                <View style={styles.dailyQuizCompactAction}>
+                  <Pressable
+                    onPress={onOpenDailyResults}
+                    style={({ pressed }) => [
+                      styles.dailyQuizMiniButton,
+                      pressed && styles.dailyQuizMiniButtonPressed,
+                      (dailyLoading || !dailyResults) && styles.dailyQuizMiniButtonDisabled
+                    ]}
+                    disabled={dailyLoading || !dailyResults}
+                  >
+                    <Text style={styles.dailyQuizMiniButtonText}>
+                      {t(locale, "dailyQuizResultsShort")}
+                    </Text>
+                    <FontAwesome name="chevron-right" size={12} color={theme.colors.reward} />
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.dailyQuizHero}>
+                  <Text style={styles.nextActionTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
+                  <Text style={styles.dailyQuizMeta}>{dailyProgressLabel}</Text>
+                </View>
+                <View style={styles.dailyQuizProgress}>
+                  <View
+                    style={[
+                      styles.dailyQuizProgressFill,
+                      { width: `${Math.min(dailyProgressRatio * 100, 100)}%` }
+                    ]}
+                  />
+                </View>
+                <View style={styles.dailyQuizButtons}>
+                  <PrimaryButton
+                    label={dailyActionLabel}
+                    icon="arrow-right"
+                    iconPosition="right"
+                    onPress={handleDailyPress}
+                    style={styles.dailyQuizPrimary}
+                    disabled={dailyLoading || !dailyQuiz}
+                  />
+                </View>
+              </>
+            )}
+          </GlassCard>
+        ) : null}
 
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
           <GlassCard style={styles.introCard}>
@@ -971,17 +971,7 @@ export function LobbyScreen({
                 );
               })}
           </GlassCard>
-        ) : (
-          <GlassCard style={styles.introCard}>
-            <View style={styles.sectionHeading}>
-              <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
-                <FontAwesome name="history" size={18} color={theme.colors.ink} />
-              </View>
-              <Text style={styles.sectionTitle}>{t(locale, "recentMatches")}</Text>
-            </View>
-            <Text style={styles.sectionSubtitle}>{t(locale, "noMatches")}</Text>
-          </GlassCard>
-        )}
+        ) : null}
 
       </ScrollView>
 
@@ -1030,15 +1020,11 @@ export function LobbyScreen({
         ]}
         onPress={openJoinDialog}
         accessibilityRole="button"
-        accessibilityLabel={t(locale, "joinWithInvite")}
+        accessibilityLabel={locale === "fr" ? "Rejoindre" : "Join"}
         accessibilityHint={t(locale, "joinInviteHint")}
       >
-        <View style={styles.joinFabIconBubble}>
-          <FontAwesome name="bolt" size={13} color="#CC8B23" />
-        </View>
-        <Text style={styles.joinFabCode}>JOIN</Text>
-        <View style={[styles.joinFabSpark, styles.joinFabSparkA]} />
-        <View style={[styles.joinFabSpark, styles.joinFabSparkB]} />
+        <FontAwesome name="bolt" size={16} color={theme.colors.surface} />
+        <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
       </Pressable>
 
       <Modal
@@ -1502,50 +1488,43 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   accountButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1
+    borderWidth: 1.4,
+    shadowColor: "#000000",
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3
+  },
+  accountButtonPressed: {
+    transform: [{ scale: 0.97 }]
   },
   sunAvatar: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     alignItems: "center",
     justifyContent: "center"
   },
   sunRay: {
     position: "absolute",
-    width: 4,
-    height: 4,
-    left: 12,
-    top: 12,
-    borderRadius: 2
-  },
-  sunCore: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  sunEyesRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4
-  },
-  sunEye: {
     width: 3,
     height: 3,
-    borderRadius: 2
+    left: 13.5,
+    top: 13.5,
+    borderRadius: 1.5
   },
-  sunSmile: {
-    width: 9,
-    height: 5,
-    marginTop: 2,
-    borderBottomWidth: 1.5,
-    borderRadius: 6
+  sunCore: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.1)"
   },
   headerActions: {
     flexDirection: "row",
@@ -1566,8 +1545,9 @@ const styles = StyleSheet.create({
   heroCard: {
     gap: theme.spacing.md,
     overflow: "hidden",
-    borderColor: "rgba(94, 124, 255, 0.2)",
-    backgroundColor: "rgba(255, 255, 255, 0.96)"
+    borderColor: "rgba(95, 122, 255, 0.26)",
+    borderWidth: 1,
+    backgroundColor: "rgba(245, 251, 255, 0.98)"
   },
   heroGradient: {
     ...StyleSheet.absoluteFillObject
@@ -1575,7 +1555,7 @@ const styles = StyleSheet.create({
   heroSparkle: {
     position: "absolute",
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.85)"
+    backgroundColor: "rgba(255, 255, 255, 0.92)"
   },
   heroSparkleOne: {
     width: 10,
@@ -1605,7 +1585,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   heroKicker: {
-    color: theme.colors.primary,
+    color: "#4E64FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "700",
@@ -1800,8 +1780,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     overflow: "hidden",
-    borderColor: "rgba(94, 124, 255, 0.18)",
-    backgroundColor: "rgba(255, 255, 255, 0.96)"
+    borderColor: "rgba(94, 124, 255, 0.2)",
+    borderWidth: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.97)"
   },
   shareCardBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -1809,73 +1790,55 @@ const styles = StyleSheet.create({
   shareRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.md
+    gap: theme.spacing.sm
   },
   shareTextBlock: {
-    flex: 1
-  },
-  shareBadge: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.2)",
-    marginBottom: 6
-  },
-  shareBadgeText: {
-    color: theme.colors.primary,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.8
+    flex: 1,
+    paddingVertical: 2,
+    justifyContent: "center"
   },
   shareTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontWeight: "700"
   },
   shareSubtitle: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
-    marginTop: theme.spacing.xs
+    marginTop: 4,
+    lineHeight: 19
   },
   shareArrowPill: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    backgroundColor: "rgba(94, 124, 255, 0.16)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.26)"
+    borderColor: "rgba(94, 124, 255, 0.28)"
   },
   qrWrap: {
-    width: 84,
-    height: 84,
-    borderRadius: 20,
+    width: 76,
+    height: 76,
+    borderRadius: 18,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.24)",
+    borderColor: "rgba(94, 124, 255, 0.28)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#1B1E2B",
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2
   },
   qrImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 12
+    width: 62,
+    height: 62,
+    borderRadius: 10
   },
   qrOverlay: {
     flex: 1,
@@ -2684,52 +2647,27 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 248, 236, 0.95)",
+    backgroundColor: "#E5A53A",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.42)",
+    borderColor: "rgba(255, 255, 255, 0.32)",
     shadowColor: "#000000",
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 4,
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
     zIndex: 3,
-    overflow: "hidden"
+    overflow: "visible"
   },
   joinFabPressed: {
     transform: [{ scale: 0.97 }]
   },
-  joinFabIconBubble: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.78)",
-    borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.35)"
-  },
-  joinFabCode: {
+  joinFabText: {
     marginTop: 1,
-    color: "#C78217",
+    color: theme.colors.surface,
     fontFamily: theme.typography.fontFamily,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.8
-  },
-  joinFabSpark: {
-    position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.55)"
-  },
-  joinFabSparkA: {
-    top: 8,
-    right: 10
-  },
-  joinFabSparkB: {
-    bottom: 9,
-    left: 10
+    letterSpacing: 0.2
   },
   overlay: {
     flex: 1,
