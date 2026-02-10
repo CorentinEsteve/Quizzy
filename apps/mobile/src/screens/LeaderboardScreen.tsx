@@ -54,9 +54,10 @@ export function LeaderboardScreen({
 
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#EAF2FF", "#F4FBFF", "#FFFDF8"]} style={StyleSheet.absoluteFill} />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
+      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(94, 124, 255, 0.14)"
+    backgroundColor: "rgba(94, 124, 255, 0.16)"
   },
   backgroundOrbBottom: {
     position: "absolute",
@@ -402,7 +403,16 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(46, 196, 182, 0.11)"
+    backgroundColor: "rgba(46, 196, 182, 0.12)"
+  },
+  backgroundOrbWarm: {
+    position: "absolute",
+    top: 180,
+    right: -120,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(255, 204, 135, 0.12)"
   },
   container: {
     padding: theme.spacing.lg,

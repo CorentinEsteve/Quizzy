@@ -223,13 +223,8 @@ export function LobbyScreen({
     : dailyAnswered > 0
       ? t(locale, "dailyQuizContinue")
       : t(locale, "dailyQuizPlay");
-  const dailyProgressLabel = t(locale, "dailyQuizProgress", {
-    count: dailyAnswered,
-    total: dailyTotal
-  });
   const showDailyCard = Boolean(dailyQuiz) || dailyLoading;
   const handleDailyPress = dailyCompleted ? onOpenDailyResults : onOpenDailyQuiz;
-  const dailyProgressRatio = Math.min(dailyAnswered / Math.max(dailyTotal, 1), 1);
   const topGlobalEntries = (leaderboardGlobal?.entries ?? []).slice(0, 3);
   const topGlobalPreview = Array.from({ length: 3 }, (_, index) => topGlobalEntries[index] ?? null);
   const myGlobalRank = leaderboardGlobal?.me?.rank ?? null;
@@ -419,17 +414,25 @@ export function LobbyScreen({
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#F4F6FA", "#F9FAFE", "#FFFFFF"]}
+        colors={["#DCEBFF", "#E8FBF7", "#FFF2DE"]}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
-        colors={["rgba(94, 124, 255, 0.12)", "rgba(94, 124, 255, 0)"]}
+        colors={["rgba(94, 124, 255, 0.32)", "rgba(94, 124, 255, 0)"]}
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.7, y: 0.7 }}
         style={styles.backgroundSweep}
       />
+      <LinearGradient
+        colors={["rgba(255, 184, 92, 0.24)", "rgba(255, 184, 92, 0)"]}
+        start={{ x: 0.95, y: 0.05 }}
+        end={{ x: 0.25, y: 0.65 }}
+        style={styles.backgroundWarmSweep}
+      />
       <View style={styles.backgroundOrb} pointerEvents="none" />
       <View style={styles.backgroundOrbAccent} pointerEvents="none" />
+      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
+      <View style={styles.backgroundRibbon} pointerEvents="none" />
       <View style={styles.backgroundGlow} pointerEvents="none" />
       <View style={styles.backgroundGlass} pointerEvents="none" />
       <LinearGradient
@@ -894,15 +897,6 @@ export function LobbyScreen({
               <>
                 <View style={styles.dailyQuizHero}>
                   <Text style={styles.nextActionTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
-                  <Text style={styles.dailyQuizMeta}>{dailyProgressLabel}</Text>
-                </View>
-                <View style={styles.dailyQuizProgress}>
-                  <View
-                    style={[
-                      styles.dailyQuizProgressFill,
-                      { width: `${Math.min(dailyProgressRatio * 100, 100)}%` }
-                    ]}
-                  />
                 </View>
                 <View style={styles.dailyQuizButtons}>
                   <PrimaryButton
@@ -1465,7 +1459,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(94, 124, 255, 0.08)"
+    backgroundColor: "rgba(94, 124, 255, 0.18)"
   },
   backgroundOrbAccent: {
     position: "absolute",
@@ -1474,7 +1468,26 @@ const styles = StyleSheet.create({
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(46, 196, 182, 0.08)"
+    backgroundColor: "rgba(46, 196, 182, 0.16)"
+  },
+  backgroundOrbWarm: {
+    position: "absolute",
+    top: 120,
+    right: -120,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(255, 196, 112, 0.2)"
+  },
+  backgroundRibbon: {
+    position: "absolute",
+    top: 220,
+    left: -90,
+    width: 280,
+    height: 160,
+    borderRadius: 44,
+    transform: [{ rotate: "-16deg" }],
+    backgroundColor: "rgba(109, 174, 255, 0.12)"
   },
   backgroundGlow: {
     position: "absolute",
@@ -1483,9 +1496,12 @@ const styles = StyleSheet.create({
     width: 440,
     height: 440,
     borderRadius: 220,
-    backgroundColor: "rgba(255, 255, 255, 0.55)"
+    backgroundColor: "rgba(255, 255, 255, 0.56)"
   },
   backgroundSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundWarmSweep: {
     ...StyleSheet.absoluteFillObject
   },
   backgroundGlass: {
@@ -1569,7 +1585,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderColor: "rgba(95, 122, 255, 0.26)",
     borderWidth: 1,
-    backgroundColor: "rgba(245, 251, 255, 0.98)"
+    backgroundColor: "rgba(248, 252, 255, 0.98)",
+    shadowColor: "rgba(61, 79, 219, 0.34)",
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7
   },
   heroGradient: {
     ...StyleSheet.absoluteFillObject
@@ -1762,7 +1783,15 @@ const styles = StyleSheet.create({
     minHeight: 46
   },
   introCard: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.1)",
+    shadowColor: "rgba(18, 24, 40, 0.28)",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5
   },
   sectionTitle: {
     color: theme.colors.ink,
@@ -1804,7 +1833,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderColor: "rgba(94, 124, 255, 0.2)",
     borderWidth: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.97)"
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    shadowColor: "rgba(61, 79, 219, 0.26)",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5
   },
   shareCardBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2014,18 +2048,24 @@ const styles = StyleSheet.create({
   },
   recapCard: {
     gap: 6,
-    backgroundColor: "rgba(94, 124, 255, 0.12)",
-    borderColor: "rgba(94, 124, 255, 0.28)",
-    shadowColor: "rgba(94, 124, 255, 0.32)",
-    shadowOpacity: 0.18,
+    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    borderColor: "rgba(94, 124, 255, 0.34)",
+    shadowColor: "rgba(94, 124, 255, 0.36)",
+    shadowOpacity: 0.22,
     shadowRadius: 20,
-    elevation: 6
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7
   },
   nextActionCard: {
     borderColor: "rgba(94, 124, 255, 0.18)",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     padding: theme.spacing.md,
-    overflow: "hidden"
+    overflow: "hidden",
+    shadowColor: "rgba(61, 79, 219, 0.26)",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 6
   },
   nextActionBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2170,7 +2210,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(243, 183, 78, 0.22)",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     padding: theme.spacing.md,
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    shadowColor: "rgba(243, 183, 78, 0.26)",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5
   },
   dailyQuizCardCompact: {
     paddingVertical: theme.spacing.md,
@@ -2565,11 +2610,20 @@ const styles = StyleSheet.create({
   },
   sessionCard: {
     paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(15, 23, 42, 0.12)"
+    paddingHorizontal: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    shadowColor: "rgba(15, 23, 42, 0.18)",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2
   },
   sessionCardLast: {
-    borderBottomWidth: 0
+    marginBottom: 0
   },
   sessionHeader: {
     flexDirection: "row",

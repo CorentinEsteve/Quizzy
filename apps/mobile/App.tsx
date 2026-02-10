@@ -1645,6 +1645,23 @@ export default function App() {
           }
         >
         <StatusBar style="dark" />
+        <View style={styles.appBackgroundRoot} pointerEvents="none">
+          <LinearGradient
+            colors={["#EEF3FF", "#F6FAFF", "#FFFFFF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.appBackgroundSweep}
+          />
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.2)", "rgba(94, 124, 255, 0)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.7, y: 0.7 }}
+            style={styles.appBackgroundAurora}
+          />
+          <View style={styles.appOrbTop} />
+          <View style={styles.appOrbBottom} />
+          <View style={styles.appGlow} />
+        </View>
 
       {splashVisible ? (
         <SplashScreen locale={locale} />
@@ -1879,6 +1896,42 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#F4F6FB"
+  },
+  appBackgroundRoot: {
+    ...StyleSheet.absoluteFillObject
+  },
+  appBackgroundSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  appBackgroundAurora: {
+    ...StyleSheet.absoluteFillObject
+  },
+  appOrbTop: {
+    position: "absolute",
+    top: -220,
+    right: -150,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: "rgba(94, 124, 255, 0.12)"
+  },
+  appOrbBottom: {
+    position: "absolute",
+    bottom: -220,
+    left: -170,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: "rgba(46, 196, 182, 0.1)"
+  },
+  appGlow: {
+    position: "absolute",
+    top: "34%",
+    alignSelf: "center",
+    width: 460,
+    height: 460,
+    borderRadius: 230,
+    backgroundColor: "rgba(255, 255, 255, 0.52)"
   },
   gestureRoot: {
     flex: 1
