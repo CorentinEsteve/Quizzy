@@ -13,13 +13,13 @@ export function SplashScreen({ locale }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  const heroWidth = Math.min(width * 0.66, 248);
+  const heroWidth = Math.min(width * 0.68, 270);
   const heroHeight = heroWidth;
 
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#EEF2FF", "#F5F6F8", "#FFFFFF"]}
+        colors={["#F2F4FF", "#FFFFFF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -27,6 +27,9 @@ export function SplashScreen({ locale }: Props) {
       <View style={[styles.orb, styles.orbPrimary]} />
       <View style={[styles.orb, styles.orbSecondary]} />
       <View style={[styles.orb, styles.orbAccent]} />
+      <View style={[styles.dot, styles.dotPrimary]} />
+      <View style={[styles.dot, styles.dotSecondary]} />
+      <View style={[styles.dot, styles.dotAccent]} />
 
       <View style={[styles.content, { paddingTop: insets.top + theme.spacing.xl }]}>
         <View style={styles.headerWrap}>
@@ -34,19 +37,26 @@ export function SplashScreen({ locale }: Props) {
             <Text style={styles.badgeText}>{t(locale, "appName")}</Text>
           </View>
           <Text style={styles.title}>{t(locale, "appName")}</Text>
+          <Text style={styles.subtitle}>{t(locale, "onboardingSubtitle")}</Text>
         </View>
 
         <View style={[styles.hero, { width: heroWidth, height: heroHeight }]}>
+          <View style={styles.heroGlow} />
           <View style={styles.heroCard}>
-            <View style={styles.logoWrap}>
-              <Image source={require("../../assets/logo-big.png")} style={styles.logoImage} resizeMode="contain" />
-            </View>
+            <Image source={require("../../assets/logo-big.png")} style={styles.logoImage} resizeMode="cover" />
           </View>
         </View>
 
         <View style={styles.footer}>
-          <ActivityIndicator size="small" color={theme.colors.cta} />
-          <Text style={styles.loading}>{t(locale, "pleaseWait")}</Text>
+          <View style={styles.loadingPill}>
+            <ActivityIndicator size="small" color={theme.colors.cta} />
+            <Text style={styles.loading}>{t(locale, "pleaseWait")}</Text>
+          </View>
+          <View style={styles.sparkRow}>
+            <View style={[styles.spark, { backgroundColor: theme.colors.primary }]} />
+            <View style={[styles.spark, { backgroundColor: theme.colors.secondary }]} />
+            <View style={[styles.spark, { backgroundColor: theme.colors.accent }]} />
+          </View>
         </View>
       </View>
       <View style={{ paddingBottom: insets.bottom + theme.spacing.xl }} />
@@ -85,15 +95,40 @@ const styles = StyleSheet.create({
     left: 30,
     backgroundColor: "rgba(245, 195, 92, 0.14)"
   },
+  dot: {
+    position: "absolute",
+    borderRadius: 999
+  },
+  dotPrimary: {
+    width: 10,
+    height: 10,
+    top: 140,
+    right: 54,
+    backgroundColor: "rgba(94, 124, 255, 0.32)"
+  },
+  dotSecondary: {
+    width: 8,
+    height: 8,
+    top: 190,
+    right: 30,
+    backgroundColor: "rgba(46, 196, 182, 0.32)"
+  },
+  dotAccent: {
+    width: 12,
+    height: 12,
+    top: 90,
+    left: 28,
+    backgroundColor: "rgba(245, 195, 92, 0.35)"
+  },
   content: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.xl
   },
   headerWrap: {
     alignItems: "center",
-    gap: theme.spacing.md
+    gap: theme.spacing.sm
   },
   badge: {
     paddingVertical: theme.spacing.xs,
@@ -113,45 +148,75 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: 40,
+    fontSize: 42,
     fontWeight: "700",
     textAlign: "center"
   },
+  subtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    textAlign: "center",
+    lineHeight: 24,
+    maxWidth: 320
+  },
   hero: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center"
   },
-  heroCard: {
-    width: "100%",
-    paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.radius.xl,
-    backgroundColor: "rgba(255, 255, 255, 0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.9)"
+  heroGlow: {
+    position: "absolute",
+    width: "94%",
+    height: "94%",
+    borderRadius: 999,
+    backgroundColor: "rgba(94, 124, 255, 0.14)"
   },
-  logoWrap: {
+  heroCard: {
+    width: "82%",
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.65)",
+    borderWidth: 1,
+    borderColor: "rgba(229, 231, 236, 0.75)",
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "center",
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: theme.radius.xl,
-    overflow: "hidden",
-    backgroundColor: "#F6F7FB"
+    overflow: "hidden"
   },
   logoImage: {
-    width: "90%",
-    height: "90%"
+    width: "128%",
+    height: "128%",
+    transform: [{ scale: 1.08 }]
   },
   footer: {
     alignItems: "center",
     gap: theme.spacing.sm
+  },
+  loadingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(229, 231, 236, 0.85)"
   },
   loading: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textAlign: "center"
+  },
+  sparkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs
+  },
+  spark: {
+    width: 7,
+    height: 7,
+    borderRadius: 999
   }
 });

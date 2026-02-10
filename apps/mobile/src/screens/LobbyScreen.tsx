@@ -613,7 +613,9 @@ export function LobbyScreen({
               accessibilityRole="button"
               accessibilityLabel={locale === "fr" ? "Profil" : "Profile"}
             >
-              <FontAwesome name="user" size={15} color="#4B5C8E" />
+              <View style={styles.accountAvatar}>
+                <Text style={styles.accountAvatarText}>{initials(userName || "Player")}</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -1280,7 +1282,7 @@ export function LobbyScreen({
             style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
             onPress={openCreateDialog}
           >
-            <FontAwesome name="plus" size={14} color={theme.colors.surface} />
+            <FontAwesome name="bolt" size={14} color={theme.colors.surface} />
             <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
           </Pressable>
         </Animated.View>
@@ -1296,7 +1298,7 @@ export function LobbyScreen({
         accessibilityLabel={locale === "fr" ? "Rejoindre" : "Join"}
         accessibilityHint={t(locale, "joinInviteHint")}
       >
-        <FontAwesome name="bolt" size={16} color={theme.colors.surface} />
+        <FontAwesome name="plus" size={16} color={theme.colors.surface} />
         <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
       </Pressable>
 
@@ -1796,17 +1798,32 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(88, 114, 206, 0.34)",
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    shadowColor: "rgba(43, 58, 143, 0.24)",
-    shadowOpacity: 0.16,
-    shadowRadius: 9,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3
+    borderWidth: 0,
+    borderColor: "transparent",
+    backgroundColor: "transparent",
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0
   },
   accountButtonPressed: {
     transform: [{ scale: 0.97 }]
+  },
+  accountAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(94, 124, 255, 0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.25)"
+  },
+  accountAvatarText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 16,
+    fontWeight: "700"
   },
   headerActions: {
     flexDirection: "row",
