@@ -228,6 +228,26 @@ function seededShuffle(items, seedValue) {
   return list;
 }
 
+const answerByQuestionId = new Map(
+  quizzes
+    .flatMap((quiz) => quiz.questions)
+    .map((question) => [question.id, question.answer])
+);
+
+function hydrateQuizAnswers(quiz) {
+  if (!quiz || typeof quiz !== "object" || !Array.isArray(quiz.questions)) return quiz;
+  let patched = false;
+  const questions = quiz.questions.map((question) => {
+    if (!question || typeof question !== "object") return question;
+    if (typeof question.answer === "number") return question;
+    const answer = answerByQuestionId.get(question.id);
+    if (typeof answer !== "number") return question;
+    patched = true;
+    return { ...question, answer };
+  });
+  return patched ? { ...quiz, questions } : quiz;
+}
+
 async function getDailyQuiz(dateKey) {
   const { data } = await supabase
     .from("daily_quizzes")
@@ -237,12 +257,12 @@ async function getDailyQuiz(dateKey) {
   if (data?.quiz_json) {
     if (typeof data.quiz_json === "string") {
       try {
-        return JSON.parse(data.quiz_json);
+        return hydrateQuizAnswers(JSON.parse(data.quiz_json));
       } catch (_err) {
         // fall through to recreate
       }
     } else {
-      return data.quiz_json;
+      return hydrateQuizAnswers(data.quiz_json);
     }
   }
 
@@ -267,7 +287,7 @@ async function getDailyQuiz(dateKey) {
     created_at: nowIso()
   });
 
-  return dailyQuiz;
+  return hydrateQuizAnswers(dailyQuiz);
 }
 
 async function getDailyAnswers(dateKey, userId) {
@@ -947,7 +967,7 @@ app.get("/daily-quiz", authMiddleware, async (req, res) => {
 
   res.json({
     date: dateKey,
-    quiz: sanitizeQuiz(quiz),
+    quiz,
     answers,
     answeredCount,
     correctCount: counts.correct,

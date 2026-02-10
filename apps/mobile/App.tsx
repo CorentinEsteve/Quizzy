@@ -1223,7 +1223,7 @@ export default function App() {
   async function handleOpenDailyQuiz() {
     if (!token) return;
     setRoomError(null);
-    const data = dailyQuiz || (await refreshDailyQuiz());
+    const data = await refreshDailyQuiz();
     if (!data) return;
     setDailyStage("quiz");
   }
@@ -1839,18 +1839,33 @@ export default function App() {
 
       {!loading && token && user && !room && dailyStage === "quiz" && dailyQuiz && (
         <EdgeSwipeBack enabled onBack={handleCloseDaily}>
-          <DailyQuizScreen
-            quiz={dailyQuiz.quiz}
-            answers={dailyAnswersMap}
-            answeredCount={dailyQuiz.answeredCount}
-            totalQuestions={dailyQuiz.totalQuestions}
-            completed={dailyQuiz.completed}
-            submitting={dailySubmitting}
-            onAnswer={handleDailyAnswer}
-            onExit={handleCloseDaily}
-            onSeeResults={handleOpenDailyResults}
-            locale={locale}
-          />
+          <View style={styles.gameBackground}>
+            <LinearGradient
+              colors={["#EDF2FA", "#F9FBFF", "#FFFFFF"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <LinearGradient
+              colors={["rgba(94, 124, 255, 0.24)", "rgba(94, 124, 255, 0)"]}
+              start={{ x: 0.0, y: 0.0 }}
+              end={{ x: 0.7, y: 0.7 }}
+              style={styles.gameSweep}
+            />
+            <View style={styles.gameOrb} pointerEvents="none" />
+            <View style={styles.gameOrbAccent} pointerEvents="none" />
+            <View style={styles.gameFog} pointerEvents="none" />
+            <DailyQuizScreen
+              quiz={dailyQuiz.quiz}
+              answers={dailyAnswersMap}
+              answeredCount={dailyQuiz.answeredCount}
+              totalQuestions={dailyQuiz.totalQuestions}
+              completed={dailyQuiz.completed}
+              submitting={dailySubmitting}
+              onAnswer={handleDailyAnswer}
+              onExit={handleCloseDaily}
+              onSeeResults={handleOpenDailyResults}
+              locale={locale}
+            />
+          </View>
         </EdgeSwipeBack>
       )}
 
