@@ -70,44 +70,6 @@ type Props = {
 };
 
 const ALL_CATEGORY_ID = "all";
-const ACCOUNT_SUN_PALETTE = [
-  {
-    background: "rgba(255, 188, 66, 0.22)",
-    border: "rgba(245, 158, 11, 0.4)",
-    core: "#FBBF24",
-    ray: "#F59E0B",
-    face: "#7C2D12"
-  },
-  {
-    background: "rgba(251, 146, 60, 0.2)",
-    border: "rgba(234, 88, 12, 0.36)",
-    core: "#FB923C",
-    ray: "#F97316",
-    face: "#7C2D12"
-  },
-  {
-    background: "rgba(250, 204, 21, 0.22)",
-    border: "rgba(234, 179, 8, 0.4)",
-    core: "#FACC15",
-    ray: "#EAB308",
-    face: "#713F12"
-  },
-  {
-    background: "rgba(253, 186, 116, 0.24)",
-    border: "rgba(249, 115, 22, 0.34)",
-    core: "#FDBA74",
-    ray: "#FB923C",
-    face: "#7C2D12"
-  },
-  {
-    background: "rgba(255, 215, 128, 0.24)",
-    border: "rgba(245, 158, 11, 0.38)",
-    core: "#FDE68A",
-    ray: "#F59E0B",
-    face: "#78350F"
-  }
-];
-const SUN_RAY_COUNT = 10;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -174,11 +136,6 @@ export function LobbyScreen({
   );
   const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
   const qrPreviewSize = Math.min(width - theme.spacing.xl * 2 - 32, 360);
-  const accountSunStyle = useMemo(() => {
-    const paletteIndex = Math.abs(userId) % ACCOUNT_SUN_PALETTE.length;
-    return ACCOUNT_SUN_PALETTE[paletteIndex];
-  }, [userId]);
-
   const categories = useMemo(() => {
     const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
     quizzes.forEach((quiz) => {
@@ -519,17 +476,17 @@ export function LobbyScreen({
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#DCEBFF", "#E8FBF7", "#FFF2DE"]}
+        colors={["#F3F6FF", "#F8F2FF", "#FFF8EE"]}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
-        colors={["rgba(94, 124, 255, 0.32)", "rgba(94, 124, 255, 0)"]}
+        colors={["rgba(47, 70, 212, 0.34)", "rgba(47, 70, 212, 0)"]}
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.7, y: 0.7 }}
         style={styles.backgroundSweep}
       />
       <LinearGradient
-        colors={["rgba(255, 184, 92, 0.24)", "rgba(255, 184, 92, 0)"]}
+        colors={["rgba(204, 44, 138, 0.2)", "rgba(204, 44, 138, 0)"]}
         start={{ x: 0.95, y: 0.05 }}
         end={{ x: 0.25, y: 0.65 }}
         style={styles.backgroundWarmSweep}
@@ -541,7 +498,7 @@ export function LobbyScreen({
       <View style={styles.backgroundGlow} pointerEvents="none" />
       <View style={styles.backgroundGlass} pointerEvents="none" />
       <LinearGradient
-        colors={["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.7)", "rgba(255, 255, 255, 0.88)"]}
+        colors={["rgba(255, 255, 255, 0)", "rgba(248, 251, 255, 0.92)", "rgba(248, 251, 255, 0.98)"]}
         style={[styles.bottomFade, { paddingBottom: insets.bottom }]}
         pointerEvents="none"
       />
@@ -563,49 +520,24 @@ export function LobbyScreen({
             <Pressable
               style={({ pressed }) => [
                 styles.accountButton,
-                {
-                  backgroundColor: accountSunStyle.background,
-                  borderColor: accountSunStyle.border
-                },
                 pressed && styles.accountButtonPressed
               ]}
               onPress={onOpenAccount}
               accessibilityRole="button"
               accessibilityLabel={locale === "fr" ? "Profil" : "Profile"}
             >
-              <View style={styles.sunAvatar}>
-                {Array.from({ length: SUN_RAY_COUNT }).map((_, index) => {
-                  const angle = (Math.PI * 2 * index) / SUN_RAY_COUNT;
-                  const x = Math.cos(angle) * 11;
-                  const y = Math.sin(angle) * 11;
-                  return (
-                    <View
-                      key={`sun-ray-${index}`}
-                      style={[
-                        styles.sunRay,
-                        {
-                          backgroundColor: accountSunStyle.ray,
-                          transform: [{ translateX: x }, { translateY: y }]
-                        }
-                      ]}
-                    />
-                  );
-                })}
-                <View style={[styles.sunCore, { backgroundColor: accountSunStyle.core }]}>
-                  <FontAwesome name="user" size={12} color={accountSunStyle.face} />
-                </View>
-              </View>
+              <FontAwesome name="user" size={15} color="#4B5C8E" />
             </Pressable>
           </View>
         </View>
 
-        <GlassCard style={styles.heroCard} accent={theme.colors.secondary}>
+        <GlassCard style={styles.heroCard}>
           <LinearGradient
             colors={[
-              "rgba(78, 104, 255, 0.24)",
-              "rgba(72, 207, 193, 0.2)",
-              "rgba(255, 201, 128, 0.2)",
-              "rgba(255, 255, 255, 0.9)"
+              "#F3F7FF",
+              "#DEE6FF",
+              "#EAD8FF",
+              "#FFDCA5"
             ]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -631,7 +563,8 @@ export function LobbyScreen({
             >
               <View style={styles.mascotGlow} />
               <View style={styles.mascotBody}>
-                <View style={styles.mascotForehead} />
+                <View style={styles.mascotFaceMask} />
+                <View style={styles.mascotHeadShine} />
                 <View style={styles.mascotEyeRow}>
                   <View style={styles.mascotEye} />
                   <View style={styles.mascotEye} />
@@ -680,7 +613,7 @@ export function LobbyScreen({
             <Animated.View style={{ transform: [{ translateY: inviteNudge }, { scale: inviteGlow }] }}>
               <GlassCard style={[styles.introCard, styles.homeInviteCard]} accent={theme.colors.secondary}>
                 <LinearGradient
-                  colors={["rgba(94, 124, 255, 0.22)", "rgba(46, 196, 182, 0.2)", "rgba(255, 255, 255, 0.95)"]}
+                  colors={["rgba(63, 84, 220, 0.2)", "rgba(204, 44, 138, 0.13)", "rgba(255, 255, 255, 0.98)"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.homeInviteBackdrop}
@@ -769,7 +702,7 @@ export function LobbyScreen({
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
             <LinearGradient
-              colors={["rgba(94, 124, 255, 0.18)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.86)"]}
+              colors={["rgba(63, 84, 220, 0.18)", "rgba(204, 44, 138, 0.1)", "rgba(255, 255, 255, 0.98)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.nextActionBackdrop}
@@ -977,7 +910,7 @@ export function LobbyScreen({
 
         <GlassCard style={styles.shareCard}>
           <LinearGradient
-            colors={["rgba(94, 124, 255, 0.16)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.82)"]}
+            colors={["rgba(63, 84, 220, 0.14)", "rgba(245, 138, 43, 0.1)", "rgba(255, 255, 255, 0.97)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.shareCardBackdrop}
@@ -988,7 +921,7 @@ export function LobbyScreen({
               <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
             </View>
             <View style={styles.shareArrowPill}>
-              <FontAwesome name="arrow-right" size={13} color={theme.colors.primary} />
+              <FontAwesome name="arrow-right" size={11} color="rgba(71, 85, 105, 0.72)" />
             </View>
             <Pressable
               style={styles.qrWrap}
@@ -1617,7 +1550,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(94, 124, 255, 0.18)"
+    backgroundColor: "rgba(56, 78, 214, 0.26)"
   },
   backgroundOrbAccent: {
     position: "absolute",
@@ -1626,7 +1559,7 @@ const styles = StyleSheet.create({
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(46, 196, 182, 0.16)"
+    backgroundColor: "rgba(155, 68, 210, 0.2)"
   },
   backgroundOrbWarm: {
     position: "absolute",
@@ -1635,7 +1568,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(255, 196, 112, 0.2)"
+    backgroundColor: "rgba(245, 138, 43, 0.2)"
   },
   backgroundRibbon: {
     position: "absolute",
@@ -1645,7 +1578,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 44,
     transform: [{ rotate: "-16deg" }],
-    backgroundColor: "rgba(109, 174, 255, 0.12)"
+    backgroundColor: "rgba(92, 70, 216, 0.16)"
   },
   backgroundGlow: {
     position: "absolute",
@@ -1654,7 +1587,7 @@ const styles = StyleSheet.create({
     width: 440,
     height: 440,
     borderRadius: 220,
-    backgroundColor: "rgba(255, 255, 255, 0.56)"
+    backgroundColor: "rgba(255, 255, 255, 0.6)"
   },
   backgroundSweep: {
     ...StyleSheet.absoluteFillObject
@@ -1669,10 +1602,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 60,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
+    backgroundColor: "rgba(241, 238, 255, 0.66)",
     transform: [{ rotate: "12deg" }],
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.6)"
+    borderColor: "rgba(223, 228, 255, 0.95)"
   },
   container: {
     padding: theme.spacing.lg,
@@ -1689,38 +1622,17 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.4,
-    shadowColor: "#000000",
+    borderWidth: 1,
+    borderColor: "rgba(112, 94, 219, 0.36)",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    shadowColor: "rgba(50, 39, 129, 0.24)",
     shadowOpacity: 0.16,
-    shadowRadius: 10,
+    shadowRadius: 9,
     shadowOffset: { width: 0, height: 5 },
     elevation: 3
   },
   accountButtonPressed: {
     transform: [{ scale: 0.97 }]
-  },
-  sunAvatar: {
-    width: 30,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  sunRay: {
-    position: "absolute",
-    width: 3,
-    height: 3,
-    left: 13.5,
-    top: 13.5,
-    borderRadius: 1.5
-  },
-  sunCore: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.1)"
   },
   headerActions: {
     flexDirection: "row",
@@ -1728,27 +1640,31 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm
   },
   title: {
-    color: theme.colors.ink,
+    color: "#12193D",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(45, 55, 101, 0.8)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
   heroCard: {
     gap: theme.spacing.md,
     overflow: "hidden",
-    borderColor: "rgba(95, 122, 255, 0.26)",
+    borderColor: "rgba(89, 92, 208, 0.46)",
     borderWidth: 1,
-    backgroundColor: "rgba(248, 252, 255, 0.98)",
-    shadowColor: "rgba(61, 79, 219, 0.34)",
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    backgroundColor: "rgba(250, 251, 255, 0.98)",
+    shadowColor: "rgba(59, 41, 161, 0.34)",
     shadowOpacity: 0.24,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 9
   },
   heroGradient: {
     ...StyleSheet.absoluteFillObject
@@ -1756,7 +1672,7 @@ const styles = StyleSheet.create({
   heroSparkle: {
     position: "absolute",
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.92)"
+    backgroundColor: "rgba(255, 245, 222, 0.88)"
   },
   heroSparkleOne: {
     width: 10,
@@ -1786,7 +1702,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   heroKicker: {
-    color: "#4E64FF",
+    color: "#A65B00",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "700",
@@ -1794,14 +1710,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2
   },
   heroTitle: {
-    color: theme.colors.ink,
+    color: "#111C48",
     fontFamily: theme.typography.fontFamily,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 31
   },
   heroBody: {
-    color: theme.colors.muted,
+    color: "rgba(47, 60, 103, 0.88)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     lineHeight: 19
@@ -1817,26 +1733,35 @@ const styles = StyleSheet.create({
     width: 82,
     height: 82,
     borderRadius: 41,
-    backgroundColor: "rgba(94, 124, 255, 0.16)"
+    backgroundColor: "rgba(88, 62, 210, 0.24)"
   },
   mascotBody: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: "#F38B3D",
+    backgroundColor: "#EE9647",
     borderWidth: 1,
-    borderColor: "rgba(169, 87, 30, 0.5)",
+    borderColor: "rgba(169, 87, 30, 0.42)",
     alignItems: "center",
     justifyContent: "flex-start",
     zIndex: 2
   },
-  mascotForehead: {
+  mascotFaceMask: {
     position: "absolute",
-    top: 6,
-    width: 22,
-    height: 10,
-    borderRadius: 7,
-    backgroundColor: "rgba(255, 215, 186, 0.92)"
+    top: 8,
+    width: 30,
+    height: 18,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 230, 204, 0.94)"
+  },
+  mascotHeadShine: {
+    position: "absolute",
+    top: 7,
+    right: 13,
+    width: 9,
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 248, 238, 0.92)"
   },
   mascotEarLeft: {
     position: "absolute",
@@ -1846,9 +1771,9 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 4,
     transform: [{ rotate: "-34deg" }],
-    backgroundColor: "#F38B3D",
+    backgroundColor: "#EE9647",
     borderWidth: 1,
-    borderColor: "rgba(169, 87, 30, 0.6)"
+    borderColor: "rgba(169, 87, 30, 0.5)"
   },
   mascotEarRight: {
     position: "absolute",
@@ -1858,9 +1783,9 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 4,
     transform: [{ rotate: "34deg" }],
-    backgroundColor: "#F38B3D",
+    backgroundColor: "#EE9647",
     borderWidth: 1,
-    borderColor: "rgba(169, 87, 30, 0.6)"
+    borderColor: "rgba(169, 87, 30, 0.5)"
   },
   mascotEarInner: {
     position: "absolute",
@@ -1868,7 +1793,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: "rgba(252, 192, 177, 0.92)",
+    backgroundColor: "rgba(253, 204, 189, 0.95)",
     zIndex: 3
   },
   mascotEarInnerLeft: {
@@ -1880,8 +1805,8 @@ const styles = StyleSheet.create({
   mascotEyeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    marginTop: 15
+    gap: 10,
+    marginTop: 17
   },
   mascotEye: {
     width: 7,
@@ -1897,7 +1822,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 2,
     borderRadius: 12,
-    backgroundColor: "#FFF7E8"
+    backgroundColor: "#FFF9ED"
   },
   mascotNose: {
     width: 0,
@@ -1934,20 +1859,29 @@ const styles = StyleSheet.create({
   },
   heroActionPrimary: {
     width: "100%",
-    minHeight: 46
+    minHeight: 46,
+    backgroundColor: "#3149D8",
+    shadowColor: "rgba(53, 73, 194, 0.46)",
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 5
   },
   heroActionSecondary: {
     width: "100%",
-    minHeight: 46
+    minHeight: 46,
+    backgroundColor: "rgba(255, 249, 236, 0.72)",
+    borderColor: "rgba(225, 140, 40, 0.36)",
+    borderWidth: 1
   },
   introCard: {
     gap: theme.spacing.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    backgroundColor: "rgba(252, 254, 255, 0.98)",
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.1)",
-    shadowColor: "rgba(18, 24, 40, 0.28)",
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
+    borderColor: "rgba(90, 98, 206, 0.18)",
+    shadowColor: "rgba(47, 45, 119, 0.2)",
+    shadowOpacity: 0.14,
+    shadowRadius: 15,
     shadowOffset: { width: 0, height: 8 },
     elevation: 5
   },
@@ -1972,13 +1906,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(11, 14, 20, 0.08)"
   },
   sectionIconPrimary: {
-    backgroundColor: "rgba(94, 124, 255, 0.12)"
+    backgroundColor: "rgba(72, 95, 224, 0.16)"
   },
   sectionIconAccent: {
-    backgroundColor: "rgba(243, 183, 78, 0.18)"
+    backgroundColor: "rgba(245, 138, 43, 0.22)"
   },
   sectionIconMuted: {
-    backgroundColor: "rgba(11, 14, 20, 0.06)"
+    backgroundColor: "rgba(117, 71, 206, 0.12)"
   },
   sectionSubtitle: {
     color: theme.colors.muted,
@@ -1989,11 +1923,11 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     overflow: "hidden",
-    borderColor: "rgba(94, 124, 255, 0.2)",
+    borderColor: "rgba(90, 98, 206, 0.24)",
     borderWidth: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.98)",
-    shadowColor: "rgba(61, 79, 219, 0.26)",
-    shadowOpacity: 0.16,
+    backgroundColor: "rgba(252, 254, 255, 0.98)",
+    shadowColor: "rgba(55, 48, 129, 0.2)",
+    shadowOpacity: 0.14,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 5
@@ -2012,27 +1946,27 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   shareTitle: {
-    color: theme.colors.ink,
+    color: "#151D44",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "700"
   },
   shareSubtitle: {
-    color: theme.colors.muted,
+    color: "rgba(50, 57, 94, 0.8)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     marginTop: 4,
     lineHeight: 19
   },
   shareArrowPill: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(94, 124, 255, 0.16)",
+    backgroundColor: "rgba(233, 231, 255, 0.82)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.28)"
+    borderColor: "rgba(64, 68, 162, 0.26)"
   },
   qrWrap: {
     width: 76,
@@ -2040,7 +1974,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.28)",
+    borderColor: "rgba(35, 61, 118, 0.28)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#1B1E2B",
@@ -2112,7 +2046,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   recapTitleText: {
-    color: theme.colors.muted,
+    color: "rgba(44, 52, 93, 0.8)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textTransform: "uppercase",
@@ -2137,9 +2071,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 5,
-    backgroundColor: "rgba(255, 255, 255, 0.58)",
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15, 23, 42, 0.1)"
+    borderColor: "rgba(65, 72, 127, 0.16)"
   },
   recapTopBadge: {
     width: 18,
@@ -2164,7 +2098,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(255, 255, 255, 0.42)",
+    backgroundColor: "rgba(255, 255, 255, 0.62)",
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 6
@@ -2179,9 +2113,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    backgroundColor: "rgba(71, 83, 202, 0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.28)"
+    borderColor: "rgba(71, 83, 202, 0.32)"
   },
   recapYouRank: {
     color: theme.colors.primary,
@@ -2206,10 +2140,10 @@ const styles = StyleSheet.create({
   },
   recapCard: {
     gap: 6,
-    backgroundColor: "rgba(94, 124, 255, 0.2)",
-    borderColor: "rgba(94, 124, 255, 0.4)",
-    shadowColor: "rgba(94, 124, 255, 0.36)",
-    shadowOpacity: 0.22,
+    backgroundColor: "rgba(123, 115, 224, 0.28)",
+    borderColor: "rgba(92, 100, 214, 0.36)",
+    shadowColor: "rgba(52, 48, 140, 0.3)",
+    shadowOpacity: 0.2,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 7
@@ -2217,8 +2151,8 @@ const styles = StyleSheet.create({
   homeInviteCard: {
     overflow: "hidden",
     gap: 6,
-    borderColor: "rgba(94, 124, 255, 0.2)",
-    backgroundColor: "rgba(245, 251, 255, 0.95)"
+    borderColor: "rgba(93, 103, 214, 0.28)",
+    backgroundColor: "rgba(252, 254, 255, 0.98)"
   },
   homeInviteBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2237,7 +2171,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.78)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.24)"
+    borderColor: "rgba(74, 79, 169, 0.26)"
   },
   homeInvitePingWrap: {
     width: 10,
@@ -2312,7 +2246,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.7)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.3)"
+    borderColor: "rgba(74, 79, 169, 0.3)"
   },
   homeInviteCodeText: {
     color: theme.colors.primary,
@@ -2329,9 +2263,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    backgroundColor: "rgba(80, 87, 189, 0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.28)"
+    borderColor: "rgba(80, 87, 189, 0.34)"
   },
   homeInviteActionText: {
     color: theme.colors.primary,
@@ -2340,12 +2274,12 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   nextActionCard: {
-    borderColor: "rgba(94, 124, 255, 0.18)",
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderColor: "rgba(90, 98, 206, 0.24)",
+    backgroundColor: "rgba(252, 254, 255, 0.98)",
     padding: theme.spacing.md,
     overflow: "hidden",
-    shadowColor: "rgba(61, 79, 219, 0.26)",
-    shadowOpacity: 0.18,
+    shadowColor: "rgba(52, 49, 126, 0.2)",
+    shadowOpacity: 0.14,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 9 },
     elevation: 6
@@ -2378,7 +2312,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.75)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.2)"
+    borderColor: "rgba(80, 87, 189, 0.24)"
   },
   nextActionHeaderBadgeText: {
     fontSize: 12
@@ -2389,9 +2323,9 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    backgroundColor: "rgba(80, 87, 189, 0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.25)"
+    borderColor: "rgba(80, 87, 189, 0.28)"
   },
   nextActionMiniAvatarText: {
     color: theme.colors.ink,
@@ -2490,12 +2424,12 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   dailyQuizCard: {
-    borderColor: "rgba(243, 183, 78, 0.22)",
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderColor: "rgba(224, 137, 43, 0.34)",
+    backgroundColor: "rgba(255, 248, 236, 0.92)",
     padding: theme.spacing.md,
     gap: theme.spacing.xs,
-    shadowColor: "rgba(243, 183, 78, 0.26)",
-    shadowOpacity: 0.16,
+    shadowColor: "rgba(163, 93, 36, 0.24)",
+    shadowOpacity: 0.15,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 5
@@ -2520,9 +2454,9 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    backgroundColor: "rgba(245, 138, 43, 0.22)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(243, 183, 78, 0.35)"
+    borderColor: "rgba(224, 137, 43, 0.4)"
   },
   dailyQuizLabel: {
     color: theme.colors.muted,
@@ -2612,9 +2546,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(243, 183, 78, 0.18)",
+    backgroundColor: "rgba(186, 140, 58, 0.2)",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.4)",
+    borderColor: "rgba(186, 140, 58, 0.42)",
     minWidth: 96,
     justifyContent: "center"
   },
@@ -2650,7 +2584,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(235, 87, 87, 0.3)"
   },
   recapPillTie: {
-    borderColor: "rgba(243, 183, 78, 0.3)"
+    borderColor: "rgba(186, 140, 58, 0.34)"
   },
   recapPillValue: {
     color: theme.colors.ink,
@@ -2707,9 +2641,9 @@ const styles = StyleSheet.create({
     marginRight: 6
   },
   selectedPillActive: {
-    backgroundColor: "rgba(94, 124, 255, 0.18)",
+    backgroundColor: "rgba(35, 61, 118, 0.18)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(94, 124, 255, 0.35)"
+    borderColor: "rgba(35, 61, 118, 0.35)"
   },
   selectedPillHidden: {
     opacity: 0
@@ -2762,9 +2696,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.9)"
   },
   choiceCardSelected: {
-    borderColor: "rgba(94, 124, 255, 0.4)",
-    backgroundColor: "rgba(94, 124, 255, 0.08)",
-    shadowColor: "rgba(94, 124, 255, 0.25)",
+    borderColor: "rgba(35, 61, 118, 0.42)",
+    backgroundColor: "rgba(35, 61, 118, 0.1)",
+    shadowColor: "rgba(35, 61, 118, 0.28)",
     shadowOpacity: 0.22,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -2942,12 +2876,12 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   statusChipOngoing: {
-    backgroundColor: "rgba(94, 124, 255, 0.12)",
-    borderColor: "rgba(94, 124, 255, 0.35)"
+    backgroundColor: "rgba(35, 61, 118, 0.14)",
+    borderColor: "rgba(35, 61, 118, 0.34)"
   },
   statusChipTurn: {
-    backgroundColor: "rgba(46, 196, 182, 0.16)",
-    borderColor: "rgba(46, 196, 182, 0.4)"
+    backgroundColor: "rgba(33, 98, 93, 0.16)",
+    borderColor: "rgba(33, 98, 93, 0.34)"
   },
   statusChipWait: {
     backgroundColor: "rgba(11, 14, 20, 0.04)",
@@ -2962,8 +2896,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(235, 87, 87, 0.35)"
   },
   statusChipRematch: {
-    backgroundColor: "rgba(243, 183, 78, 0.18)",
-    borderColor: "rgba(243, 183, 78, 0.45)"
+    backgroundColor: "rgba(186, 140, 58, 0.2)",
+    borderColor: "rgba(186, 140, 58, 0.4)"
   },
   statusChipRound: {
     width: 26,
@@ -2984,8 +2918,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(11, 14, 20, 0.12)"
   },
   ctaPrimary: {
-    backgroundColor: "rgba(61, 79, 219, 0.14)",
-    borderColor: "rgba(61, 79, 219, 0.4)"
+    backgroundColor: "rgba(35, 61, 118, 0.16)",
+    borderColor: "rgba(35, 61, 118, 0.36)"
   },
   ctaDisabled: {
     backgroundColor: "rgba(11, 14, 20, 0.04)",
@@ -3055,9 +2989,9 @@ const styles = StyleSheet.create({
     width: 180,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    backgroundColor: "rgba(35, 61, 118, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.32)"
+    borderColor: "rgba(35, 61, 118, 0.34)"
   },
   fabLabel: {
     color: theme.colors.surface,
@@ -3073,10 +3007,10 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#E5A53A",
+    backgroundColor: theme.colors.secondary,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.32)",
-    shadowColor: "#000000",
+    borderColor: "rgba(46, 196, 182, 0.38)",
+    shadowColor: "rgba(15, 118, 110, 0.5)",
     shadowOpacity: 0.28,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },

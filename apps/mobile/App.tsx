@@ -764,6 +764,11 @@ export default function App() {
   }, [token, user, panel, hasSeenOnboarding]);
 
   useEffect(() => {
+    if (!token || !user || !hasSeenOnboarding) return;
+    refreshLeaderboards(false);
+  }, [token, user?.id, user?.country, hasSeenOnboarding]);
+
+  useEffect(() => {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || room || recapRoom) return;
     const interval = setInterval(() => refreshMyRooms(), 15000);
     return () => clearInterval(interval);
@@ -834,6 +839,25 @@ export default function App() {
       .then(setStats)
       .catch((err) => {
         handleAuthFailure(err);
+      });
+  }
+
+  function refreshLeaderboards(showLoading = false) {
+    if (!token || !user) return Promise.resolve();
+    if (showLoading) setLeaderboardLoading(true);
+    return Promise.all([
+      fetchLeaderboard(token, "global"),
+      fetchLeaderboard(token, "country", user.country)
+    ])
+      .then(([globalData, localData]) => {
+        setLeaderboardGlobal(globalData);
+        setLeaderboardLocal(localData);
+      })
+      .catch((err) => {
+        handleAuthFailure(err);
+      })
+      .finally(() => {
+        if (showLoading) setLeaderboardLoading(false);
       });
   }
 
@@ -988,17 +1012,8 @@ export default function App() {
 
   useEffect(() => {
     if (!token || !user || panel !== "leaderboard") return;
-    setLeaderboardLoading(true);
+    refreshLeaderboards(true);
     setBadgesLoading(true);
-    Promise.all([fetchLeaderboard(token, "global"), fetchLeaderboard(token, "country", user.country)])
-      .then(([globalData, localData]) => {
-        setLeaderboardGlobal(globalData);
-        setLeaderboardLocal(localData);
-      })
-      .catch((err) => {
-        handleAuthFailure(err);
-      })
-      .finally(() => setLeaderboardLoading(false));
     fetchBadges(token)
       .then(setBadges)
       .catch((err) => {
