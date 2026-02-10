@@ -76,9 +76,19 @@ export function DailyQuizScreen({
   if (!question) {
     return (
       <View style={styles.screen}>
+        <LinearGradient
+          colors={["#FFF9EE", "#FFF4DA", "#FFFAF2"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.dailyOrbTop} pointerEvents="none" />
+        <View style={styles.dailyOrbBottom} pointerEvents="none" />
         <View style={[styles.container, { paddingTop: theme.spacing.lg + insets.top }]}>
           <GlassCard style={styles.statusCard}>
-            <Text style={styles.statusTitle}>{t(locale, "pleaseWait")}</Text>
+            <View style={styles.statusHeader}>
+              <ActivityIndicator size="small" color={theme.colors.reward} />
+            </View>
           </GlassCard>
         </View>
       </View>
@@ -111,11 +121,19 @@ export function DailyQuizScreen({
   return (
     <View style={styles.screen}>
       <LinearGradient
-        colors={["#FFFFFF", "#F1F3F8"]}
+        colors={["#FFF9EE", "#FFF4DA", "#FFFAF2"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+      <LinearGradient
+        colors={["rgba(243, 183, 78, 0.28)", "rgba(243, 183, 78, 0)"]}
+        start={{ x: 0.05, y: 0.0 }}
+        end={{ x: 0.85, y: 0.7 }}
+        style={styles.dailySweep}
+      />
+      <View style={styles.dailyOrbTop} pointerEvents="none" />
+      <View style={styles.dailyOrbBottom} pointerEvents="none" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -132,7 +150,7 @@ export function DailyQuizScreen({
             <Text style={styles.title}>{quiz.title}</Text>
             <View style={styles.headerMetaRow}>
               <View style={styles.modeChip}>
-                <FontAwesome name="calendar" size={10} color={theme.colors.primary} />
+                <FontAwesome name="calendar" size={10} color="#9C6514" />
                 <Text style={styles.modeChipText}>{t(locale, "dailyQuizTitle")}</Text>
               </View>
               <Text numberOfLines={1} style={styles.subtitle}>
@@ -187,8 +205,7 @@ export function DailyQuizScreen({
 
         {submitting ? (
           <View style={styles.submittingRow}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-            <Text style={styles.submittingText}>{t(locale, "pleaseWait")}</Text>
+            <ActivityIndicator size="small" color={theme.colors.reward} />
           </View>
         ) : null}
       </ScrollView>
@@ -220,11 +237,33 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1
   },
+  dailySweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  dailyOrbTop: {
+    position: "absolute",
+    top: -220,
+    right: -160,
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: "rgba(243, 183, 78, 0.2)"
+  },
+  dailyOrbBottom: {
+    position: "absolute",
+    bottom: -230,
+    left: -190,
+    width: 410,
+    height: 410,
+    borderRadius: 205,
+    backgroundColor: "rgba(223, 154, 31, 0.14)"
+  },
   container: {
     flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg
+    paddingBottom: theme.spacing.lg,
+    backgroundColor: "transparent"
   },
   header: {
     flexDirection: "row",
@@ -248,12 +287,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.26)"
+    borderColor: "rgba(223, 154, 31, 0.38)"
   },
   modeChipText: {
-    color: theme.colors.primary,
+    color: "#9C6514",
     fontFamily: theme.typography.fontFamily,
     fontSize: 11,
     fontWeight: "700"
@@ -266,9 +305,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.86)",
+    backgroundColor: "rgba(255, 248, 231, 0.94)",
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)"
+    borderColor: "rgba(223, 154, 31, 0.28)"
   },
   progressPillText: {
     color: theme.colors.ink,
@@ -277,22 +316,24 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   title: {
-    color: theme.colors.ink,
+    color: "#211507",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(65, 42, 16, 0.72)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     flexShrink: 1
   },
   card: {
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(255, 252, 244, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.26)"
   },
   prompt: {
-    color: theme.colors.ink,
+    color: "#1F1306",
     fontFamily: theme.typography.fontFamily,
     fontSize: 28,
     fontWeight: "700",
@@ -307,22 +348,24 @@ const styles = StyleSheet.create({
   },
   optionFeedback: {
     borderWidth: 1,
-    shadowColor: "rgba(11, 14, 20, 0.18)",
+    shadowColor: "rgba(108, 76, 24, 0.22)",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 1,
     shadowRadius: 10,
     elevation: 2
   },
   optionCorrect: {
-    backgroundColor: "rgba(43, 158, 102, 0.12)",
-    borderColor: "rgba(43, 158, 102, 0.35)"
+    backgroundColor: "rgba(70, 169, 114, 0.16)",
+    borderColor: "rgba(43, 158, 102, 0.42)"
   },
   optionIncorrect: {
-    backgroundColor: "rgba(235, 87, 87, 0.12)",
-    borderColor: "rgba(235, 87, 87, 0.35)"
+    backgroundColor: "rgba(235, 87, 87, 0.14)",
+    borderColor: "rgba(235, 87, 87, 0.42)"
   },
   statusCard: {
-    marginTop: theme.spacing.xs
+    marginTop: theme.spacing.xs,
+    backgroundColor: "rgba(255, 252, 244, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.26)"
   },
   statusHeader: {
     flexDirection: "row",
@@ -334,13 +377,13 @@ const styles = StyleSheet.create({
     gap: 2
   },
   statusTitle: {
-    color: theme.colors.ink,
+    color: "#211507",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     fontWeight: "600"
   },
   statusBody: {
-    color: theme.colors.muted,
+    color: "rgba(65, 42, 16, 0.72)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -348,12 +391,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8
-  },
-  submittingText: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    gap: 8,
+    justifyContent: "center"
   },
   footer: {
     position: "absolute",
@@ -364,8 +403,8 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: "rgba(245, 246, 248, 0.84)"
+    borderTopColor: "rgba(223, 154, 31, 0.2)",
+    backgroundColor: "rgba(255, 248, 231, 0.86)"
   },
   footerButton: {
     flex: 1

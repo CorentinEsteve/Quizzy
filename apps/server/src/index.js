@@ -1030,6 +1030,8 @@ app.get("/daily-quiz/results", authMiddleware, async (req, res) => {
 
   const quiz = await getDailyQuiz(dateKey);
   const totalQuestions = quiz?.questions.length ?? 0;
+  const myAnswers = await getDailyAnswers(dateKey, req.user.id);
+  const myAnswerMap = new Map(myAnswers.map((item) => [item.questionId, item.answerIndex]));
   const { data: allAnswers } = await supabase
     .from("daily_answers")
     .select("user_id, question_id, answer_index")
@@ -1068,7 +1070,16 @@ app.get("/daily-quiz/results", authMiddleware, async (req, res) => {
     })
     .filter((friend) => friend.answered > 0);
 
-  res.json({ ...baseResults, friends });
+  const questions = (quiz?.questions || []).map((question) => ({
+    id: question.id,
+    prompt: question.prompt,
+    options: question.options,
+    answer: typeof question.answer === "number" ? question.answer : null,
+    myAnswer:
+      typeof myAnswerMap.get(question.id) === "number" ? myAnswerMap.get(question.id) : null
+  }));
+
+  res.json({ ...baseResults, friends, questions });
 });
 
 app.get("/daily-quiz/history", authMiddleware, async (req, res) => {

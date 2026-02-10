@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,15 +26,53 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
   const percentile = results.my.percentile ?? 0;
   const historyRows = history.filter((item) => item.date !== results.date).slice(0, 5);
 
+  const reviewItems = useMemo(() => {
+    if (!results.questions?.length) return [];
+    return results.questions.map((question) => {
+      const prompt = question.prompt?.[locale] ?? question.prompt?.en ?? "";
+      const options = question.options?.[locale] ?? question.options?.en ?? [];
+      const correctText =
+        typeof question.answer === "number"
+          ? options[question.answer] ?? t(locale, "noAnswer")
+          : t(locale, "noAnswer");
+      const myAnswerText =
+        typeof question.myAnswer === "number"
+          ? options[question.myAnswer] ?? t(locale, "noAnswer")
+          : t(locale, "noAnswer");
+      const isCorrect =
+        typeof question.answer === "number" &&
+        typeof question.myAnswer === "number" &&
+        question.answer === question.myAnswer;
+      return {
+        id: question.id,
+        prompt,
+        correctText,
+        myAnswerText,
+        isCorrect
+      };
+    });
+  }, [results.questions, locale]);
+
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#FFF7E6", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#FFF4DA", "#FFF9EF", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={["rgba(243, 183, 78, 0.24)", "rgba(243, 183, 78, 0)"]}
+        start={{ x: 0.1, y: 0.0 }}
+        end={{ x: 0.8, y: 0.7 }}
+        style={styles.backgroundSweep}
+      />
+      <View style={styles.backgroundOrbTop} pointerEvents="none" />
+      <View style={styles.backgroundOrbBottom} pointerEvents="none" />
+      <View style={styles.backgroundGlow} pointerEvents="none" />
+
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: theme.spacing.lg + insets.bottom }
+          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + insets.bottom }
         ]}
         showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.header}>
           <Pressable
@@ -49,6 +87,9 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "dailyQuizResultsTitle")}</Text>
             <Text style={styles.title}>{dateLabel}</Text>
+          </View>
+          <View style={styles.awardDot}>
+            <Text style={styles.awardDotEmoji}>✨</Text>
           </View>
         </View>
 
@@ -158,10 +199,10 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
             <Text style={styles.sectionTitle}>{t(locale, "dailyQuizHistoryTitle")}</Text>
             <Text style={styles.sectionMeta}>{t(locale, "dailyQuizHistorySubtitle")}</Text>
             {historyRows.map((item) => {
-              const dateText = new Date(`${item.date}T00:00:00Z`).toLocaleDateString(
-                localeTag,
-                { month: "short", day: "numeric" }
-              );
+              const dateText = new Date(`${item.date}T00:00:00Z`).toLocaleDateString(localeTag, {
+                month: "short",
+                day: "numeric"
+              });
               return (
                 <View key={item.date} style={styles.historyRow}>
                   <View style={styles.historyDateBadge}>
@@ -169,9 +210,7 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
                   </View>
                   <View style={styles.historyMeta}>
                     <Text style={styles.historyHeadline}>
-                      {t(locale, "dailyQuizBetterThan", {
-                        percent: item.percentile ?? 0
-                      })}
+                      {t(locale, "dailyQuizBetterThan", { percent: item.percentile ?? 0 })}
                     </Text>
                     <Text style={styles.historySub}>
                       {t(locale, "dailyQuizScoreLabel", {
@@ -185,6 +224,43 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
             })}
           </GlassCard>
         ) : null}
+
+        {reviewItems.length > 0 ? (
+          <GlassCard style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.reviewTitle}>{t(locale, "answerReviewTitle")}</Text>
+              <Text style={styles.reviewSubtitle}>{t(locale, "answerReviewSubtitle")}</Text>
+            </View>
+            <View style={styles.reviewList}>
+              {reviewItems.map((item, index) => (
+                <View key={item.id} style={styles.questionItem}>
+                  <View style={styles.questionHeader}>
+                    <Text style={styles.questionIndex}>{index + 1}.</Text>
+                    <Text style={styles.questionPrompt}>{item.prompt}</Text>
+                  </View>
+                  <View style={styles.answerRow}>
+                    <Text style={styles.answerLabel}>{t(locale, "correctAnswer")}</Text>
+                    <View style={styles.correctPill}>
+                      <Text style={styles.correctPillText}>{item.correctText}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.answerRow}>
+                    <Text style={styles.answerLabel}>{t(locale, "wrongAnswers")}</Text>
+                    <View style={styles.wrongWrap}>
+                      {item.isCorrect ? (
+                        <Text style={styles.answerEmpty}>{t(locale, "noWrongAnswers")}</Text>
+                      ) : (
+                        <View style={styles.wrongPill}>
+                          <Text style={styles.wrongPillText}>{item.myAnswerText}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </GlassCard>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -194,9 +270,38 @@ const styles = StyleSheet.create({
   page: {
     flex: 1
   },
+  backgroundSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundOrbTop: {
+    position: "absolute",
+    top: -200,
+    right: -140,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: "rgba(243, 183, 78, 0.2)"
+  },
+  backgroundOrbBottom: {
+    position: "absolute",
+    bottom: -220,
+    left: -170,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: "rgba(223, 154, 31, 0.14)"
+  },
+  backgroundGlow: {
+    position: "absolute",
+    top: "34%",
+    alignSelf: "center",
+    width: 450,
+    height: 450,
+    borderRadius: 225,
+    backgroundColor: "rgba(255, 255, 255, 0.52)"
+  },
   container: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
     gap: theme.spacing.lg
   },
   header: {
@@ -209,10 +314,10 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.12)",
+    borderColor: "rgba(223, 154, 31, 0.28)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.surface
+    backgroundColor: "rgba(255, 248, 231, 0.92)"
   },
   headerText: {
     flex: 1
@@ -230,12 +335,27 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
+  awardDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(243, 183, 78, 0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.42)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  awardDotEmoji: {
+    fontSize: 13
+  },
   sectionCard: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255, 252, 244, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.22)"
   },
   heroCard: {
-    backgroundColor: "rgba(243, 183, 78, 0.18)",
-    borderColor: "rgba(243, 183, 78, 0.4)"
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
+    borderColor: "rgba(243, 183, 78, 0.42)"
   },
   heroLabel: {
     color: "#9A6A1C",
@@ -444,5 +564,100 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  reviewCard: {
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255, 252, 244, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.24)"
+  },
+  reviewHeader: {
+    gap: 2
+  },
+  reviewTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "700"
+  },
+  reviewSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  reviewList: {
+    gap: theme.spacing.sm
+  },
+  questionItem: {
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(15, 23, 42, 0.08)",
+    paddingTop: theme.spacing.sm
+  },
+  questionHeader: {
+    flexDirection: "row",
+    gap: 8
+  },
+  questionIndex: {
+    color: theme.colors.reward,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "700"
+  },
+  questionPrompt: {
+    flex: 1,
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  answerRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center"
+  },
+  answerLabel: {
+    width: 110,
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  correctPill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(43, 158, 102, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(43, 158, 102, 0.35)"
+  },
+  correctPillText: {
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  wrongWrap: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  answerEmpty: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  wrongPill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(235, 87, 87, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(235, 87, 87, 0.35)"
+  },
+  wrongPillText: {
+    color: theme.colors.danger,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
   }
 });

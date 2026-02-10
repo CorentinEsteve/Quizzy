@@ -185,6 +185,13 @@ export type DailyQuizResults = {
     wrongPct: number;
   };
   friends: DailyFriendStat[];
+  questions?: {
+    id: string;
+    prompt: LocalizedText;
+    options: LocalizedOptions;
+    answer: number | null;
+    myAnswer: number | null;
+  }[];
 };
 
 export type DailyQuizHistoryItem = {
