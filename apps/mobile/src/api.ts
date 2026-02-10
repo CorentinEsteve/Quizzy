@@ -232,6 +232,27 @@ export async function cancelRoomInvite(token: string, code: string, userId: numb
   return response.json() as Promise<RoomState>;
 }
 
+export async function closeRoom(token: string, code: string) {
+  const postResponse = await fetch(`${API_BASE_URL}/rooms/${code}/close`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (postResponse.ok) {
+    return postResponse.json() as Promise<{ ok: boolean; code: string }>;
+  }
+
+  const deleteResponse = await fetch(`${API_BASE_URL}/rooms/${code}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  await ensureOk(deleteResponse, "Unable to close room", { authRequired: true });
+  return deleteResponse.json() as Promise<{ ok: boolean; code: string }>;
+}
+
 export async function fetchRoom(token: string, code: string) {
   const response = await fetch(`${API_BASE_URL}/rooms/${code}`, {
     headers: { Authorization: `Bearer ${token}` }

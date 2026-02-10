@@ -47,6 +47,7 @@ import {
 } from "./src/components/NotificationBanner";
 import {
   createRoom,
+  closeRoom,
   deleteAccount,
   deactivateAccount,
   exportAccountData,
@@ -1360,14 +1361,28 @@ export default function App() {
     setRoomError(null);
     setDailyStage(null);
     try {
-      const state = await joinRoom(token, code);
+      const existing = myRooms.find((item) => item.code === code);
+      const amParticipant =
+        Boolean(user) &&
+        (
+          existing?.myRole === "guest" ||
+          existing?.myRole === "host" ||
+          existing?.players.some((player) => player.id === user.id)
+        );
+      const state = amParticipant ? await fetchRoom(token, code) : await joinRoom(token, code);
       setRoom(state);
       setSelectedAnswers({});
       closedRoomCodesRef.current.delete(state.code);
       socketRef.current?.emit("room:join", { code: state.code });
     } catch (err) {
       if (handleAuthFailure(err)) return;
-      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+      const message = err instanceof Error ? err.message : t(locale, "roomError");
+      if (typeof message === "string" && message.toLowerCase().includes("room is full")) {
+        refreshMyRooms();
+        setRoomError(t(locale, "inviteRoomFull"));
+        return;
+      }
+      setRoomError(message);
     }
   }
 
@@ -1491,6 +1506,25 @@ export default function App() {
     }
   }
 
+  async function handleCloseHostedRoom(code: string) {
+    if (!token) return;
+    setRoomError(null);
+    try {
+      await closeRoom(token, code);
+      closedRoomCodesRef.current.delete(code);
+      roomSnapshotsRef.current.delete(code);
+      setMyRooms((prev) => prev.filter((item) => item.code !== code));
+      if (room?.code === code) {
+        setRoom(null);
+        setSelectedAnswers({});
+      }
+      refreshMyRooms();
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    }
+  }
+
   function handleAnswer(questionId: string, answerIndex: number) {
     if (!room) return;
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: answerIndex }));
@@ -1498,7 +1532,7 @@ export default function App() {
   }
 
   function handleLeaveRoom() {
-    if (room?.code) {
+    if (room?.code && room.status !== "lobby") {
       closedRoomCodesRef.current.add(room.code);
     }
     setRoom(null);
@@ -1635,6 +1669,7 @@ export default function App() {
       recapStats={stats}
       onOpenRecap={handleOpenRecap}
       onResumeRoom={handleResumeRoom}
+      onCloseHostedRoom={handleCloseHostedRoom}
       dailyQuiz={dailyQuiz}
       dailyResults={dailyResults}
       dailyLoading={dailyLoading}

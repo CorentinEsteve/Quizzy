@@ -61,6 +61,7 @@ type Props = {
   }[];
   onOpenRecap: (code: string) => void;
   onResumeRoom: (code: string) => void;
+  onCloseHostedRoom: (code: string) => void;
   recapStats: StatsResponse | null;
   dailyQuiz: DailyQuizStatus | null;
   dailyResults: DailyQuizResults | null;
@@ -105,6 +106,7 @@ export function LobbyScreen({
   sessions,
   onOpenRecap,
   onResumeRoom,
+  onCloseHostedRoom,
   recapStats: _recapStats,
   dailyQuiz,
   dailyResults,
@@ -136,6 +138,9 @@ export function LobbyScreen({
   );
   const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
   const qrPreviewSize = Math.min(width - theme.spacing.xl * 2 - 32, 360);
+  const pickStepOrder: Array<"category" | "count" | "mode"> = ["category", "count", "mode"];
+  const pickStepIndex = Math.max(0, pickStepOrder.indexOf(pickStep));
+  const pickProgress = pickStepIndex + 1;
   const categories = useMemo(() => {
     const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
     quizzes.forEach((quiz) => {
@@ -195,42 +200,124 @@ export function LobbyScreen({
   const remainingSessions = nextSession
     ? activeSessions.filter((session) => session.code !== nextSession.code)
     : activeSessions;
-  const invitedSession = useMemo(
-    () => sessions.find((session) => session.status === "lobby" && session.myRole === "invited") ?? null,
+  const lobbyMemberSessions = useMemo(
+    () =>
+      sessions.filter(
+        (session) =>
+          session.status === "lobby" &&
+          (session.myRole === "invited" || session.myRole === "guest")
+      ),
     [sessions]
   );
-  const invitedHostName = useMemo(() => {
-    if (!invitedSession) return locale === "fr" ? "un joueur" : "a player";
-    return (
-      invitedSession.players.find((player) => player.role === "host")?.displayName ||
-      invitedSession.players.find((player) => player.id !== userId)?.displayName ||
-      (locale === "fr" ? "un joueur" : "a player")
-    );
-  }, [invitedSession, locale, userId]);
+  const hostedLobbySessions = useMemo(
+    () => sessions.filter((session) => session.status === "lobby" && session.myRole === "host"),
+    [sessions]
+  );
   useEffect(() => {
-    if (!invitedSession) return;
-    if (!inviteFirstSeenRef.current.has(invitedSession.code)) {
-      inviteFirstSeenRef.current.set(invitedSession.code, Date.now());
-    }
-  }, [invitedSession]);
-  const invitedSentAtMs = useMemo(() => {
-    if (!invitedSession) return null;
-    return (
-      parseInviteTimestamp(invitedSession.invitedAt) ??
-      parseInviteTimestamp(invitedSession.updatedAt) ??
-      parseInviteTimestamp(invitedSession.createdAt) ??
-      inviteFirstSeenRef.current.get(invitedSession.code) ??
-      null
-    );
-  }, [invitedSession]);
-  const inviteExpiresAtMs = invitedSentAtMs ? invitedSentAtMs + 24 * 60 * 60 * 1000 : null;
-  const inviteIsExpired = inviteExpiresAtMs ? inviteNowMs >= inviteExpiresAtMs : false;
-  const showInvitedCard = Boolean(invitedSession) && !inviteIsExpired;
-  const invitedSentAgoLabel = invitedSentAtMs
-    ? formatInviteRelative(locale, invitedSentAtMs, inviteNowMs)
-    : locale === "fr"
-      ? "nouveau"
-      : "new";
+    lobbyMemberSessions.forEach((session) => {
+      if (!inviteFirstSeenRef.current.has(session.code)) {
+        inviteFirstSeenRef.current.set(session.code, Date.now());
+      }
+    });
+  }, [lobbyMemberSessions]);
+  useEffect(() => {
+    hostedLobbySessions.forEach((session) => {
+      if (!inviteFirstSeenRef.current.has(session.code)) {
+        inviteFirstSeenRef.current.set(session.code, Date.now());
+      }
+    });
+  }, [hostedLobbySessions]);
+  const invitedCards = useMemo(() => {
+    const fallbackHostName = locale === "fr" ? "un joueur" : "a player";
+    return lobbyMemberSessions
+      .map((session) => {
+        const amParticipant =
+          session.myRole === "guest" ||
+          session.myRole === "host" ||
+          session.players.some((player) => player.id === userId);
+        const isAtCapacity = session.players.length >= 2;
+        if (!amParticipant && isAtCapacity) return null;
+
+        const sentAtMs =
+          parseInviteTimestamp(session.invitedAt) ??
+          parseInviteTimestamp(session.updatedAt) ??
+          parseInviteTimestamp(session.createdAt) ??
+          inviteFirstSeenRef.current.get(session.code) ??
+          null;
+        const expiresAtMs = sentAtMs ? sentAtMs + 24 * 60 * 60 * 1000 : null;
+        const isExpired = expiresAtMs ? inviteNowMs >= expiresAtMs : false;
+        if (isExpired) return null;
+        const hostName =
+          session.players.find((player) => player.role === "host")?.displayName ||
+          session.players.find((player) => player.id !== userId)?.displayName ||
+          fallbackHostName;
+        const sentAgoLabel = sentAtMs
+          ? formatInviteRelative(locale, sentAtMs, inviteNowMs)
+          : locale === "fr"
+            ? "nouveau"
+            : "new";
+        const isInvite = session.myRole === "invited";
+        const badgeLabel = isInvite
+          ? t(locale, "notificationInviteTitle")
+          : locale === "fr"
+            ? "SALON REJOINT"
+            : "ROOM JOINED";
+        const title = isInvite
+          ? t(locale, "homeInviteTitle", { name: hostName })
+          : locale === "fr"
+            ? `Salon avec ${hostName}`
+            : `Room with ${hostName}`;
+        const body = isInvite
+          ? t(locale, "homeInviteBody")
+          : locale === "fr"
+            ? "Tu as rejoint ce duel. Rouvre le salon pour continuer."
+            : "You joined this duel. Reopen the room to continue.";
+        const actionLabel = isInvite
+          ? t(locale, "homeInviteAction")
+          : locale === "fr"
+            ? "Ouvrir"
+            : "Open room";
+        return { session, hostName, sentAgoLabel, sentAtMs: sentAtMs ?? 0, badgeLabel, title, body, actionLabel, isInvite };
+      })
+      .filter(
+        (
+          item
+        ): item is {
+          session: Props["sessions"][number];
+          hostName: string;
+          sentAgoLabel: string;
+          sentAtMs: number;
+          badgeLabel: string;
+          title: string;
+          body: string;
+          actionLabel: string;
+          isInvite: boolean;
+        } => Boolean(item)
+      )
+      .sort((a, b) => b.sentAtMs - a.sentAtMs);
+  }, [lobbyMemberSessions, inviteNowMs, locale, userId, t]);
+  const showInvitedCard = invitedCards.length > 0;
+  const hostedLobbyCards = useMemo(
+    () =>
+      hostedLobbySessions
+        .map((session) => {
+          const sentAtMs =
+            parseInviteTimestamp(session.updatedAt) ??
+            parseInviteTimestamp(session.createdAt) ??
+            inviteFirstSeenRef.current.get(session.code) ??
+            null;
+          const expiresAtMs = sentAtMs ? sentAtMs + 24 * 60 * 60 * 1000 : null;
+          const isExpired = expiresAtMs ? inviteNowMs >= expiresAtMs : false;
+          if (isExpired) return null;
+          return { session, sentAtMs: sentAtMs ?? 0 };
+        })
+        .filter(
+          (item): item is { session: Props["sessions"][number]; sentAtMs: number } =>
+            Boolean(item)
+        )
+        .sort((a, b) => b.sentAtMs - a.sentAtMs),
+    [hostedLobbySessions, inviteNowMs]
+  );
   const dailyAnswered = dailyQuiz?.answeredCount ?? 0;
   const dailyTotal = dailyQuiz?.totalQuestions ?? 10;
   const dailyCompleted = dailyQuiz?.completed ?? false;
@@ -476,7 +563,7 @@ export function LobbyScreen({
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#F3F6FF", "#F8F2FF", "#FFF8EE"]}
+        colors={["#F3F6FF", "#FFF3EE", "#FFF8EF"]}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
@@ -486,7 +573,7 @@ export function LobbyScreen({
         style={styles.backgroundSweep}
       />
       <LinearGradient
-        colors={["rgba(204, 44, 138, 0.2)", "rgba(204, 44, 138, 0)"]}
+        colors={["rgba(227, 92, 76, 0.2)", "rgba(227, 92, 76, 0)"]}
         start={{ x: 0.95, y: 0.05 }}
         end={{ x: 0.25, y: 0.65 }}
         style={styles.backgroundWarmSweep}
@@ -536,7 +623,7 @@ export function LobbyScreen({
             colors={[
               "#F3F7FF",
               "#DEE6FF",
-              "#EAD8FF",
+              "#FFDCCE",
               "#FFDCA5"
             ]}
             start={{ x: 0, y: 0 }}
@@ -603,58 +690,126 @@ export function LobbyScreen({
           </View>
         </GlassCard>
 
-        {showInvitedCard && invitedSession ? (
+        {showInvitedCard
+          ? invitedCards.map((inviteCard) => (
+              <Pressable
+                key={`invite-${inviteCard.session.code}`}
+                onPress={() => onResumeRoom(inviteCard.session.code)}
+                accessibilityRole="button"
+                accessibilityLabel={t(locale, "homeInviteA11y")}
+                hitSlop={6}
+              >
+                <Animated.View style={{ transform: [{ translateY: inviteNudge }, { scale: inviteGlow }] }}>
+                  <GlassCard style={[styles.introCard, styles.homeInviteCard]} accent={theme.colors.secondary}>
+                    <LinearGradient
+                      colors={["rgba(63, 84, 220, 0.2)", "rgba(224, 97, 80, 0.13)", "rgba(255, 255, 255, 0.98)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.homeInviteBackdrop}
+                    />
+                    <View style={styles.homeInviteHeader}>
+                      <View style={styles.homeInviteBadge}>
+                        <View style={styles.homeInvitePingWrap}>
+                          <Animated.View
+                            style={[
+                              styles.homeInvitePing,
+                              !inviteCard.isInvite && styles.homeInvitePingJoined,
+                              {
+                                opacity: invitePingOpacity,
+                                transform: [{ scale: invitePingScale }]
+                              }
+                            ]}
+                          />
+                          <View style={[styles.homeInvitePingDot, !inviteCard.isInvite && styles.homeInvitePingDotJoined]} />
+                        </View>
+                        <Text style={styles.homeInviteBadgeText}>{inviteCard.badgeLabel}</Text>
+                      </View>
+                      <View style={styles.homeInviteAgePill}>
+                        <FontAwesome name="clock-o" size={10} color={theme.colors.muted} />
+                        <Text style={styles.homeInviteAgeText}>{inviteCard.sentAgoLabel}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.homeInviteTitle}>{inviteCard.title}</Text>
+                    <Text style={styles.homeInviteBody}>{inviteCard.body}</Text>
+                    <View style={styles.homeInviteCtaRow}>
+                      <View style={styles.homeInviteCodePill}>
+                        <FontAwesome name="hashtag" size={11} color={theme.colors.primary} />
+                        <Text style={styles.homeInviteCodeText}>{inviteCard.session.code}</Text>
+                      </View>
+                      <View style={styles.homeInviteActionPill}>
+                        <Text style={styles.homeInviteActionText}>{inviteCard.actionLabel}</Text>
+                        <FontAwesome name="chevron-right" size={11} color={theme.colors.primary} />
+                      </View>
+                    </View>
+                  </GlassCard>
+                </Animated.View>
+              </Pressable>
+            ))
+          : null}
+        {hostedLobbyCards.map((hostedCard) => (
           <Pressable
-            onPress={() => onResumeRoom(invitedSession.code)}
+            key={`host-${hostedCard.session.code}`}
+            onPress={() => onResumeRoom(hostedCard.session.code)}
             accessibilityRole="button"
-            accessibilityLabel={t(locale, "homeInviteA11y")}
+            accessibilityLabel={locale === "fr" ? "Rouvrir le salon" : "Reopen room"}
             hitSlop={6}
           >
-            <Animated.View style={{ transform: [{ translateY: inviteNudge }, { scale: inviteGlow }] }}>
-              <GlassCard style={[styles.introCard, styles.homeInviteCard]} accent={theme.colors.secondary}>
-                <LinearGradient
-                  colors={["rgba(63, 84, 220, 0.2)", "rgba(204, 44, 138, 0.13)", "rgba(255, 255, 255, 0.98)"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.homeInviteBackdrop}
-                />
-                <View style={styles.homeInviteHeader}>
-                  <View style={styles.homeInviteBadge}>
-                    <View style={styles.homeInvitePingWrap}>
-                      <Animated.View
-                        style={[
-                          styles.homeInvitePing,
-                          {
-                            opacity: invitePingOpacity,
-                            transform: [{ scale: invitePingScale }]
-                          }
-                        ]}
-                      />
-                      <View style={styles.homeInvitePingDot} />
-                    </View>
-                    <Text style={styles.homeInviteBadgeText}>{t(locale, "notificationInviteTitle")}</Text>
-                  </View>
-                  <View style={styles.homeInviteAgePill}>
-                    <FontAwesome name="clock-o" size={10} color={theme.colors.muted} />
-                    <Text style={styles.homeInviteAgeText}>{invitedSentAgoLabel}</Text>
-                  </View>
+            <GlassCard style={[styles.introCard, styles.homeInviteCard, styles.homeHostCard]} accent={theme.colors.primary}>
+              <LinearGradient
+                colors={["rgba(63, 84, 220, 0.14)", "rgba(242, 166, 67, 0.11)", "rgba(255, 255, 255, 0.98)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.homeInviteBackdrop}
+              />
+              <View style={[styles.homeInviteHeader, styles.homeHostHeader]}>
+                <View style={[styles.homeInviteBadge, styles.homeHostBadge]}>
+                  <View style={styles.homeHostBadgeDot} />
+                  <Text style={styles.homeInviteBadgeText}>
+                    {locale === "fr" ? "SALON OUVERT" : "ROOM OPEN"}
+                  </Text>
                 </View>
-                <Text style={styles.homeInviteTitle}>{t(locale, "homeInviteTitle", { name: invitedHostName })}</Text>
-                <Text style={styles.homeInviteBody}>{t(locale, "homeInviteBody")}</Text>
-                <View style={styles.homeInviteCtaRow}>
-                  <View style={styles.homeInviteCodePill}>
-                    <FontAwesome name="hashtag" size={11} color={theme.colors.primary} />
-                    <Text style={styles.homeInviteCodeText}>{invitedSession.code}</Text>
-                  </View>
-                  <View style={styles.homeInviteActionPill}>
-                    <Text style={styles.homeInviteActionText}>{t(locale, "homeInviteAction")}</Text>
-                    <FontAwesome name="chevron-right" size={11} color={theme.colors.primary} />
-                  </View>
+                <Pressable
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.homeInviteCloseButton,
+                    styles.homeHostCloseButton,
+                    pressed && styles.homeInviteCloseButtonPressed
+                  ]}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    Haptics.selectionAsync();
+                    onCloseHostedRoom(hostedCard.session.code);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={locale === "fr" ? "Fermer ce salon" : "Close this room"}
+                >
+                  <Text style={styles.homeInviteCloseLabel}>
+                    {locale === "fr" ? "Fermer le salon" : "Close room"}
+                  </Text>
+                  <FontAwesome name="times" size={10} color={theme.colors.muted} />
+                </Pressable>
+              </View>
+              <Text style={[styles.homeInviteTitle, styles.homeHostTitle]}>
+                {locale === "fr" ? "Ton duel attend un joueur" : "Your duel is waiting for a player"}
+              </Text>
+              <Text style={[styles.homeInviteBody, styles.homeHostBody]}>
+                {locale === "fr"
+                  ? "En attente d'un joueur..."
+                  : "Waiting for a player..."}
+              </Text>
+              <View style={[styles.homeInviteCtaRow, styles.homeHostCtaRow]}>
+                <View style={styles.homeInviteCodePill}>
+                  <FontAwesome name="hashtag" size={11} color={theme.colors.primary} />
+                  <Text style={styles.homeInviteCodeText}>{hostedCard.session.code}</Text>
                 </View>
-              </GlassCard>
-            </Animated.View>
+                <View style={styles.homeInviteActionPill}>
+                  <Text style={styles.homeInviteActionText}>{locale === "fr" ? "Ouvrir" : "Open room"}</Text>
+                  <FontAwesome name="chevron-right" size={11} color={theme.colors.primary} />
+                </View>
+              </View>
+            </GlassCard>
           </Pressable>
-        ) : null}
+        ))}
 
         <Pressable
           onPress={onOpenPersonalLeaderboard}
@@ -702,7 +857,7 @@ export function LobbyScreen({
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
             <LinearGradient
-              colors={["rgba(63, 84, 220, 0.18)", "rgba(204, 44, 138, 0.1)", "rgba(255, 255, 255, 0.98)"]}
+              colors={["rgba(63, 84, 220, 0.18)", "rgba(224, 97, 80, 0.1)", "rgba(255, 255, 255, 0.98)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.nextActionBackdrop}
@@ -910,7 +1065,7 @@ export function LobbyScreen({
 
         <GlassCard style={styles.shareCard}>
           <LinearGradient
-            colors={["rgba(63, 84, 220, 0.14)", "rgba(245, 138, 43, 0.1)", "rgba(255, 255, 255, 0.97)"]}
+            colors={["rgba(63, 84, 220, 0.08)", "rgba(245, 138, 43, 0.06)", "rgba(255, 255, 255, 0.98)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.shareCardBackdrop}
@@ -1183,12 +1338,31 @@ export function LobbyScreen({
                 </Pressable>
                 <View style={styles.dialogHeaderCentered}>
                   <Text style={styles.dialogTitle}>{t(locale, "newMatch")}</Text>
+                  <View style={styles.dialogProgressRow}>
+                    <View style={styles.dialogProgressTrack}>
+                      {pickStepOrder.map((step, index) => {
+                        const isActive = index <= pickStepIndex;
+                        return (
+                          <View
+                            key={step}
+                            style={[
+                              styles.dialogProgressSegment,
+                              isActive && styles.dialogProgressSegmentActive
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.dialogProgressMeta}>
+                      {locale === "fr" ? `Etape ${pickProgress}/3` : `Step ${pickProgress}/3`}
+                    </Text>
+                  </View>
                 </View>
                 {pickStep === "category" ? (
                   <View style={styles.dialogSection}>
                     <View style={styles.dialogSectionHeader}>
-                      <View style={styles.stepBadge}>
-                        <Text style={styles.stepBadgeText}>1</Text>
+                      <View style={[styles.dialogSectionIcon, styles.dialogSectionIconCategory]}>
+                        <FontAwesome name="th-large" size={12} color="#2F46C9" />
                       </View>
                       <View style={styles.dialogSectionText}>
                         <Text style={styles.dialogSectionTitle}>{t(locale, "chooseCategory")}</Text>
@@ -1271,8 +1445,8 @@ export function LobbyScreen({
                 ) : pickStep === "count" ? (
                   <View style={styles.dialogSection}>
                   <View style={styles.dialogSectionHeader}>
-                    <View style={styles.stepBadge}>
-                      <Text style={styles.stepBadgeText}>2</Text>
+                    <View style={[styles.dialogSectionIcon, styles.dialogSectionIconLength]}>
+                      <FontAwesome name="clock-o" size={12} color="#A85D00" />
                     </View>
                     <View style={styles.dialogSectionText}>
                       <Text style={styles.dialogSectionTitle}>
@@ -1361,8 +1535,8 @@ export function LobbyScreen({
                 ) : pickStep === "mode" ? (
                   <View style={styles.dialogSection}>
                     <View style={styles.dialogSectionHeader}>
-                      <View style={styles.stepBadge}>
-                        <Text style={styles.stepBadgeText}>3</Text>
+                      <View style={[styles.dialogSectionIcon, styles.dialogSectionIconMode]}>
+                        <FontAwesome name="exchange" size={12} color="#A33F6E" />
                       </View>
                       <View style={styles.dialogSectionText}>
                         <Text style={styles.dialogSectionTitle}>{t(locale, "duelFormat")}</Text>
@@ -1559,7 +1733,7 @@ const styles = StyleSheet.create({
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(155, 68, 210, 0.2)"
+    backgroundColor: "rgba(224, 102, 86, 0.18)"
   },
   backgroundOrbWarm: {
     position: "absolute",
@@ -1578,7 +1752,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 44,
     transform: [{ rotate: "-16deg" }],
-    backgroundColor: "rgba(92, 70, 216, 0.16)"
+    backgroundColor: "rgba(220, 110, 82, 0.14)"
   },
   backgroundGlow: {
     position: "absolute",
@@ -1602,10 +1776,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 60,
-    backgroundColor: "rgba(241, 238, 255, 0.66)",
+    backgroundColor: "rgba(255, 242, 235, 0.62)",
     transform: [{ rotate: "12deg" }],
     borderWidth: 1,
-    borderColor: "rgba(223, 228, 255, 0.95)"
+    borderColor: "rgba(255, 228, 216, 0.95)"
   },
   container: {
     padding: theme.spacing.lg,
@@ -1623,9 +1797,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(112, 94, 219, 0.36)",
+    borderColor: "rgba(88, 114, 206, 0.34)",
     backgroundColor: "rgba(255, 255, 255, 0.92)",
-    shadowColor: "rgba(50, 39, 129, 0.24)",
+    shadowColor: "rgba(43, 58, 143, 0.24)",
     shadowOpacity: 0.16,
     shadowRadius: 9,
     shadowOffset: { width: 0, height: 5 },
@@ -1653,14 +1827,14 @@ const styles = StyleSheet.create({
   heroCard: {
     gap: theme.spacing.md,
     overflow: "hidden",
-    borderColor: "rgba(89, 92, 208, 0.46)",
+    borderColor: "rgba(90, 102, 201, 0.42)",
     borderWidth: 1,
     borderTopWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderLeftWidth: 1,
     backgroundColor: "rgba(250, 251, 255, 0.98)",
-    shadowColor: "rgba(59, 41, 161, 0.34)",
+    shadowColor: "rgba(48, 68, 151, 0.3)",
     shadowOpacity: 0.24,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
@@ -1672,7 +1846,7 @@ const styles = StyleSheet.create({
   heroSparkle: {
     position: "absolute",
     borderRadius: 999,
-    backgroundColor: "rgba(255, 245, 222, 0.88)"
+    backgroundColor: "rgba(255, 235, 190, 0.9)"
   },
   heroSparkleOne: {
     width: 10,
@@ -1702,7 +1876,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   heroKicker: {
-    color: "#A65B00",
+    color: "#AD6500",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "700",
@@ -1733,7 +1907,7 @@ const styles = StyleSheet.create({
     width: 82,
     height: 82,
     borderRadius: 41,
-    backgroundColor: "rgba(88, 62, 210, 0.24)"
+    backgroundColor: "rgba(82, 106, 213, 0.22)"
   },
   mascotBody: {
     width: 52,
@@ -1909,10 +2083,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(72, 95, 224, 0.16)"
   },
   sectionIconAccent: {
-    backgroundColor: "rgba(245, 138, 43, 0.22)"
+    backgroundColor: "rgba(242, 166, 67, 0.26)"
   },
   sectionIconMuted: {
-    backgroundColor: "rgba(117, 71, 206, 0.12)"
+    backgroundColor: "rgba(86, 109, 202, 0.12)"
   },
   sectionSubtitle: {
     color: theme.colors.muted,
@@ -1923,14 +2097,14 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     overflow: "hidden",
-    borderColor: "rgba(90, 98, 206, 0.24)",
+    borderColor: "rgba(95, 104, 178, 0.18)",
     borderWidth: 1,
-    backgroundColor: "rgba(252, 254, 255, 0.98)",
-    shadowColor: "rgba(55, 48, 129, 0.2)",
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 5
+    backgroundColor: "rgba(253, 254, 255, 0.99)",
+    shadowColor: "rgba(50, 58, 110, 0.14)",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3
   },
   shareCardBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -1946,13 +2120,13 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   shareTitle: {
-    color: "#151D44",
+    color: "#182045",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "700"
   },
   shareSubtitle: {
-    color: "rgba(50, 57, 94, 0.8)",
+    color: "rgba(56, 63, 98, 0.74)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     marginTop: 4,
@@ -1964,24 +2138,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(233, 231, 255, 0.82)",
+    backgroundColor: "rgba(243, 245, 252, 0.94)",
     borderWidth: 1,
-    borderColor: "rgba(64, 68, 162, 0.26)"
+    borderColor: "rgba(95, 104, 178, 0.18)"
   },
   qrWrap: {
     width: 76,
     height: 76,
     borderRadius: 18,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
     borderWidth: 1,
-    borderColor: "rgba(35, 61, 118, 0.28)",
+    borderColor: "rgba(95, 104, 178, 0.22)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#1B1E2B",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2
+    shadowColor: "rgba(50, 58, 110, 0.16)",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1
   },
   qrImage: {
     width: 62,
@@ -2140,9 +2314,9 @@ const styles = StyleSheet.create({
   },
   recapCard: {
     gap: 6,
-    backgroundColor: "rgba(123, 115, 224, 0.28)",
-    borderColor: "rgba(92, 100, 214, 0.36)",
-    shadowColor: "rgba(52, 48, 140, 0.3)",
+    backgroundColor: "rgba(104, 128, 216, 0.25)",
+    borderColor: "rgba(88, 108, 203, 0.32)",
+    shadowColor: "rgba(46, 68, 145, 0.28)",
     shadowOpacity: 0.2,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
@@ -2151,8 +2325,11 @@ const styles = StyleSheet.create({
   homeInviteCard: {
     overflow: "hidden",
     gap: 6,
-    borderColor: "rgba(93, 103, 214, 0.28)",
+    borderColor: "rgba(92, 109, 201, 0.26)",
     backgroundColor: "rgba(252, 254, 255, 0.98)"
+  },
+  homeHostCard: {
+    gap: 4
   },
   homeInviteBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2161,6 +2338,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
+  },
+  homeHostHeader: {
+    marginBottom: 2
   },
   homeInviteBadge: {
     flexDirection: "row",
@@ -2172,6 +2352,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.78)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(74, 79, 169, 0.26)"
+  },
+  homeHostBadge: {
+    paddingVertical: 4
   },
   homeInvitePingWrap: {
     width: 10,
@@ -2186,11 +2369,23 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "rgba(34, 197, 94, 0.45)"
   },
+  homeInvitePingJoined: {
+    backgroundColor: "rgba(63, 84, 220, 0.42)"
+  },
   homeInvitePingDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: "rgba(34, 197, 94, 0.98)"
+  },
+  homeInvitePingDotJoined: {
+    backgroundColor: "rgba(63, 84, 220, 0.98)"
+  },
+  homeHostBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(242, 166, 67, 0.98)"
   },
   homeInviteBadgeText: {
     color: theme.colors.primary,
@@ -2217,6 +2412,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600"
   },
+  homeInviteCloseButton: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.16)"
+  },
+  homeHostCloseButton: {
+    backgroundColor: "transparent",
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    paddingHorizontal: 6,
+    gap: 4
+  },
+  homeInviteCloseLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.2
+  },
+  homeInviteCloseButtonPressed: {
+    transform: [{ scale: 0.95 }],
+    opacity: 0.9
+  },
   homeInviteTitle: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
@@ -2224,11 +2449,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 24
   },
+  homeHostTitle: {
+    fontSize: 18,
+    lineHeight: 22,
+    marginTop: 2
+  },
   homeInviteBody: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: 13,
     lineHeight: 18
+  },
+  homeHostBody: {
+    lineHeight: 16
   },
   homeInviteCtaRow: {
     marginTop: 4,
@@ -2236,6 +2469,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing.sm
+  },
+  homeHostCtaRow: {
+    marginTop: 6
   },
   homeInviteCodePill: {
     flexDirection: "row",
@@ -2274,11 +2510,11 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   nextActionCard: {
-    borderColor: "rgba(90, 98, 206, 0.24)",
+    borderColor: "rgba(90, 109, 201, 0.24)",
     backgroundColor: "rgba(252, 254, 255, 0.98)",
     padding: theme.spacing.md,
     overflow: "hidden",
-    shadowColor: "rgba(52, 49, 126, 0.2)",
+    shadowColor: "rgba(48, 67, 138, 0.2)",
     shadowOpacity: 0.14,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 9 },
@@ -2609,16 +2845,21 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)",
-    backgroundColor: "rgba(255, 255, 255, 0.9)"
+    borderColor: "rgba(107, 113, 191, 0.22)",
+    backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   categoryChipSelected: {
-    borderColor: "rgba(11, 14, 20, 0.35)",
-    backgroundColor: "rgba(11, 14, 20, 0.03)"
+    borderColor: "rgba(66, 84, 205, 0.48)",
+    backgroundColor: "rgba(232, 237, 255, 0.92)",
+    shadowColor: "rgba(73, 82, 182, 0.3)",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2
   },
   categoryDot: {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     borderRadius: 999
   },
   categoryLabel: {
@@ -2636,20 +2877,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(222, 227, 248, 0.82)",
     marginLeft: "auto",
     marginRight: 6
   },
   selectedPillActive: {
-    backgroundColor: "rgba(35, 61, 118, 0.18)",
+    backgroundColor: "rgba(70, 87, 207, 0.22)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(35, 61, 118, 0.35)"
+    borderColor: "rgba(70, 87, 207, 0.5)"
   },
   selectedPillHidden: {
     opacity: 0
   },
   categoryChevron: {
-    marginLeft: "auto"
+    marginLeft: "auto",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(236, 239, 255, 0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(106, 112, 202, 0.26)"
   },
   lengthGrid: {
     gap: theme.spacing.sm
@@ -2660,8 +2909,8 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)",
-    backgroundColor: "rgba(255, 255, 255, 0.9)"
+    borderColor: "rgba(107, 113, 191, 0.22)",
+    backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   lengthHeader: {
     flexDirection: "row",
@@ -2692,13 +2941,13 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)",
-    backgroundColor: "rgba(255, 255, 255, 0.9)"
+    borderColor: "rgba(107, 113, 191, 0.22)",
+    backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   choiceCardSelected: {
-    borderColor: "rgba(35, 61, 118, 0.42)",
-    backgroundColor: "rgba(35, 61, 118, 0.1)",
-    shadowColor: "rgba(35, 61, 118, 0.28)",
+    borderColor: "rgba(66, 84, 205, 0.5)",
+    backgroundColor: "rgba(232, 237, 255, 0.92)",
+    shadowColor: "rgba(73, 82, 182, 0.32)",
     shadowOpacity: 0.22,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -2733,7 +2982,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body
   },
   joinButton: {
-    backgroundColor: theme.colors.secondary
+    backgroundColor: "#16BFA8"
   },
   buttonDisabled: {
     opacity: 0.6
@@ -3033,18 +3282,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(15, 17, 24, 0.35)",
     justifyContent: "center",
-    padding: theme.spacing.xl
+    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg
   },
   dialogTouch: {
     alignSelf: "stretch"
   },
   dialog: {
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    backgroundColor: "rgba(250, 251, 255, 0.96)",
     borderRadius: theme.radius.lg,
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.md,
     borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.7)",
+    borderColor: "rgba(106, 112, 210, 0.28)",
     width: "100%"
   },
   dialogClose: {
@@ -3056,21 +3307,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.04)",
+    backgroundColor: "rgba(236, 239, 255, 0.92)",
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)"
+    borderColor: "rgba(93, 101, 192, 0.26)"
   },
   dialogGlow: {
-    shadowColor: theme.colors.champagneDeep,
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 }
+    shadowColor: "rgba(64, 61, 170, 0.34)",
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 }
   },
   dialogTitle: {
-    color: theme.colors.ink,
+    color: "#121A3D",
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
+    fontSize: 22,
+    fontWeight: "700"
   },
   dialogHeader: {
     flexDirection: "row",
@@ -3080,7 +3331,35 @@ const styles = StyleSheet.create({
   dialogHeaderCentered: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: theme.spacing.sm
+    marginBottom: theme.spacing.xs
+  },
+  dialogProgressRow: {
+    marginTop: 8,
+    width: "78%",
+    alignItems: "center",
+    gap: 6
+  },
+  dialogProgressTrack: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 6
+  },
+  dialogProgressSegment: {
+    flex: 1,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(157, 166, 201, 0.26)"
+  },
+  dialogProgressSegmentActive: {
+    backgroundColor: "rgba(64, 83, 199, 0.62)"
+  },
+  dialogProgressMeta: {
+    color: "rgba(64, 72, 116, 0.74)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    textTransform: "uppercase"
   },
   dialogBack: {
     paddingHorizontal: 10,
@@ -3120,41 +3399,52 @@ const styles = StyleSheet.create({
   dialogSectionHeader: {
     flexDirection: "row",
     gap: theme.spacing.sm,
-    alignItems: "center"
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(238, 241, 255, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(113, 117, 211, 0.16)"
   },
   dialogSectionText: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    gap: 2
+  },
+  dialogSectionIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1
+  },
+  dialogSectionIconCategory: {
+    backgroundColor: "rgba(68, 96, 214, 0.14)",
+    borderColor: "rgba(68, 96, 214, 0.28)"
+  },
+  dialogSectionIconLength: {
+    backgroundColor: "rgba(236, 163, 68, 0.18)",
+    borderColor: "rgba(214, 143, 52, 0.34)"
+  },
+  dialogSectionIconMode: {
+    backgroundColor: "rgba(204, 73, 132, 0.16)",
+    borderColor: "rgba(177, 61, 113, 0.3)"
   },
   dialogSectionTitle: {
-    color: theme.colors.ink,
+    color: "#151F47",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     fontWeight: "600",
     flexShrink: 1
   },
   dialogSectionBody: {
-    color: theme.colors.muted,
+    color: "rgba(53, 60, 99, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     lineHeight: 18,
     flexShrink: 1
-  },
-  stepBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)"
-  },
-  stepBadgeText: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "600"
   },
   dialogScroll: {
     flexGrow: 0

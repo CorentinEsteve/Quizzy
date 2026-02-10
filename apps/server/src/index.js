@@ -1917,6 +1917,29 @@ app.delete("/rooms/:code/invite/:userId", authMiddleware, async (req, res) => {
   res.json(await roomState(room));
 });
 
+async function closeRoomHandler(req, res) {
+  const room = await getRoomByCode(req.params.code);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  if (room.host_user_id !== req.user.id) {
+    return res.status(403).json({ error: "Only the host can close this room" });
+  }
+  if (room.status !== "lobby") {
+    return res.status(409).json({ error: "Room already started" });
+  }
+
+  await supabase.from("room_answers").delete().eq("room_id", room.id);
+  await supabase.from("room_rematch").delete().eq("room_id", room.id);
+  await supabase.from("room_players").delete().eq("room_id", room.id);
+  await supabase.from("rooms").delete().eq("id", room.id);
+
+  res.json({ ok: true, code: room.code });
+}
+
+app.post("/rooms/:code/close", authMiddleware, closeRoomHandler);
+app.delete("/rooms/:code", authMiddleware, closeRoomHandler);
+
 app.get("/rooms/mine", authMiddleware, async (req, res) => {
   const { data: rows } = await supabase
     .from("room_players")
