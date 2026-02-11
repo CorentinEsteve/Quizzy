@@ -9,6 +9,7 @@ import { supabase } from "./db.js";
 import { authMiddleware, signToken, verifyToken } from "./auth.js";
 import { quizzes } from "./quizzes.js";
 import { Resend } from "resend";
+import { sendNativePush } from "./push.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -30,6 +31,7 @@ const resendClient = EMAIL_PROVIDER === "resend" && RESEND_API_KEY ? new Resend(
 const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID || "";
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
+const PUSH_DEVICE_TABLE = "push_devices";
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
@@ -790,6 +792,108 @@ async function roomState(room) {
     progress,
     rematchReady: rematch.map((item) => item.userId)
   };
+}
+
+async function emitRoomUpdateToMembers(roomOrCode) {
+  const room = typeof roomOrCode === "string" ? await getRoomByCode(roomOrCode) : roomOrCode;
+  if (!room) return null;
+  const state = await roomState(room);
+  const members = await getRoomPlayers(room.id, { includeInvited: true });
+  members.forEach((member) => {
+    io.to(`user:${member.id}`).emit("room:update", state);
+  });
+  return state;
+}
+
+function isPushTableMissing(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("relation") && message.includes("push_devices") && message.includes("does not exist");
+}
+
+async function upsertPushDevice(userId, payload) {
+  const token = typeof payload?.token === "string" ? payload.token.trim() : "";
+  const provider = typeof payload?.provider === "string" ? payload.provider.trim().toLowerCase() : "";
+  const platform = typeof payload?.platform === "string" ? payload.platform.trim().toLowerCase() : "";
+  if (!token) throw new Error("Missing push token");
+  if (!["apns", "fcm"].includes(provider)) throw new Error("Invalid push provider");
+  if (!["ios", "android"].includes(platform)) throw new Error("Invalid push platform");
+
+  const { error } = await supabase.from(PUSH_DEVICE_TABLE).upsert(
+    {
+      user_id: userId,
+      provider,
+      token,
+      platform,
+      last_seen_at: nowIso(),
+      updated_at: nowIso(),
+      disabled_at: null,
+      last_error: null
+    },
+    { onConflict: "provider,token" }
+  );
+  if (error) throw error;
+}
+
+async function removePushDevice(userId, payload) {
+  const provider = typeof payload?.provider === "string" ? payload.provider.trim().toLowerCase() : "";
+  const token = typeof payload?.token === "string" ? payload.token.trim() : "";
+  let query = supabase.from(PUSH_DEVICE_TABLE).delete().eq("user_id", userId);
+  if (provider) query = query.eq("provider", provider);
+  if (token) query = query.eq("token", token);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+async function listPushDevicesForUsers(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) return [];
+  const uniqueIds = Array.from(new Set(userIds.map((id) => Number(id)).filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from(PUSH_DEVICE_TABLE)
+    .select("id, user_id, provider, token, platform")
+    .in("user_id", uniqueIds)
+    .is("disabled_at", null);
+  if (error) throw error;
+  return data || [];
+}
+
+async function disablePushDevice(deviceId, errorMessage) {
+  if (!deviceId) return;
+  await supabase
+    .from(PUSH_DEVICE_TABLE)
+    .update({
+      disabled_at: nowIso(),
+      last_error: errorMessage || "Invalid device token",
+      updated_at: nowIso()
+    })
+    .eq("id", deviceId);
+}
+
+async function sendPushToUsers(userIds, payload) {
+  if (!Array.isArray(userIds) || userIds.length === 0) return;
+  try {
+    const devices = await listPushDevicesForUsers(userIds);
+    if (devices.length === 0) return;
+    await Promise.all(
+      devices.map(async (device) => {
+        const result = await sendNativePush(device, payload);
+        if (result.invalidToken) {
+          await disablePushDevice(device.id, result.error);
+          return;
+        }
+        if (!result.ok && result.error) {
+          await supabase
+            .from(PUSH_DEVICE_TABLE)
+            .update({ last_error: result.error, updated_at: nowIso() })
+            .eq("id", device.id);
+        }
+      })
+    );
+  } catch (error) {
+    if (!isPushTableMissing(error)) {
+      console.warn("[push] unable to send push notifications", error);
+    }
+  }
 }
 
 app.get("/health", (req, res) => {
@@ -1554,6 +1658,40 @@ app.get("/me", authMiddleware, async (req, res) => {
   });
 });
 
+app.post(
+  "/me/push-devices",
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 60 }),
+  async (req, res) => {
+    try {
+      await upsertPushDevice(req.user.id, req.body || {});
+      return res.json({ ok: true });
+    } catch (error) {
+      if (isPushTableMissing(error)) {
+        return res.status(503).json({ error: "Push devices table is not configured" });
+      }
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid push device" });
+    }
+  }
+);
+
+app.delete(
+  "/me/push-devices",
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 60 }),
+  async (req, res) => {
+    try {
+      await removePushDevice(req.user.id, req.body || {});
+      return res.json({ ok: true });
+    } catch (error) {
+      if (isPushTableMissing(error)) {
+        return res.status(503).json({ error: "Push devices table is not configured" });
+      }
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to remove push device" });
+    }
+  }
+);
+
 app.patch("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 30 }), async (req, res) => {
   const { displayName, country } = req.body;
   const updates = [];
@@ -1835,6 +1973,7 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
   const players = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
   const existing = allPlayers.find((player) => player.id === req.user.id);
   const isInvited = existing?.role === "invited";
+  const hadSeatAvailable = players.length < 2;
   if (!existing && room.status !== "lobby") {
     return res.status(409).json({ error: "Room already started" });
   }
@@ -1861,7 +2000,20 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
       .eq("room_id", room.id)
       .eq("user_id", req.user.id);
   }
-  res.json(await roomState(room));
+  const state = await emitRoomUpdateToMembers(room);
+  if (hadSeatAvailable && req.user.id !== room.host_user_id) {
+    sendPushToUsers([room.host_user_id], {
+      title: "Player joined your room",
+      body: "A player joined your lobby. You can start the match.",
+      data: {
+        type: "room",
+        roomCode: room.code,
+        roomStatus: "lobby",
+        eventType: "host_player_joined"
+      }
+    });
+  }
+  res.json(state || (await roomState(room)));
 });
 
 app.post("/rooms/:code/invite", authMiddleware, async (req, res) => {
@@ -1896,6 +2048,7 @@ app.post("/rooms/:code/invite", authMiddleware, async (req, res) => {
   const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
   const activePlayers = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
   const existing = allPlayers.find((player) => player.id === inviteeId);
+  const isNewInvite = !existing;
 
   if (activePlayers.length >= 2 && !existing) {
     return res.status(409).json({ error: "Room is full" });
@@ -1909,7 +2062,20 @@ app.post("/rooms/:code/invite", authMiddleware, async (req, res) => {
     });
   }
 
-  res.json(await roomState(room));
+  const state = await emitRoomUpdateToMembers(room);
+  if (isNewInvite) {
+    sendPushToUsers([inviteeId], {
+      title: "New room invite",
+      body: "You have been invited to a Qwizzy room.",
+      data: {
+        type: "room",
+        roomCode: room.code,
+        roomStatus: "lobby",
+        eventType: "invite_received"
+      }
+    });
+  }
+  res.json(state || (await roomState(room)));
 });
 
 app.delete("/rooms/:code/invite/:userId", authMiddleware, async (req, res) => {
@@ -1945,7 +2111,8 @@ app.delete("/rooms/:code/invite/:userId", authMiddleware, async (req, res) => {
     .eq("user_id", inviteeId)
     .eq("role", "invited");
 
-  res.json(await roomState(room));
+  const state = await emitRoomUpdateToMembers(room);
+  res.json(state || (await roomState(room)));
 });
 
 async function closeRoomHandler(req, res) {
@@ -1974,12 +2141,20 @@ app.delete("/rooms/:code", authMiddleware, closeRoomHandler);
 app.get("/rooms/mine", authMiddleware, async (req, res) => {
   const { data: rows } = await supabase
     .from("room_players")
-    .select("rooms(*), role")
+    .select("rooms(*), role, joined_at")
     .eq("user_id", req.user.id)
     .order("created_at", { ascending: false, foreignTable: "rooms" });
   const rooms = (rows || []).map((row) => row.rooms).filter(Boolean);
-  const roleByRoomId = new Map(
-    (rows || []).map((row) => [row.rooms?.id, row.role]).filter((item) => item[0])
+  const membershipByRoomId = new Map(
+    (rows || [])
+      .map((row) => [
+        row.rooms?.id,
+        {
+          role: row.role,
+          invitedAt: row.joined_at || null
+        }
+      ])
+      .filter((item) => item[0])
   );
 
   const result = await Promise.all(
@@ -2003,12 +2178,15 @@ app.get("/rooms/mine", authMiddleware, async (req, res) => {
         code: room.code,
         mode: room.mode,
         status: room.status,
+        createdAt: room.created_at,
+        updatedAt: room.updated_at,
+        invitedAt: membershipByRoomId.get(room.id)?.invitedAt || null,
         quiz: sanitizeQuiz(quiz),
         progress,
         players,
         scores,
         rematchReady: rematch.map((item) => item.userId),
-        myRole: roleByRoomId.get(room.id) || "guest"
+        myRole: membershipByRoomId.get(room.id)?.role || "guest"
       };
     })
   );
@@ -2164,6 +2342,7 @@ io.on("connection", (socket) => {
     try {
       const decoded = verifyToken(token);
       user = { id: decoded.sub, email: decoded.email, displayName: decoded.displayName };
+      socket.join(`user:${user.id}`);
       socket.emit("auth:ok", { user });
     } catch (err) {
       socket.emit("auth:error", { error: "Invalid token" });
@@ -2178,7 +2357,7 @@ io.on("connection", (socket) => {
       return socket.emit("room:error", { error: "Not a member of this room" });
     }
     socket.join(code);
-    io.to(code).emit("room:update", await roomState(room));
+    await emitRoomUpdateToMembers(room);
   });
 
   socket.on("room:start", async ({ code }) => {
@@ -2197,7 +2376,21 @@ io.on("connection", (socket) => {
       .update({ status: "active", current_index: 0, started_at: nowIso() })
       .eq("id", room.id);
     const updated = await getRoomByCode(code);
-    io.to(code).emit("room:update", await roomState(updated));
+    await emitRoomUpdateToMembers(updated || code);
+    const participants = await getRoomPlayers(room.id);
+    const targetUserIds = participants.map((player) => player.id).filter((id) => id !== user.id);
+    if (targetUserIds.length > 0) {
+      sendPushToUsers(targetUserIds, {
+        title: "Match started",
+        body: "Your duel is now live.",
+        data: {
+          type: "room",
+          roomCode: room.code,
+          roomStatus: "active",
+          eventType: "room_started"
+        }
+      });
+    }
   });
 
   socket.on("room:rematch", async ({ code }) => {
@@ -2226,7 +2419,21 @@ io.on("connection", (socket) => {
     }
 
     const updated = await getRoomByCode(code);
-    io.to(code).emit("room:update", await roomState(updated));
+    await emitRoomUpdateToMembers(updated || code);
+    const playersForPush = await getRoomPlayers(room.id);
+    const targetUserIds = playersForPush.map((player) => player.id).filter((id) => id !== user.id);
+    if (targetUserIds.length > 0) {
+      sendPushToUsers(targetUserIds, {
+        title: "Rematch requested",
+        body: "Your opponent is ready for another round.",
+        data: {
+          type: "room",
+          roomCode: room.code,
+          roomStatus: updated?.status || room.status,
+          eventType: "rematch_requested"
+        }
+      });
+    }
   });
 
   socket.on("room:answer", async ({ code, questionId, answerIndex }) => {
@@ -2297,7 +2504,47 @@ io.on("connection", (socket) => {
     }
 
     const updated = await getRoomByCode(code);
-    io.to(code).emit("room:update", await roomState(updated));
+    await emitRoomUpdateToMembers(updated || code);
+
+    if (room.mode === "async" && updated?.status === "active") {
+      const answeredCountByUser = new Map();
+      answers.forEach((item) => {
+        answeredCountByUser.set(item.user_id, (answeredCountByUser.get(item.user_id) || 0) + 1);
+      });
+      const targetUserIds = players
+        .map((player) => player.id)
+        .filter(
+          (id) => id !== user.id && (answeredCountByUser.get(id) || 0) < quiz.questions.length
+        );
+      if (targetUserIds.length > 0) {
+        sendPushToUsers(targetUserIds, {
+          title: "Your turn",
+          body: "Time to answer in your duel.",
+          data: {
+            type: "room",
+            roomCode: room.code,
+            roomStatus: "active",
+            eventType: "your_turn"
+          }
+        });
+      }
+    }
+
+    if (updated?.status === "complete" && room.status !== "complete") {
+      const targetUserIds = players.map((player) => player.id).filter((id) => id !== user.id);
+      if (targetUserIds.length > 0) {
+        sendPushToUsers(targetUserIds, {
+          title: "Match finished",
+          body: "Results are ready.",
+          data: {
+            type: "room",
+            roomCode: room.code,
+            roomStatus: "complete",
+            eventType: "match_complete"
+          }
+        });
+      }
+    }
   });
 
   socket.on("disconnect", () => {

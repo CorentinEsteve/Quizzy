@@ -113,6 +113,9 @@ export type RoomListItem = {
   code: string;
   mode: "sync" | "async";
   status: "lobby" | "active" | "complete";
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  invitedAt?: string | null;
   quiz: Omit<Quiz, "questions"> & { questions: Omit<Question, "answer">[] };
   progress: Record<string, number>;
   players: { id: number; displayName: string; role: string }[];

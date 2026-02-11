@@ -231,6 +231,7 @@ export function LobbyScreen({
     const fallbackHostName = locale === "fr" ? "un joueur" : "a player";
     return lobbyMemberSessions
       .map((session) => {
+        const isInvite = session.myRole === "invited";
         const amParticipant =
           session.myRole === "guest" ||
           session.myRole === "host" ||
@@ -238,12 +239,12 @@ export function LobbyScreen({
         const isAtCapacity = session.players.length >= 2;
         if (!amParticipant && isAtCapacity) return null;
 
-        const sentAtMs =
-          parseInviteTimestamp(session.invitedAt) ??
-          parseInviteTimestamp(session.updatedAt) ??
-          parseInviteTimestamp(session.createdAt) ??
-          inviteFirstSeenRef.current.get(session.code) ??
-          null;
+        const sentAtMs = isInvite
+          ? parseInviteTimestamp(session.invitedAt)
+          : parseInviteTimestamp(session.invitedAt) ??
+            parseInviteTimestamp(session.createdAt) ??
+            inviteFirstSeenRef.current.get(session.code) ??
+            null;
         const expiresAtMs = sentAtMs ? sentAtMs + 24 * 60 * 60 * 1000 : null;
         const isExpired = expiresAtMs ? inviteNowMs >= expiresAtMs : false;
         if (isExpired) return null;
@@ -256,7 +257,6 @@ export function LobbyScreen({
           : locale === "fr"
             ? "nouveau"
             : "new";
-        const isInvite = session.myRole === "invited";
         const badgeLabel = isInvite
           ? t(locale, "notificationInviteTitle")
           : locale === "fr"

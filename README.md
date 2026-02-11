@@ -16,6 +16,21 @@ npm install
 npm run dev
 ```
 
+For native push notifications (APNs/FCM), create the device table:
+```bash
+psql "$SUPABASE_DB_URL" -f docs/push-devices.sql
+```
+
+And set server env vars (only the providers you use):
+- `FCM_PROJECT_ID`
+- `FCM_CLIENT_EMAIL`
+- `FCM_PRIVATE_KEY` (use `\n` escaped line breaks)
+- `APNS_TEAM_ID`
+- `APNS_KEY_ID`
+- `APNS_PRIVATE_KEY` (use `\n` escaped line breaks)
+- `APNS_BUNDLE_ID`
+- `APNS_USE_PRODUCTION` (`true` for App Store/TestFlight, `false` for sandbox)
+
 ### Mobile
 ```bash
 cd apps/mobile

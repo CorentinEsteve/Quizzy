@@ -20,7 +20,6 @@ import { io, Socket } from "socket.io-client";
 import * as Notifications from "expo-notifications";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import Constants from "expo-constants";
 import * as Localization from "expo-localization";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -72,7 +71,9 @@ import {
   requestEmailVerification,
   requestPasswordReset,
   registerUser,
+  registerPushDevice,
   submitDailyAnswer,
+  unregisterPushDevice,
   updateEmail,
   updateProfile,
   updatePassword
@@ -91,6 +92,11 @@ import {
   StatsResponse,
   User
 } from "./src/data/types";
+import {
+  getRoomNotificationEvents,
+  RoomNotificationEvent,
+  RoomSnapshot
+} from "./src/notifications/roomNotifications";
 
 const MAIN_PANELS = ["lobby", "account"] as const;
 const AUTH_TOKEN_KEY = "dq_auth_token";
@@ -120,21 +126,45 @@ Notifications.setNotificationHandler({
   })
 });
 
-type RoomSnapshot = {
-  code: string;
-  mode: "sync" | "async";
-  status: "lobby" | "active" | "complete";
-  quizTitle: string;
-  totalQuestions: number;
-  players: { id: number; displayName: string }[];
-  progressByUserId: Record<number, number>;
-  rematchReady: number[];
-  inviteForMe?: boolean;
-};
-
 type RoomNotificationPayload = {
   roomCode: string;
   roomStatus: RoomSnapshot["status"];
+};
+
+const ROOM_NOTIFICATION_COPY: Record<
+  RoomNotificationEvent,
+  { titleKey: string; bodyKey: string; tone: NotificationTone }
+> = {
+  invite_received: {
+    titleKey: "notificationInviteTitle",
+    bodyKey: "notificationInviteBody",
+    tone: "accent"
+  },
+  host_player_joined: {
+    titleKey: "notificationJoinedTitle",
+    bodyKey: "notificationJoinedBody",
+    tone: "success"
+  },
+  room_started: {
+    titleKey: "notificationStartedTitle",
+    bodyKey: "notificationStartedBody",
+    tone: "primary"
+  },
+  your_turn: {
+    titleKey: "notificationTurnTitle",
+    bodyKey: "notificationTurnBody",
+    tone: "primary"
+  },
+  match_complete: {
+    titleKey: "notificationCompleteTitle",
+    bodyKey: "notificationCompleteBody",
+    tone: "success"
+  },
+  rematch_requested: {
+    titleKey: "notificationRematchTitle",
+    bodyKey: "notificationRematchBody",
+    tone: "accent"
+  }
 };
 
 type ApplePendingProfile = {
@@ -178,7 +208,7 @@ function normalizeProgressMap(progress: Record<string, number> | undefined) {
   return result;
 }
 
-function snapshotFromRoomState(room: RoomState): RoomSnapshot {
+function snapshotFromRoomState(room: RoomState, currentUserId?: number): RoomSnapshot {
   const progressByUserId: Record<number, number> = {};
   room.progress.forEach((item) => {
     progressByUserId[item.userId] = item.answeredCount;
@@ -189,9 +219,14 @@ function snapshotFromRoomState(room: RoomState): RoomSnapshot {
     status: room.status,
     quizTitle: room.quiz.title,
     totalQuestions: room.quiz.questions.length,
-    players: room.players.map((player) => ({ id: player.id, displayName: player.displayName })),
+    players: room.players.map((player) => ({
+      id: player.id,
+      displayName: player.displayName,
+      role: player.role
+    })),
     progressByUserId,
-    rematchReady: room.rematchReady ?? []
+    rematchReady: room.rematchReady ?? [],
+    inviteForMe: Boolean(currentUserId && room.invites?.some((invite) => invite.id === currentUserId))
   };
 }
 
@@ -202,7 +237,11 @@ function snapshotFromRoomList(room: RoomListItem): RoomSnapshot {
     status: room.status,
     quizTitle: room.quiz.title,
     totalQuestions: room.quiz.questions?.length ?? 0,
-    players: room.players.map((player) => ({ id: player.id, displayName: player.displayName })),
+    players: room.players.map((player) => ({
+      id: player.id,
+      displayName: player.displayName,
+      role: player.role
+    })),
     progressByUserId: normalizeProgressMap(room.progress),
     rematchReady: room.rematchReady ?? [],
     inviteForMe: room.myRole === "invited"
@@ -311,6 +350,7 @@ export default function App() {
   const roomErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const registeredPushRef = useRef<{ provider: "apns" | "fcm"; token: string } | null>(null);
 
   const dailyAnswersMap = useMemo(() => {
     const result: Record<string, number> = {};
@@ -411,24 +451,6 @@ export default function App() {
     [notificationsEnabled]
   );
 
-  const scheduleSystemNotification = useCallback(
-    async (title: string, body: string, payload: RoomNotificationPayload) => {
-      try {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title,
-            body,
-            data: { type: "room", ...payload }
-          },
-          trigger: null
-        });
-      } catch (_err) {
-        return;
-      }
-    },
-    []
-  );
-
   const notifyRoomSnapshot = useCallback(
     (snapshot: RoomSnapshot, previous?: RoomSnapshot) => {
       if (!user || !previous || !notificationsEnabled) return;
@@ -436,54 +458,24 @@ export default function App() {
         return;
       }
 
-      const opponent = snapshot.players.find((player) => player.id !== user.id);
-      const opponentProgress = opponent ? snapshot.progressByUserId[opponent.id] ?? 0 : 0;
-      const previousOpponentProgress = opponent
-        ? previous.progressByUserId[opponent.id] ?? 0
-        : 0;
-      const myProgress = snapshot.progressByUserId[user.id] ?? 0;
       const payload = { roomCode: snapshot.code, roomStatus: snapshot.status };
 
-      const notify = (titleKey: string, bodyKey: string, tone: NotificationTone) => {
-        const title = t(locale, titleKey);
-        const body = t(locale, bodyKey);
+      const notify = (event: RoomNotificationEvent) => {
+        const copy = ROOM_NOTIFICATION_COPY[event];
+        const title = t(locale, copy.titleKey);
+        const body = t(locale, copy.bodyKey);
         enqueueNotification({
           title,
           body,
-          tone,
+          tone: copy.tone,
           onPress: () => openMatchFromPayload(payload)
         });
-        if (appStateRef.current !== "active") {
-          scheduleSystemNotification(title, body, payload);
-        }
       };
 
-      if (snapshot.status === "complete" && previous.status !== "complete") {
-        notify("notificationCompleteTitle", "notificationCompleteBody", "success");
-      }
-
-      if (snapshot.status === "active" && previous.status !== "active") {
-        notify("notificationTurnTitle", "notificationTurnBody", "primary");
-      } else if (
-        snapshot.mode === "async" &&
-        snapshot.status === "active" &&
-        opponentProgress > previousOpponentProgress &&
-        myProgress < snapshot.totalQuestions
-      ) {
-        notify("notificationTurnTitle", "notificationTurnBody", "primary");
-      }
-
-      const previousReady = new Set(previous.rematchReady ?? []);
-      const newlyReady = (snapshot.rematchReady ?? []).filter((id) => !previousReady.has(id));
-      if (newlyReady.some((id) => id !== user.id)) {
-        notify("notificationRematchTitle", "notificationRematchBody", "accent");
-      }
-
-      if (snapshot.inviteForMe && !previous.inviteForMe) {
-        notify("notificationInviteTitle", "notificationInviteBody", "accent");
-      }
+      const events = getRoomNotificationEvents({ snapshot, previous, userId: user.id });
+      events.forEach((event) => notify(event));
     },
-    [enqueueNotification, locale, notificationsEnabled, openMatchFromPayload, scheduleSystemNotification, user]
+    [enqueueNotification, locale, notificationsEnabled, openMatchFromPayload, user]
   );
 
   const processRoomSnapshot = useCallback(
@@ -591,7 +583,18 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!notificationsEnabled) return;
+    if (!token) return;
+    if (!notificationsEnabled) {
+      const registered = registeredPushRef.current;
+      if (registered) {
+        unregisterPushDevice(token, registered).catch(() => null);
+      } else {
+        unregisterPushDevice(token).catch(() => null);
+      }
+      registeredPushRef.current = null;
+      AsyncStorage.removeItem("dq_push_token").catch(() => null);
+      return;
+    }
     const register = async () => {
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("default", {
@@ -608,15 +611,27 @@ export default function App() {
       }
       if (finalStatus !== "granted") return;
 
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-      const tokenResponse = projectId
-        ? await Notifications.getExpoPushTokenAsync({ projectId })
-        : await Notifications.getExpoPushTokenAsync();
-      AsyncStorage.setItem("dq_push_token", tokenResponse.data).catch(() => null);
+      const nativeToken = await Notifications.getDevicePushTokenAsync();
+      const provider: "apns" | "fcm" | null =
+        nativeToken.type === "ios"
+          ? "apns"
+          : nativeToken.type === "android"
+          ? "fcm"
+          : null;
+      const deviceToken =
+        typeof nativeToken.data === "string" ? nativeToken.data.trim() : String(nativeToken.data || "");
+      if (!provider || !deviceToken) return;
+
+      await registerPushDevice(token, {
+        provider,
+        token: deviceToken,
+        platform: Platform.OS === "ios" ? "ios" : "android"
+      });
+      registeredPushRef.current = { provider, token: deviceToken };
+      AsyncStorage.setItem("dq_push_token", `${provider}:${deviceToken}`).catch(() => null);
     };
     register().catch(() => null);
-  }, [notificationsEnabled]);
+  }, [notificationsEnabled, token]);
 
   useEffect(() => {
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -629,26 +644,6 @@ export default function App() {
         openMatchFromPayload({
           roomCode: data.roomCode,
           roomStatus: data.roomStatus ?? "active"
-        });
-      }
-    });
-
-    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as {
-        type?: string;
-        roomCode?: string;
-        roomStatus?: RoomSnapshot["status"];
-      };
-      if (data?.type === "room" && data.roomCode) {
-        enqueueNotification({
-          title: notification.request.content.title ?? t(locale, "notificationTurnTitle"),
-          body: notification.request.content.body ?? t(locale, "notificationTurnBody"),
-          tone: "primary",
-          onPress: () =>
-            openMatchFromPayload({
-              roomCode: data.roomCode,
-              roomStatus: data.roomStatus ?? "active"
-            })
         });
       }
     });
@@ -670,9 +665,8 @@ export default function App() {
 
     return () => {
       responseSub.remove();
-      receivedSub.remove();
     };
-  }, [enqueueNotification, locale, openMatchFromPayload]);
+  }, [openMatchFromPayload]);
 
   useEffect(() => {
     if (notificationsEnabled) return;
@@ -962,7 +956,7 @@ export default function App() {
     });
 
     socket.on("room:update", (state: RoomState) => {
-      processRoomSnapshot(snapshotFromRoomState(state));
+      processRoomSnapshot(snapshotFromRoomState(state, user?.id));
       if (
         closedRoomCodesRef.current.has(state.code) &&
         roomRef.current?.code !== state.code &&
@@ -1562,6 +1556,11 @@ export default function App() {
   }
 
   function handleLogout() {
+    if (token) {
+      const registered = registeredPushRef.current;
+      unregisterPushDevice(token, registered || undefined).catch(() => null);
+      registeredPushRef.current = null;
+    }
     setAuthMode("login");
     setApplePendingProfile(null);
     setToken(null);

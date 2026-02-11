@@ -8,11 +8,12 @@
       "developmentClient": true,
       "distribution": "internal"
     },
+    "production": {
+      "env": { "NODE_ENV": "production" },
+      "autoIncrement": true
+    },
     "preview": {
       "distribution": "internal"
-    },
-    "production": {
-      "autoIncrement": true
     }
   },
   "submit": {

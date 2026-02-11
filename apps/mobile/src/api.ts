@@ -299,6 +299,38 @@ export async function fetchMe(token: string) {
   return response.json() as Promise<{ user: User }>;
 }
 
+export async function registerPushDevice(
+  token: string,
+  payload: { provider: "apns" | "fcm"; token: string; platform: "ios" | "android" }
+) {
+  const response = await fetch(`${API_BASE_URL}/me/push-devices`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  await ensureOk(response, "Unable to register push device", { authRequired: true });
+  return response.json() as Promise<{ ok: boolean }>;
+}
+
+export async function unregisterPushDevice(
+  token: string,
+  payload?: { provider?: "apns" | "fcm"; token?: string }
+) {
+  const response = await fetch(`${API_BASE_URL}/me/push-devices`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload || {})
+  });
+  await ensureOk(response, "Unable to unregister push device", { authRequired: true });
+  return response.json() as Promise<{ ok: boolean }>;
+}
+
 export async function fetchMyRooms(token: string) {
   const response = await fetch(`${API_BASE_URL}/rooms/mine`, {
     headers: { Authorization: `Bearer ${token}` }
