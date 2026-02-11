@@ -18,10 +18,16 @@ npm run dev
 
 For native push notifications (APNs/FCM), create the device table:
 ```bash
-psql "$SUPABASE_DB_URL" -f docs/push-devices.sql
+psql "$SUPABASE_DB_URL" -f ../../docs/push-devices.sql
 ```
 
-And set server env vars (only the providers you use):
+Set required server env vars:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `JWT_SECRET`
+- `APP_BASE_URL`
+
+And set push/email provider env vars only if you use these features:
 - `FCM_PROJECT_ID`
 - `FCM_CLIENT_EMAIL`
 - `FCM_PRIVATE_KEY` (use `\n` escaped line breaks)

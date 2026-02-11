@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
+import { randomBytes } from "crypto";
 import { Server as SocketServer } from "socket.io";
 import bcrypt from "bcryptjs";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -932,7 +933,7 @@ function renderSimplePage(title, bodyHtml) {
 }
 
 function createToken() {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  return randomBytes(32).toString("hex");
 }
 
 function addMinutes(date, minutes) {
@@ -1190,13 +1191,23 @@ app.get("/daily-quiz/history", authMiddleware, async (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 7, 1), 14);
   const { data: rows } = await supabase
     .from("daily_answers")
-    .select("quiz_date")
+    .select("quiz_date, answered_at")
     .eq("user_id", req.user.id)
     .order("quiz_date", { ascending: false })
-    .limit(limit);
+    .order("answered_at", { ascending: false })
+    .limit(limit * 20);
+
+  const uniqueRows = [];
+  const seenDates = new Set();
+  for (const row of rows || []) {
+    if (!row?.quiz_date || seenDates.has(row.quiz_date)) continue;
+    seenDates.add(row.quiz_date);
+    uniqueRows.push(row);
+    if (uniqueRows.length >= limit) break;
+  }
 
   const results = await Promise.all(
-    (rows || []).map((row) => buildDailyResults(row.quiz_date, req.user.id))
+    uniqueRows.map((row) => buildDailyResults(row.quiz_date, req.user.id))
   );
   const history = results
     .filter(Boolean)
@@ -1878,23 +1889,43 @@ app.get("/me/export", authMiddleware, async (req, res) => {
 });
 
 app.delete("/me", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
-  const userId = req.user.id;
-  const { data: hostedRooms } = await supabase
-    .from("rooms")
-    .select("id")
-    .eq("host_user_id", userId);
-  const roomIds = hostedRooms?.map((row) => row.id) || [];
-  if (roomIds.length > 0) {
-    await supabase.from("room_answers").delete().in("room_id", roomIds);
-    await supabase.from("room_players").delete().in("room_id", roomIds);
-    await supabase.from("room_rematch").delete().in("room_id", roomIds);
-    await supabase.from("rooms").delete().in("id", roomIds);
+  try {
+    const userId = req.user.id;
+    const { data: hostedRooms, error: hostedRoomsError } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("host_user_id", userId);
+    if (hostedRoomsError) {
+      throw hostedRoomsError;
+    }
+    const roomIds = hostedRooms?.map((row) => row.id) || [];
+    if (roomIds.length > 0) {
+      const { error: roomAnswersError } = await supabase.from("room_answers").delete().in("room_id", roomIds);
+      if (roomAnswersError) throw roomAnswersError;
+      const { error: roomPlayersError } = await supabase.from("room_players").delete().in("room_id", roomIds);
+      if (roomPlayersError) throw roomPlayersError;
+      const { error: roomRematchError } = await supabase.from("room_rematch").delete().in("room_id", roomIds);
+      if (roomRematchError) throw roomRematchError;
+      const { error: roomsError } = await supabase.from("rooms").delete().in("id", roomIds);
+      if (roomsError) throw roomsError;
+    }
+    const { error: myRoomAnswersError } = await supabase.from("room_answers").delete().eq("user_id", userId);
+    if (myRoomAnswersError) throw myRoomAnswersError;
+    const { error: myRoomPlayersError } = await supabase.from("room_players").delete().eq("user_id", userId);
+    if (myRoomPlayersError) throw myRoomPlayersError;
+    const { error: myRoomRematchError } = await supabase.from("room_rematch").delete().eq("user_id", userId);
+    if (myRoomRematchError) throw myRoomRematchError;
+    const { error: myDailyAnswersError } = await supabase.from("daily_answers").delete().eq("user_id", userId);
+    if (myDailyAnswersError) throw myDailyAnswersError;
+    const { error: myUserBadgesError } = await supabase.from("user_badges").delete().eq("user_id", userId);
+    if (myUserBadgesError) throw myUserBadgesError;
+    const { error: userDeleteError } = await supabase.from("users").delete().eq("id", userId);
+    if (userDeleteError) throw userDeleteError;
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[account-delete] failed", error);
+    res.status(500).json({ error: "Unable to delete account" });
   }
-  await supabase.from("room_answers").delete().eq("user_id", userId);
-  await supabase.from("room_players").delete().eq("user_id", userId);
-  await supabase.from("user_badges").delete().eq("user_id", userId);
-  await supabase.from("users").delete().eq("id", userId);
-  res.json({ ok: true });
 });
 
 app.post("/me/deactivate", authMiddleware, rateLimit({ windowMs: 60_000, max: 5 }), async (req, res) => {
