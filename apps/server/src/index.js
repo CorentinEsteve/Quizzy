@@ -901,6 +901,43 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/health/push", async (req, res) => {
+  const apnsConfigured = Boolean(
+    process.env.APNS_TEAM_ID &&
+      process.env.APNS_KEY_ID &&
+      process.env.APNS_PRIVATE_KEY &&
+      process.env.APNS_BUNDLE_ID
+  );
+  const fcmConfigured = Boolean(
+    process.env.FCM_PROJECT_ID && process.env.FCM_CLIENT_EMAIL && process.env.FCM_PRIVATE_KEY
+  );
+
+  let pushDevicesTableAvailable = true;
+  let pushDevicesCount = 0;
+  try {
+    const { count, error } = await supabase
+      .from(PUSH_DEVICE_TABLE)
+      .select("*", { count: "exact", head: true });
+    if (error) throw error;
+    pushDevicesCount = count || 0;
+  } catch (error) {
+    pushDevicesTableAvailable = false;
+    if (!isPushTableMissing(error)) {
+      console.warn("[push-health] unexpected push table check failure", error);
+    }
+  }
+
+  res.json({
+    status: "ok",
+    apnsConfigured,
+    apnsUseProduction:
+      (process.env.APNS_USE_PRODUCTION || "true").toLowerCase() !== "false",
+    fcmConfigured,
+    pushDevicesTableAvailable,
+    pushDevicesCount
+  });
+});
+
 function renderLegalPage(title, bodyHtml) {
   return `<!doctype html>
 <html lang="en">
@@ -1678,6 +1715,10 @@ app.post(
       await upsertPushDevice(req.user.id, req.body || {});
       return res.json({ ok: true });
     } catch (error) {
+      console.warn("[push] register device failed", {
+        userId: req.user.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
       if (isPushTableMissing(error)) {
         return res.status(503).json({ error: "Push devices table is not configured" });
       }
@@ -1695,6 +1736,10 @@ app.delete(
       await removePushDevice(req.user.id, req.body || {});
       return res.json({ ok: true });
     } catch (error) {
+      console.warn("[push] unregister device failed", {
+        userId: req.user.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
       if (isPushTableMissing(error)) {
         return res.status(503).json({ error: "Push devices table is not configured" });
       }

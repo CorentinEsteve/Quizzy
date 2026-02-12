@@ -630,7 +630,14 @@ export default function App() {
       registeredPushRef.current = { provider, token: deviceToken };
       AsyncStorage.setItem("dq_push_token", `${provider}:${deviceToken}`).catch(() => null);
     };
-    register().catch(() => null);
+    register().catch((err) => {
+      console.warn("[push] native token registration failed", err);
+      setRoomError(
+        locale === "fr"
+          ? "Échec de l'enregistrement des notifications push."
+          : "Push notification registration failed."
+      );
+    });
   }, [notificationsEnabled, token]);
 
   useEffect(() => {
