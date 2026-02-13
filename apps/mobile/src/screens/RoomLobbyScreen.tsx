@@ -59,11 +59,14 @@ export function RoomLobbyScreen({
   const visibleOpponents = availableOpponents.slice(0, 4);
   const canInviteOpponents = isHost && !hasBothPlayers;
   const canManageInvites = isHost;
-  const statusHint = hasBothPlayers
+  const headerHint = hasBothPlayers
+    ? t(locale, "lobbyReady")
+    : t(locale, "lobbyInviteHint");
+  const statusHeroHint = hasBothPlayers
     ? isHost
       ? t(locale, "lobbyStartHint")
       : t(locale, "lobbyGuestHint")
-    : t(locale, "lobbyInviteHint");
+    : t(locale, "inviteBody");
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -134,7 +137,9 @@ export function RoomLobbyScreen({
           </Text>
           <View style={styles.headerMeta}>
             <Pill label={modeLabel} />
-            <Text style={styles.subtitle}>{statusHint}</Text>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={styles.subtitle}>
+              {headerHint}
+            </Text>
           </View>
         </View>
 
@@ -162,7 +167,9 @@ export function RoomLobbyScreen({
                 />
                 <View style={[styles.liveDot, hasBothPlayers && styles.liveDotReady]} />
               </View>
-              <Text style={styles.liveText}>{hasBothPlayers ? t(locale, "lobbyReady") : t(locale, "lobbyWaiting")}</Text>
+              <Text style={styles.liveText}>
+                {hasBothPlayers ? t(locale, "lobbyStatusReady") : t(locale, "lobbyStatusOpen")}
+              </Text>
             </View>
             <View style={styles.statusCountPill}>
               <Text style={styles.statusCountText}>{room.players.length}/2</Text>
@@ -170,14 +177,10 @@ export function RoomLobbyScreen({
           </View>
           <Text style={styles.statusHeroTitle}>
             {hasBothPlayers
-              ? locale === "fr"
-                ? "Le duel est prêt"
-                : "Duel is ready"
-              : locale === "fr"
-                ? "En attente d'un challenger"
-                : "Waiting for a challenger"}
+              ? t(locale, "lobbyHeroReadyTitle")
+              : t(locale, "lobbyHeroWaitingTitle")}
           </Text>
-          <Text style={styles.statusHeroBody}>{statusHint}</Text>
+          <Text style={styles.statusHeroBody}>{statusHeroHint}</Text>
           <View style={styles.statusHeroCodeRow}>
             <View style={styles.statusHeroCodePill}>
               <FontAwesome name="hashtag" size={12} color={theme.colors.primary} />
