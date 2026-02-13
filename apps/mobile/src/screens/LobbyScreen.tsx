@@ -21,6 +21,7 @@ import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
 import { localizedCategoryLabel } from "../data/categories";
+import { resolveMaxRoomPlayers } from "../roomConfig";
 import {
   DailyQuizResults,
   DailyQuizStatus,
@@ -43,9 +44,10 @@ type Props = {
     code: string;
     mode: "sync" | "async";
     status: string;
-    createdAt?: string;
-    updatedAt?: string;
-    invitedAt?: string;
+    maxPlayers?: number;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    invitedAt?: string | null;
     quiz: {
       title: string;
       subtitle: string;
@@ -182,14 +184,16 @@ export function LobbyScreen({
       activeSessions.filter((session) => {
         const totalQuestions = session.quiz.questions?.length ?? 0;
         const myProgress = session.progress?.[String(userId)] ?? 0;
-        const opponent = session.players.find((player) => player.id !== userId);
-        const opponentProgress = opponent ? session.progress?.[String(opponent.id)] ?? 0 : 0;
-        const isAsyncDual = session.mode === "async" && session.players.length > 1;
+        const otherProgressValues = session.players
+          .filter((player) => player.id !== userId)
+          .map((player) => session.progress?.[String(player.id)] ?? 0);
         const isWaitingForOpponent =
           (session.mode === "sync" &&
-            myProgress > opponentProgress &&
-            myProgress < totalQuestions) ||
-          (isAsyncDual && myProgress >= totalQuestions && opponentProgress < totalQuestions);
+            myProgress < totalQuestions &&
+            otherProgressValues.some((progress) => myProgress > progress)) ||
+          (session.mode === "async" &&
+            myProgress >= totalQuestions &&
+            otherProgressValues.some((progress) => progress < totalQuestions));
         return session.mode === "sync"
           ? !isWaitingForOpponent && myProgress < totalQuestions
           : myProgress < totalQuestions;
@@ -236,7 +240,7 @@ export function LobbyScreen({
           session.myRole === "guest" ||
           session.myRole === "host" ||
           session.players.some((player) => player.id === userId);
-        const isAtCapacity = session.players.length >= 2;
+        const isAtCapacity = session.players.length >= resolveMaxRoomPlayers(session);
         if (!amParticipant && isAtCapacity) return null;
 
         const sentAtMs = isInvite
@@ -486,13 +490,15 @@ export function LobbyScreen({
     return () => animation.stop();
   }, [invitePulse, showInvitedCard]);
 
-  const nextOpponent = nextSession?.players.find((player) => player.id !== userId);
-  const nextOpponentName = nextOpponent?.displayName ?? t(locale, "opponentLabel");
+  const nextOpponents = nextSession?.players.filter((player) => player.id !== userId) ?? [];
+  const nextOpponentName =
+    nextOpponents.length === 0
+      ? t(locale, "opponentLabel")
+      : nextOpponents.length === 1
+        ? nextOpponents[0].displayName
+        : `${nextOpponents[0].displayName} +${nextOpponents.length - 1}`;
   const nextTotalQuestions = nextSession?.quiz.questions?.length ?? 0;
   const nextMyProgress = nextSession ? nextSession.progress?.[String(userId)] ?? 0 : 0;
-  const nextOpponentProgress =
-    nextSession && nextOpponent ? nextSession.progress?.[String(nextOpponent.id)] ?? 0 : 0;
-  const nextDelta = nextOpponentProgress - nextMyProgress;
   const nextStatus = t(locale, "yourTurn");
   const nextMeta =
     nextSession && nextTotalQuestions
@@ -929,20 +935,25 @@ export function LobbyScreen({
             {remainingSessions
               .slice(0, 3)
               .map((session, index, array) => {
-                const opponent = session.players.find((p) => p.id !== userId);
+                const otherPlayers = session.players.filter((player) => player.id !== userId);
+                const opponentsLabel =
+                  otherPlayers.length === 0
+                    ? "-"
+                    : otherPlayers.length === 1
+                      ? otherPlayers[0].displayName
+                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
                 const totalQuestions = session.quiz.questions?.length ?? 0;
                 const myProgress = session.progress?.[String(userId)] ?? 0;
-                const opponentProgress = opponent
-                  ? session.progress?.[String(opponent.id)] ?? 0
-                  : 0;
-                const isAsyncDual = session.mode === "async" && session.players.length > 1;
+                const otherProgressValues = otherPlayers.map(
+                  (player) => session.progress?.[String(player.id)] ?? 0
+                );
                 const isWaitingForOpponent =
                   (session.mode === "sync" &&
-                    myProgress > opponentProgress &&
-                    myProgress < totalQuestions) ||
-                  (isAsyncDual &&
+                    myProgress < totalQuestions &&
+                    otherProgressValues.some((progress) => myProgress > progress)) ||
+                  (session.mode === "async" &&
                     myProgress >= totalQuestions &&
-                    opponentProgress < totalQuestions);
+                    otherProgressValues.some((progress) => progress < totalQuestions));
                 const canContinue =
                   session.mode === "sync"
                     ? !isWaitingForOpponent && myProgress < totalQuestions
@@ -966,7 +977,7 @@ export function LobbyScreen({
                       <View>
                         <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
                         <Text style={styles.sessionSubtitle}>
-                          {t(locale, "withOpponent")} {opponent?.displayName ?? "-"}
+                          {t(locale, "withOpponent")} {opponentsLabel}
                         </Text>
                         <Text style={styles.sessionMetaSubtle}>
                           {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
@@ -1033,7 +1044,13 @@ export function LobbyScreen({
                 const isLast = index === array.length - 1;
                 const rematchByYou = session.rematchReady?.includes(userId);
                 const rematchByOpponent = !rematchByYou;
-                const opponent = session.players.find((p) => p.id !== userId);
+                const otherPlayers = session.players.filter((player) => player.id !== userId);
+                const opponentsLabel =
+                  otherPlayers.length === 0
+                    ? "-"
+                    : otherPlayers.length === 1
+                      ? otherPlayers[0].displayName
+                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
                 return (
                   <Pressable
                     key={session.code}
@@ -1044,7 +1061,7 @@ export function LobbyScreen({
                         <View>
                           <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
                           <Text style={styles.sessionSubtitle}>
-                            {t(locale, "withOpponent")} {opponent?.displayName ?? "-"}
+                            {t(locale, "withOpponent")} {opponentsLabel}
                           </Text>
                         </View>
                         <View style={[styles.ctaPill, styles.ctaPrimary]}>
@@ -1175,16 +1192,24 @@ export function LobbyScreen({
               .map((session, index, array) => {
                 const totalQuestions = session.quiz.questions?.length ?? 0;
                 const myScore = session.scores?.[String(userId)];
-                const opponent = session.players.find((p) => p.id !== userId);
-                const opponentScore = opponent ? session.scores?.[String(opponent.id)] : undefined;
+                const otherPlayers = session.players.filter((player) => player.id !== userId);
+                const opponentsLabel =
+                  otherPlayers.length === 0
+                    ? "-"
+                    : otherPlayers.length === 1
+                      ? otherPlayers[0].displayName
+                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
+                const allScores = session.players
+                  .map((player) => session.scores?.[String(player.id)])
+                  .filter((score): score is number => typeof score === "number");
                 const rematchByYou = session.rematchReady?.includes(userId);
                 const resultLabel =
-                  myScore !== undefined && opponentScore !== undefined
-                    ? myScore > opponentScore
-                      ? t(locale, "wonLabel")
-                      : myScore < opponentScore
-                        ? t(locale, "lostLabel")
-                        : t(locale, "youTied")
+                  myScore !== undefined && allScores.length > 0
+                    ? myScore === Math.max(...allScores)
+                      ? allScores.filter((score) => score === myScore).length > 1
+                        ? t(locale, "youTied")
+                        : t(locale, "wonLabel")
+                      : t(locale, "lostLabel")
                     : null;
                 const isLast = index === array.length - 1;
                 const resultStyle =
@@ -1215,7 +1240,7 @@ export function LobbyScreen({
                         <View>
                           <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
                           <Text style={styles.sessionSubtitle}>
-                            {t(locale, "withOpponent")} {opponent?.displayName ?? "-"}
+                            {t(locale, "withOpponent")} {opponentsLabel}
                           </Text>
                           <Text style={styles.sessionMetaSubtle}>
                             {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}

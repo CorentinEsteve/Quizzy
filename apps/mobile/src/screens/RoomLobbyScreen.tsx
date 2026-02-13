@@ -10,6 +10,7 @@ import { Pill } from "../components/Pill";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { localizedCategoryLabel } from "../data/categories";
 import { RoomState, StatsResponse, User } from "../data/types";
+import { MIN_ROOM_PLAYERS_TO_START, resolveMaxRoomPlayers } from "../roomConfig";
 
 type Props = {
   room: RoomState;
@@ -40,9 +41,13 @@ export function RoomLobbyScreen({
   locale
 }: Props) {
   const insets = useSafeAreaInsets();
+  const maxPlayers = resolveMaxRoomPlayers(room);
+  const seatsLeft = Math.max(maxPlayers - room.players.length, 0);
+  const reservedCount = room.players.length + (room.invites?.length ?? 0);
+  const hasEnoughPlayers = room.players.length >= MIN_ROOM_PLAYERS_TO_START;
+  const isFull = room.players.length >= maxPlayers;
   const isHost = room.players.find((player) => player.id === user.id)?.role === "host";
-  const hasBothPlayers = room.players.length >= 2;
-  const canStart = isHost && hasBothPlayers;
+  const canStart = isHost && hasEnoughPlayers;
   const footerInset = theme.spacing.lg + insets.bottom + 96;
   const modeLabel = room.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel");
   const statusPulse = useRef(new Animated.Value(0)).current;
@@ -57,12 +62,12 @@ export function RoomLobbyScreen({
     return recentOpponents.filter((opponent) => !activeIds.has(opponent.opponentId));
   }, [recentOpponents, room.players]);
   const visibleOpponents = availableOpponents.slice(0, 4);
-  const canInviteOpponents = isHost && !hasBothPlayers;
+  const canInviteOpponents = isHost && reservedCount < maxPlayers;
   const canManageInvites = isHost;
-  const headerHint = hasBothPlayers
+  const headerHint = hasEnoughPlayers
     ? t(locale, "lobbyReady")
     : t(locale, "lobbyInviteHint");
-  const statusHeroHint = hasBothPlayers
+  const statusHeroHint = hasEnoughPlayers
     ? isHost
       ? t(locale, "lobbyStartHint")
       : t(locale, "lobbyGuestHint")
@@ -157,7 +162,7 @@ export function RoomLobbyScreen({
                   style={[
                     styles.liveDotPulse,
                     {
-                      backgroundColor: hasBothPlayers
+                      backgroundColor: hasEnoughPlayers
                         ? "rgba(34, 197, 94, 0.34)"
                         : "rgba(245, 158, 11, 0.36)",
                       opacity: pulseOpacity,
@@ -165,18 +170,20 @@ export function RoomLobbyScreen({
                     }
                   ]}
                 />
-                <View style={[styles.liveDot, hasBothPlayers && styles.liveDotReady]} />
+                <View style={[styles.liveDot, hasEnoughPlayers && styles.liveDotReady]} />
               </View>
               <Text style={styles.liveText}>
-                {hasBothPlayers ? t(locale, "lobbyStatusReady") : t(locale, "lobbyStatusOpen")}
+                {hasEnoughPlayers ? t(locale, "lobbyStatusReady") : t(locale, "lobbyStatusOpen")}
               </Text>
             </View>
             <View style={styles.statusCountPill}>
-              <Text style={styles.statusCountText}>{room.players.length}/2</Text>
+              <Text style={styles.statusCountText}>
+                {room.players.length}/{maxPlayers}
+              </Text>
             </View>
           </View>
           <Text style={styles.statusHeroTitle}>
-            {hasBothPlayers
+            {hasEnoughPlayers
               ? t(locale, "lobbyHeroReadyTitle")
               : t(locale, "lobbyHeroWaitingTitle")}
           </Text>
@@ -192,7 +199,7 @@ export function RoomLobbyScreen({
           </View>
         </GlassCard>
 
-        {!hasBothPlayers ? (
+        {!isFull ? (
           <GlassCard style={[styles.card, styles.inviteCard]}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeading}>
@@ -311,7 +318,7 @@ export function RoomLobbyScreen({
               <Text style={styles.sectionTitle}>{t(locale, "players")}</Text>
             </View>
             <Text style={styles.sectionMetaInline}>
-              {room.players.length}/2
+              {room.players.length}/{maxPlayers}
             </Text>
           </View>
           {room.players.map((player) => (
@@ -329,9 +336,11 @@ export function RoomLobbyScreen({
               </View>
             </View>
           ))}
-          {room.players.length < 2 ? (
+          {!isFull ? (
             <View style={styles.openSeat}>
-              <Text style={styles.openSeatLabel}>{t(locale, "openSeat")}</Text>
+              <Text style={styles.openSeatLabel}>
+                {t(locale, "openSeat")} · {seatsLeft}
+              </Text>
               <Pill label={t(locale, "readyToInvite")} />
             </View>
           ) : null}

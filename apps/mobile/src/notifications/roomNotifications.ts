@@ -42,8 +42,7 @@ export function getRoomNotificationEvents(params: {
     snapshot.status === "lobby" &&
     previous.status === "lobby" &&
     isHost(snapshot, userId) &&
-    countOpponents(previous, userId) === 0 &&
-    countOpponents(snapshot, userId) > 0
+    countOpponents(snapshot, userId) > countOpponents(previous, userId)
   ) {
     events.push("host_player_joined");
   }
@@ -52,11 +51,15 @@ export function getRoomNotificationEvents(params: {
   if (justStarted) {
     events.push("room_started");
   } else if (snapshot.mode === "async" && snapshot.status === "active") {
-    const opponent = snapshot.players.find((player) => player.id !== userId);
-    const opponentProgress = opponent ? snapshot.progressByUserId[opponent.id] ?? 0 : 0;
-    const previousOpponentProgress = opponent ? previous.progressByUserId[opponent.id] ?? 0 : 0;
+    const hasOtherProgressUpdate = snapshot.players
+      .filter((player) => player.id !== userId)
+      .some((player) => {
+        const progress = snapshot.progressByUserId[player.id] ?? 0;
+        const previousProgress = previous.progressByUserId[player.id] ?? 0;
+        return progress > previousProgress;
+      });
     const myProgress = snapshot.progressByUserId[userId] ?? 0;
-    if (opponentProgress > previousOpponentProgress && myProgress < snapshot.totalQuestions) {
+    if (hasOtherProgressUpdate && myProgress < snapshot.totalQuestions) {
       events.push("your_turn");
     }
   }

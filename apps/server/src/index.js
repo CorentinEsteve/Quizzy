@@ -33,6 +33,14 @@ const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID || "";
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 const PUSH_DEVICE_TABLE = "push_devices";
+const MIN_ROOM_PLAYERS_TO_START = 2;
+const MIN_MULTIPLAYER_ROOM_CAPACITY = 3;
+const configuredMaxRoomPlayers = Number.parseInt(process.env.MAX_ROOM_PLAYERS || "", 10);
+const MAX_ROOM_PLAYERS =
+  Number.isInteger(configuredMaxRoomPlayers) &&
+  configuredMaxRoomPlayers >= MIN_MULTIPLAYER_ROOM_CAPACITY
+    ? configuredMaxRoomPlayers
+    : 8;
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
@@ -786,6 +794,7 @@ async function roomState(room) {
     code: room.code,
     mode: room.mode,
     status: room.status,
+    maxPlayers: MAX_ROOM_PLAYERS,
     currentIndex: room.current_index,
     quiz,
     players,
@@ -883,8 +892,8 @@ function resolvePushCopy(eventType, country, fallbackTitle, fallbackBody) {
       fr: { title: "Match lance", body: "Ton duel a commence." }
     },
     rematch_requested: {
-      en: { title: "Rematch requested", body: "Your opponent is ready for another round." },
-      fr: { title: "Revanche demandee", body: "Ton adversaire est pret pour une nouvelle manche." }
+      en: { title: "Rematch requested", body: "Another player is ready for another round." },
+      fr: { title: "Revanche demandee", body: "Un joueur est pret pour une nouvelle manche." }
     },
     your_turn: {
       en: { title: "Your turn", body: "Time to answer in your duel." },
@@ -2098,20 +2107,16 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
     return res.status(404).json({ error: "Room not found" });
   }
   const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
-  const players = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
   const existing = allPlayers.find((player) => player.id === req.user.id);
   const isInvited = existing?.role === "invited";
-  const hadSeatAvailable = players.length < 2;
+  const joinedNow = !existing || isInvited;
   if (!existing && room.status !== "lobby") {
     return res.status(409).json({ error: "Room already started" });
   }
   if (isInvited && room.status !== "lobby") {
     return res.status(409).json({ error: "Room already started" });
   }
-  if (!existing && players.length >= 2) {
-    return res.status(409).json({ error: "Room is full" });
-  }
-  if (isInvited && players.length >= 2) {
+  if (!existing && allPlayers.length >= MAX_ROOM_PLAYERS) {
     return res.status(409).json({ error: "Room is full" });
   }
   if (!existing) {
@@ -2129,7 +2134,7 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
       .eq("user_id", req.user.id);
   }
   const state = await emitRoomUpdateToMembers(room);
-  if (hadSeatAvailable && req.user.id !== room.host_user_id) {
+  if (joinedNow && req.user.id !== room.host_user_id) {
     sendPushToUsers([room.host_user_id], {
       title: "Player joined your room",
       body: "A player joined your lobby. You can start the match.",
@@ -2174,11 +2179,13 @@ app.post("/rooms/:code/invite", authMiddleware, async (req, res) => {
   }
 
   const allPlayers = await getRoomPlayers(room.id, { includeInvited: true });
-  const activePlayers = allPlayers.filter((player) => ACTIVE_ROLES.has(player.role));
   const existing = allPlayers.find((player) => player.id === inviteeId);
   const isNewInvite = !existing;
 
-  if (activePlayers.length >= 2 && !existing) {
+  if (ACTIVE_ROLES.has(existing?.role || "")) {
+    return res.status(409).json({ error: "Player already joined" });
+  }
+  if (allPlayers.length >= MAX_ROOM_PLAYERS && !existing) {
     return res.status(409).json({ error: "Room is full" });
   }
   if (!existing) {
@@ -2314,6 +2321,7 @@ app.get("/rooms/mine", authMiddleware, async (req, res) => {
         players,
         scores,
         rematchReady: rematch.map((item) => item.userId),
+        maxPlayers: MAX_ROOM_PLAYERS,
         myRole: membershipByRoomId.get(room.id)?.role || "guest"
       };
     })
@@ -2378,33 +2386,53 @@ app.get("/stats", authMiddleware, async (req, res) => {
     }
 
     if (rematch.length > 0) rematchRequested += 1;
-    const opponent = players.find((player) => player.id !== req.user.id);
-    if (!opponent || !quiz) continue;
+    if (!quiz) continue;
+    const opponents = players.filter((player) => player.id !== req.user.id);
+    if (opponents.length === 0) continue;
 
-    const key = String(opponent.id);
-    if (!perOpponent[key]) {
-      perOpponent[key] = {
-        opponentId: opponent.id,
-        opponentName: opponent.displayName,
-        wins: 0,
-        losses: 0,
-        ties: 0
-      };
-    }
+    opponents.forEach((opponent) => {
+      const key = String(opponent.id);
+      if (!perOpponent[key]) {
+        perOpponent[key] = {
+          opponentId: opponent.id,
+          opponentName: opponent.displayName,
+          wins: 0,
+          losses: 0,
+          ties: 0
+        };
+      }
+    });
 
     if (room.status === "complete") {
-      const myScore = computeScore(quiz, answers, req.user.id);
-      const theirScore = computeScore(quiz, answers, opponent.id);
-      if (myScore > theirScore) {
-        wins += 1;
-        perOpponent[key].wins += 1;
-      } else if (myScore < theirScore) {
-        losses += 1;
-        perOpponent[key].losses += 1;
+      const scoreByUser = new Map(
+        players.map((player) => [player.id, computeScore(quiz, answers, player.id)])
+      );
+      const myScore = scoreByUser.get(req.user.id) ?? 0;
+      const opponentScores = opponents.map((opponent) => scoreByUser.get(opponent.id) ?? 0);
+      const topScore = Math.max(myScore, ...opponentScores);
+      const topCount = [myScore, ...opponentScores].filter((score) => score === topScore).length;
+
+      if (myScore === topScore) {
+        if (topCount > 1) {
+          ties += 1;
+        } else {
+          wins += 1;
+        }
       } else {
-        ties += 1;
-        perOpponent[key].ties += 1;
+        losses += 1;
       }
+
+      opponents.forEach((opponent) => {
+        const key = String(opponent.id);
+        const theirScore = scoreByUser.get(opponent.id) ?? 0;
+        if (myScore > theirScore) {
+          perOpponent[key].wins += 1;
+        } else if (myScore < theirScore) {
+          perOpponent[key].losses += 1;
+        } else {
+          perOpponent[key].ties += 1;
+        }
+      });
     }
   }
 
@@ -2499,14 +2527,19 @@ io.on("connection", (socket) => {
       return socket.emit("room:error", { error: "Only the host can start" });
     }
     if (room.status !== "lobby") return;
+    const players = await getRoomPlayers(room.id);
+    if (players.length < MIN_ROOM_PLAYERS_TO_START) {
+      return socket.emit("room:error", {
+        error: `At least ${MIN_ROOM_PLAYERS_TO_START} players are required to start`
+      });
+    }
     await supabase
       .from("rooms")
       .update({ status: "active", current_index: 0, started_at: nowIso() })
       .eq("id", room.id);
     const updated = await getRoomByCode(code);
     await emitRoomUpdateToMembers(updated || code);
-    const participants = await getRoomPlayers(room.id);
-    const targetUserIds = participants.map((player) => player.id).filter((id) => id !== user.id);
+    const targetUserIds = players.map((player) => player.id).filter((id) => id !== user.id);
     if (targetUserIds.length > 0) {
       sendPushToUsers(targetUserIds, {
         title: "Match started",
@@ -2553,7 +2586,7 @@ io.on("connection", (socket) => {
     if (targetUserIds.length > 0) {
       sendPushToUsers(targetUserIds, {
         title: "Rematch requested",
-        body: "Your opponent is ready for another round.",
+        body: "Another player is ready for another round.",
         data: {
           type: "room",
           roomCode: room.code,

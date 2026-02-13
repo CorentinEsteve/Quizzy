@@ -49,6 +49,7 @@ export type RoomState = {
   code: string;
   mode: "sync" | "async";
   status: "lobby" | "active" | "complete";
+  maxPlayers?: number;
   currentIndex: number;
   quiz: Quiz;
   players: { id: number; displayName: string; role: string }[];
@@ -113,6 +114,7 @@ export type RoomListItem = {
   code: string;
   mode: "sync" | "async";
   status: "lobby" | "active" | "complete";
+  maxPlayers?: number;
   createdAt?: string | null;
   updatedAt?: string | null;
   invitedAt?: string | null;

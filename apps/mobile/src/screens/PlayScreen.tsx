@@ -43,8 +43,6 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
     { paddingTop: theme.spacing.lg + insets.top, paddingBottom: footerInset }
   ];
   const myProgress = room.progress.find((item) => item.userId === userId)?.answeredCount ?? 0;
-  const myCorrect = room.progress.find((item) => item.userId === userId)?.correctCount ?? 0;
-  const myWrong = room.progress.find((item) => item.userId === userId)?.wrongCount ?? 0;
   const totalQuestions = Math.max(quiz.questions.length, 1);
   const safeMyProgress = Math.max(0, Math.min(myProgress, quiz.questions.length));
 
@@ -73,22 +71,46 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
     room.mode === "sync"
       ? `${Math.min(room.currentIndex + 1, quiz.questions.length)} / ${quiz.questions.length}`
       : `${safeMyProgress} / ${quiz.questions.length}`;
-  const opponent = room.players.find((player) => player.id !== userId);
-  const opponentName = opponent?.displayName ?? t(locale, "opponentLabel");
-  const opponentProgressItem = room.progress.find((item) => item.userId !== userId);
-  const otherProgress = opponentProgressItem?.answeredCount ?? 0;
-  const otherCorrect = opponentProgressItem?.correctCount ?? 0;
-  const otherWrong = opponentProgressItem?.wrongCount ?? 0;
+  const otherPlayers = room.players.filter((player) => player.id !== userId);
+  const opponentsLabel =
+    otherPlayers.length === 0
+      ? t(locale, "opponentLabel")
+      : otherPlayers.length === 1
+        ? otherPlayers[0].displayName
+        : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
+  const playerProgressRows = room.players
+    .map((player) => {
+      const progressItem = room.progress.find((item) => item.userId === player.id);
+      return {
+        id: player.id,
+        displayName: player.displayName,
+        answeredCount: progressItem?.answeredCount ?? 0,
+        correctCount: progressItem?.correctCount ?? 0,
+        wrongCount: progressItem?.wrongCount ?? 0
+      };
+    })
+    .sort((a, b) => {
+      if (a.id === userId) return -1;
+      if (b.id === userId) return 1;
+      if (b.answeredCount !== a.answeredCount) return b.answeredCount - a.answeredCount;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  const otherProgressValues = playerProgressRows
+    .filter((row) => row.id !== userId)
+    .map((row) => row.answeredCount);
   const hasAnsweredCurrent =
     selectedAnswers[question.id] !== undefined ||
     myProgress > questionIndex;
   const feedbackActive = feedback?.questionId === question.id;
   const isSyncDone = room.mode === "sync" && myProgress >= quiz.questions.length;
   const isAsyncDone = room.mode === "async" && myProgress >= quiz.questions.length;
-  const isAhead = myProgress > otherProgress;
-  const isTied = myProgress === otherProgress;
-  const isWaitingForOpponent = room.mode === "sync" && hasAnsweredCurrent && isAhead;
-  const isWaitingForNext = room.mode === "sync" && hasAnsweredCurrent && isTied;
+  const hasOtherPlayers = otherProgressValues.length > 0;
+  const hasOthersBehind = otherProgressValues.some((progress) => progress < myProgress);
+  const allOthersCaughtUp =
+    hasOtherPlayers && otherProgressValues.every((progress) => progress >= myProgress);
+  const isWaitingForOpponent = room.mode === "sync" && hasAnsweredCurrent && hasOthersBehind;
+  const isWaitingForNext =
+    room.mode === "sync" && hasAnsweredCurrent && !hasOthersBehind && allOthersCaughtUp;
   const waitingTitle =
     room.mode === "sync"
       ? isWaitingForOpponent
@@ -100,56 +122,44 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
   const waitingSubtitle =
     room.mode === "sync" && hasAnsweredCurrent ? t(locale, "youAnswered") : null;
   const showQuestionBlock = !(room.mode === "sync" && hasAnsweredCurrent && !feedbackActive);
-  const myProgressRatio = Math.min(myProgress / totalQuestions, 1);
-  const otherProgressRatio = Math.min(otherProgress / totalQuestions, 1);
   const progressBlock = (
     <View style={styles.statusProgressBlock}>
-      <View style={styles.statusRow}>
-        <View style={styles.statusDot} />
-        <Text style={styles.statusLabel}>{t(locale, "youLabel")}</Text>
-        <View style={styles.statusValueGroup}>
-          <View style={styles.statusScore}>
-            <View style={styles.scoreBadge}>
-              <FontAwesome name="check" size={9} color={theme.colors.success} />
-              <Text style={[styles.scoreValue, styles.scoreCorrect]}>{myCorrect}</Text>
+      {playerProgressRows.map((row) => {
+        const isSelf = row.id === userId;
+        const progressRatio = Math.min(row.answeredCount / totalQuestions, 1);
+        return (
+          <View key={row.id} style={styles.statusPlayerBlock}>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, !isSelf && styles.statusDotMuted]} />
+              <Text style={styles.statusLabel}>
+                {isSelf ? t(locale, "youLabel") : row.displayName}
+              </Text>
+              <View style={styles.statusValueGroup}>
+                <View style={styles.statusScore}>
+                  <View style={styles.scoreBadge}>
+                    <FontAwesome name="check" size={9} color={theme.colors.success} />
+                    <Text style={[styles.scoreValue, styles.scoreCorrect]}>{row.correctCount}</Text>
+                  </View>
+                  <Text style={styles.scoreDivider}>·</Text>
+                  <View style={styles.scoreBadge}>
+                    <FontAwesome name="times" size={9} color={theme.colors.danger} />
+                    <Text style={[styles.scoreValue, styles.scoreWrong]}>{row.wrongCount}</Text>
+                  </View>
+                </View>
+              </View>
             </View>
-            <Text style={styles.scoreDivider}>·</Text>
-            <View style={styles.scoreBadge}>
-              <FontAwesome name="times" size={9} color={theme.colors.danger} />
-              <Text style={[styles.scoreValue, styles.scoreWrong]}>{myWrong}</Text>
+            <View style={styles.statusTrack}>
+              <View
+                style={[
+                  styles.statusFill,
+                  !isSelf && styles.statusFillMuted,
+                  { width: `${progressRatio * 100}%` }
+                ]}
+              />
             </View>
           </View>
-        </View>
-      </View>
-      <View style={styles.statusTrack}>
-        <View style={[styles.statusFill, { width: `${myProgressRatio * 100}%` }]} />
-      </View>
-      <View style={styles.statusRow}>
-        <View style={[styles.statusDot, styles.statusDotMuted]} />
-        <Text style={styles.statusLabel}>{opponentName}</Text>
-        <View style={styles.statusValueGroup}>
-          <View style={styles.statusScore}>
-            <View style={styles.scoreBadge}>
-              <FontAwesome name="check" size={9} color={theme.colors.success} />
-              <Text style={[styles.scoreValue, styles.scoreCorrect]}>{otherCorrect}</Text>
-            </View>
-            <Text style={styles.scoreDivider}>·</Text>
-            <View style={styles.scoreBadge}>
-              <FontAwesome name="times" size={9} color={theme.colors.danger} />
-              <Text style={[styles.scoreValue, styles.scoreWrong]}>{otherWrong}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      <View style={styles.statusTrack}>
-        <View
-          style={[
-            styles.statusFill,
-            styles.statusFillMuted,
-            { width: `${otherProgressRatio * 100}%` }
-          ]}
-        />
-      </View>
+        );
+      })}
     </View>
   );
 
@@ -380,7 +390,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
               </Text>
             </View>
             <Text numberOfLines={1} style={styles.subtitle}>
-              vs {opponentName}
+              vs {opponentsLabel}
             </Text>
           </View>
         </View>
@@ -711,6 +721,9 @@ const styles = StyleSheet.create({
   },
   statusProgressBlock: {
     gap: theme.spacing.sm
+  },
+  statusPlayerBlock: {
+    gap: 6
   },
   statusRow: {
     flexDirection: "row",
