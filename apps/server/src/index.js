@@ -858,6 +858,51 @@ async function listPushDevicesForUsers(userIds) {
   return data || [];
 }
 
+async function getUserCountriesById(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) return new Map();
+  const uniqueIds = Array.from(new Set(userIds.map((id) => Number(id)).filter(Boolean)));
+  if (uniqueIds.length === 0) return new Map();
+  const { data, error } = await supabase.from("users").select("id, country").in("id", uniqueIds);
+  if (error) throw error;
+  return new Map((data || []).map((row) => [row.id, String(row.country || "US").toUpperCase()]));
+}
+
+function resolvePushCopy(eventType, country, fallbackTitle, fallbackBody) {
+  const isFrench = String(country || "").toUpperCase() === "FR";
+  const copyByEvent = {
+    invite_received: {
+      en: { title: "New room invite", body: "You have been invited to a Qwizzy room." },
+      fr: { title: "Nouvelle invitation", body: "Tu as ete invite dans un salon Qwizzy." }
+    },
+    host_player_joined: {
+      en: { title: "Player joined your room", body: "A player joined your lobby. You can start the match." },
+      fr: { title: "Un joueur a rejoint ton salon", body: "Un joueur est arrive. Tu peux demarrer le match." }
+    },
+    room_started: {
+      en: { title: "Match started", body: "Your duel is now live." },
+      fr: { title: "Match lance", body: "Ton duel a commence." }
+    },
+    rematch_requested: {
+      en: { title: "Rematch requested", body: "Your opponent is ready for another round." },
+      fr: { title: "Revanche demandee", body: "Ton adversaire est pret pour une nouvelle manche." }
+    },
+    your_turn: {
+      en: { title: "Your turn", body: "Time to answer in your duel." },
+      fr: { title: "A toi de jouer", body: "C'est le moment de repondre dans ton duel." }
+    },
+    match_complete: {
+      en: { title: "Match finished", body: "Results are ready." },
+      fr: { title: "Match termine", body: "Les resultats sont prets." }
+    }
+  };
+
+  const eventCopy = eventType && copyByEvent[eventType] ? copyByEvent[eventType] : null;
+  if (!eventCopy) {
+    return { title: fallbackTitle, body: fallbackBody };
+  }
+  return isFrench ? eventCopy.fr : eventCopy.en;
+}
+
 async function disablePushDevice(deviceId, errorMessage) {
   if (!deviceId) return;
   await supabase
@@ -875,9 +920,16 @@ async function sendPushToUsers(userIds, payload) {
   try {
     const devices = await listPushDevicesForUsers(userIds);
     if (devices.length === 0) return;
+    const countryByUserId = await getUserCountriesById(devices.map((device) => device.user_id));
     await Promise.all(
       devices.map(async (device) => {
-        const result = await sendNativePush(device, payload);
+        const localized = resolvePushCopy(
+          payload?.data?.eventType,
+          countryByUserId.get(device.user_id),
+          payload.title,
+          payload.body
+        );
+        const result = await sendNativePush(device, { ...payload, ...localized });
         if (result.invalidToken) {
           await disablePushDevice(device.id, result.error);
           return;
