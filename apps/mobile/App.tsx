@@ -455,6 +455,10 @@ export default function App() {
   const notifyRoomSnapshot = useCallback(
     (snapshot: RoomSnapshot, previous?: RoomSnapshot) => {
       if (!user || !previous || !notificationsEnabled) return;
+      // Avoid in-app room banner noise while the user is actively playing.
+      if (roomRef.current?.status === "active") {
+        return;
+      }
       if (roomRef.current?.code === snapshot.code || recapRef.current?.code === snapshot.code) {
         return;
       }

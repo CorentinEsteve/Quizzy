@@ -884,8 +884,8 @@ function resolvePushCopy(eventType, country, fallbackTitle, fallbackBody) {
       fr: { title: "Nouvelle invitation", body: "Tu as ete invite dans un salon Qwizzy." }
     },
     host_player_joined: {
-      en: { title: "Player joined your room", body: "A player joined your lobby. You can start the match." },
-      fr: { title: "Un joueur a rejoint ton salon", body: "Un joueur est arrive. Tu peux demarrer le match." }
+      en: { title: "Player joined your room", body: "A player joined your lobby." },
+      fr: { title: "Un joueur a rejoint ton salon", body: "Un joueur est arrive dans ton salon." }
     },
     room_started: {
       en: { title: "Match started", body: "Your duel is now live." },
@@ -2137,7 +2137,7 @@ app.post("/rooms/:code/join", authMiddleware, async (req, res) => {
   if (joinedNow && req.user.id !== room.host_user_id) {
     sendPushToUsers([room.host_user_id], {
       title: "Player joined your room",
-      body: "A player joined your lobby. You can start the match.",
+      body: "A player joined your lobby.",
       data: {
         type: "room",
         roomCode: room.code,
@@ -2613,6 +2613,7 @@ io.on("connection", (socket) => {
       .eq("user_id", user.id)
       .eq("question_id", questionId)
       .maybeSingle();
+    let createdAnswer = false;
     if (!existing) {
       const quiz = await getQuiz(room.quiz_id);
       if (!quiz) return;
@@ -2629,6 +2630,7 @@ io.on("connection", (socket) => {
         answer_index: answerIndex,
         answered_at: nowIso()
       });
+      createdAnswer = true;
     }
 
     const quiz = await getQuiz(room.quiz_id);
@@ -2667,16 +2669,22 @@ io.on("connection", (socket) => {
     const updated = await getRoomByCode(code);
     await emitRoomUpdateToMembers(updated || code);
 
-    if (room.mode === "async" && updated?.status === "active") {
+    if (room.mode === "async" && updated?.status === "active" && createdAnswer) {
       const answeredCountByUser = new Map();
       answers.forEach((item) => {
         answeredCountByUser.set(item.user_id, (answeredCountByUser.get(item.user_id) || 0) + 1);
       });
+      const actorCountAfter = answeredCountByUser.get(user.id) || 0;
+      const actorCountBefore = Math.max(actorCountAfter - 1, 0);
       const targetUserIds = players
         .map((player) => player.id)
-        .filter(
-          (id) => id !== user.id && (answeredCountByUser.get(id) || 0) < quiz.questions.length
-        );
+        .filter((id) => {
+          if (id === user.id) return false;
+          const targetCount = answeredCountByUser.get(id) || 0;
+          if (targetCount >= quiz.questions.length) return false;
+          // Notify only when this answer newly puts the actor ahead of that target.
+          return actorCountAfter > targetCount && actorCountBefore <= targetCount;
+        });
       if (targetUserIds.length > 0) {
         sendPushToUsers(targetUserIds, {
           title: "Your turn",

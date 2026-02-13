@@ -62,8 +62,8 @@ export function RoomLobbyScreen({
     return recentOpponents.filter((opponent) => !activeIds.has(opponent.opponentId));
   }, [recentOpponents, room.players]);
   const visibleOpponents = availableOpponents.slice(0, 4);
-  const canInviteOpponents = isHost && reservedCount < maxPlayers;
-  const canManageInvites = isHost;
+  const canInviteOpponents = reservedCount < maxPlayers;
+  const canManageInvites = room.players.some((player) => player.id === user.id);
   const headerHint = hasEnoughPlayers
     ? t(locale, "lobbyReady")
     : t(locale, "lobbyInviteHint");
@@ -211,7 +211,7 @@ export function RoomLobbyScreen({
                   <Text style={styles.sectionMeta}>{t(locale, "inviteFriendBody")}</Text>
                 </View>
               </View>
-              {isHost ? (
+              {canManageInvites ? (
                 <Pressable
                   onPress={onShareInvite}
                   style={({ pressed }) => [
@@ -227,7 +227,7 @@ export function RoomLobbyScreen({
                 </Pressable>
               ) : null}
             </View>
-            {isHost ? (
+            {canManageInvites ? (
               <View style={styles.inviteRecentBlock}>
                 <View style={styles.inviteRecentHeader}>
                   <Text style={styles.inviteRecentTitle}>{t(locale, "inviteRecentTitle")}</Text>

@@ -125,7 +125,7 @@ const dictionaries: Dictionaries = {
     notificationRematchTitle: "Rematch requested",
     notificationRematchBody: "Another player is ready for another round.",
     notificationJoinedTitle: "Player joined",
-    notificationJoinedBody: "A player joined your room.",
+    notificationJoinedBody: "A player joined your lobby.",
     notificationStartedTitle: "Match started",
     notificationStartedBody: "Your duel is now live.",
     stats: "Stats",

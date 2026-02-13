@@ -51,15 +51,21 @@ export function getRoomNotificationEvents(params: {
   if (justStarted) {
     events.push("room_started");
   } else if (snapshot.mode === "async" && snapshot.status === "active") {
-    const hasOtherProgressUpdate = snapshot.players
-      .filter((player) => player.id !== userId)
-      .some((player) => {
-        const progress = snapshot.progressByUserId[player.id] ?? 0;
-        const previousProgress = previous.progressByUserId[player.id] ?? 0;
-        return progress > previousProgress;
-      });
     const myProgress = snapshot.progressByUserId[userId] ?? 0;
-    if (hasOtherProgressUpdate && myProgress < snapshot.totalQuestions) {
+    const previousMyProgress = previous.progressByUserId[userId] ?? 0;
+    const othersAheadNow = snapshot.players
+      .filter((player) => player.id !== userId)
+      .reduce((count, player) => {
+        const progress = snapshot.progressByUserId[player.id] ?? 0;
+        return progress > myProgress ? count + 1 : count;
+      }, 0);
+    const othersAheadBefore = previous.players
+      .filter((player) => player.id !== userId)
+      .reduce((count, player) => {
+        const progress = previous.progressByUserId[player.id] ?? 0;
+        return progress > previousMyProgress ? count + 1 : count;
+      }, 0);
+    if (othersAheadNow > 0 && othersAheadBefore === 0 && myProgress < snapshot.totalQuestions) {
       events.push("your_turn");
     }
   }
