@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,40 +26,19 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
   const percentile = results.my.percentile ?? 0;
   const historyRows = history.filter((item) => item.date !== results.date).slice(0, 5);
 
-  const reviewItems = useMemo(() => {
-    if (!results.questions?.length) return [];
-    return results.questions.map((question) => {
-      const prompt = question.prompt?.[locale] ?? question.prompt?.en ?? "";
-      const options = question.options?.[locale] ?? question.options?.en ?? [];
-      const correctText =
-        typeof question.answer === "number"
-          ? options[question.answer] ?? t(locale, "noAnswer")
-          : t(locale, "noAnswer");
-      return {
-        id: question.id,
-        prompt,
-        correctText
-      };
-    });
-  }, [results.questions, locale]);
-
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#FFF4DA", "#FFF9EF", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
-      <LinearGradient
-        colors={["rgba(243, 183, 78, 0.24)", "rgba(243, 183, 78, 0)"]}
-        start={{ x: 0.1, y: 0.0 }}
-        end={{ x: 0.8, y: 0.7 }}
-        style={styles.backgroundSweep}
-      />
+      <LinearGradient colors={["#FFF5DE", "#FFFAF0", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
-      <View style={styles.backgroundGlow} pointerEvents="none" />
 
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + insets.bottom }
+          {
+            paddingTop: theme.spacing.lg + insets.top,
+            paddingBottom: theme.spacing.lg + insets.bottom
+          }
         ]}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
@@ -77,48 +56,38 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "dailyQuizResultsTitle")}</Text>
             <Text style={styles.title}>{dateLabel}</Text>
-            <Text style={styles.subtitle}>{t(locale, "dailyQuizResultsSubtitle")}</Text>
-          </View>
-          <View style={styles.awardDot}>
-            <Text style={styles.awardDotEmoji}>✨</Text>
           </View>
         </View>
 
         <GlassCard style={[styles.sectionCard, styles.heroCard]} accent={theme.colors.reward}>
-          <Text style={styles.heroLabel}>{t(locale, "dailyQuizResultsSubtitle")}</Text>
-          <Text style={styles.heroScore}>
-            {results.my.score} / {results.totalQuestions}
-          </Text>
-          {streakCount > 0 ? (
-            <View style={styles.streakPill}>
-              <FontAwesome name="fire" size={12} color={theme.colors.reward} />
-              <Text style={styles.streakPillText}>
-                {t(locale, "streakDays", { count: streakCount })}
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroScoreBlock}>
+              <Text style={styles.heroLabel}>{t(locale, "dailyQuizResultsSubtitle")}</Text>
+              <Text style={styles.heroScore}>
+                {results.my.score} / {results.totalQuestions}
               </Text>
             </View>
-          ) : null}
-          <View style={styles.heroAccuracyRow}>
-            <Text style={styles.heroAccuracyText}>
-              {t(locale, "dailyQuizCorrect")} {results.my.correctPct}%
-            </Text>
-            <Text style={styles.heroAccuracyText}>
-              {t(locale, "dailyQuizWrong")} {results.my.wrongPct}%
-            </Text>
+            <View style={styles.rankBadge}>
+              <Text style={styles.rankBadgeLabel}>{t(locale, "dailyQuizRankLabel")}</Text>
+              <Text style={styles.rankBadgeValue}>{results.my.rank ? `#${results.my.rank}` : "-"}</Text>
+            </View>
           </View>
-          <View style={styles.heroStatsRow}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatLabel}>{t(locale, "dailyQuizRankLabel")}</Text>
-              <Text style={styles.heroStatValue}>
-                {results.my.rank ? `#${results.my.rank}` : "-"}
+
+          <View style={styles.heroPillsRow}>
+            {streakCount > 0 ? (
+              <View style={styles.streakPill}>
+                <FontAwesome name="fire" size={12} color="#7A5412" />
+                <Text style={styles.streakPillText}>{t(locale, "streakDays", { count: streakCount })}</Text>
+              </View>
+            ) : null}
+            <View style={styles.percentilePill}>
+              <Text style={styles.percentilePillText}>
+                {t(locale, "dailyQuizPercentile", { percent: percentile })}
               </Text>
             </View>
           </View>
-          <Text style={styles.heroSubMeta}>
-            {t(locale, "dailyQuizParticipants", { count: results.participants })}
-          </Text>
-          <Text style={styles.heroMeta}>
-            {t(locale, "dailyQuizPercentile", { percent: percentile })}
-          </Text>
+
+          <Text style={styles.heroMeta}>{t(locale, "dailyQuizParticipants", { count: results.participants })}</Text>
         </GlassCard>
 
         <GlassCard style={styles.sectionCard}>
@@ -143,7 +112,7 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
               ]}
             />
           </View>
-          <View style={styles.legendRow}>
+          <View style={styles.legendList}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, styles.legendCorrect]} />
               <Text style={styles.legendLabel}>
@@ -167,19 +136,17 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
             results.friends.map((friend) => (
               <View key={friend.userId} style={styles.friendRow}>
                 <View style={styles.friendHeader}>
-                  <Text style={styles.friendName}>{friend.displayName}</Text>
+                  <Text style={styles.friendName} numberOfLines={1}>
+                    {friend.displayName}
+                  </Text>
                   <Text style={styles.friendScore}>
                     {friend.score}/{results.totalQuestions}
                   </Text>
                 </View>
-                <View style={styles.friendMetaRow}>
-                  <Text style={styles.friendMeta}>
-                    {t(locale, "dailyQuizCorrect")} {friend.correctPct}%
-                  </Text>
-                  <Text style={styles.friendMeta}>
-                    {t(locale, "dailyQuizWrong")} {friend.wrongPct}%
-                  </Text>
-                </View>
+                <Text style={styles.friendMeta}>
+                  {t(locale, "dailyQuizCorrect")} {friend.correctPct}% · {t(locale, "dailyQuizWrong")}{" "}
+                  {friend.wrongPct}%
+                </Text>
               </View>
             ))
           )}
@@ -200,7 +167,7 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
                     <Text style={styles.historyDateText}>{dateText}</Text>
                   </View>
                   <View style={styles.historyMeta}>
-                    <Text style={styles.historyHeadline}>
+                    <Text style={styles.historyHeadline} numberOfLines={2}>
                       {t(locale, "dailyQuizBetterThan", { percent: item.percentile ?? 0 })}
                     </Text>
                     <Text style={styles.historySub}>
@@ -215,31 +182,6 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
             })}
           </GlassCard>
         ) : null}
-
-        {reviewItems.length > 0 ? (
-          <GlassCard style={styles.reviewCard}>
-            <View style={styles.reviewHeader}>
-              <Text style={styles.reviewTitle}>{t(locale, "answerReviewTitle")}</Text>
-              <Text style={styles.reviewSubtitle}>{t(locale, "answerReviewSubtitle")}</Text>
-            </View>
-            <View style={styles.reviewList}>
-              {reviewItems.map((item, index) => (
-                <View key={item.id} style={styles.questionItem}>
-                  <View style={styles.questionHeader}>
-                    <Text style={styles.questionIndex}>{index + 1}.</Text>
-                    <Text style={styles.questionPrompt}>{item.prompt}</Text>
-                  </View>
-                  <View style={styles.answerRow}>
-                    <Text style={styles.answerLabel}>{t(locale, "correctAnswer")}</Text>
-                    <View style={styles.correctPill}>
-                      <Text style={styles.correctPillText}>{item.correctText}</Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </GlassCard>
-        ) : null}
       </ScrollView>
     </View>
   );
@@ -249,35 +191,23 @@ const styles = StyleSheet.create({
   page: {
     flex: 1
   },
-  backgroundSweep: {
-    ...StyleSheet.absoluteFillObject
-  },
   backgroundOrbTop: {
     position: "absolute",
-    top: -200,
-    right: -140,
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: "rgba(243, 183, 78, 0.2)"
+    top: -220,
+    right: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "rgba(243, 183, 78, 0.16)"
   },
   backgroundOrbBottom: {
     position: "absolute",
-    bottom: -220,
+    bottom: -240,
     left: -170,
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(223, 154, 31, 0.14)"
-  },
-  backgroundGlow: {
-    position: "absolute",
-    top: "34%",
-    alignSelf: "center",
-    width: 450,
-    height: 450,
-    borderRadius: 225,
-    backgroundColor: "rgba(255, 255, 255, 0.52)"
+    backgroundColor: "rgba(223, 154, 31, 0.1)"
   },
   container: {
     paddingHorizontal: theme.spacing.lg,
@@ -299,7 +229,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 248, 231, 0.92)"
   },
   headerText: {
-    flex: 1
+    flex: 1,
+    minWidth: 0
   },
   eyebrow: {
     color: theme.colors.muted,
@@ -311,38 +242,31 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.display,
+    fontSize: theme.typography.title,
     fontWeight: "700"
-  },
-  subtitle: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body
-  },
-  awardDot: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(243, 183, 78, 0.25)",
-    borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.42)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  awardDotEmoji: {
-    fontSize: 13
   },
   sectionCard: {
     gap: theme.spacing.sm,
-    backgroundColor: "rgba(255, 252, 244, 0.9)",
-    borderColor: "rgba(223, 154, 31, 0.22)"
+    backgroundColor: "rgba(255, 253, 248, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.18)"
   },
   heroCard: {
-    backgroundColor: "rgba(243, 183, 78, 0.2)",
-    borderColor: "rgba(243, 183, 78, 0.42)"
+    backgroundColor: "rgba(243, 183, 78, 0.16)",
+    borderColor: "rgba(243, 183, 78, 0.34)",
+    gap: theme.spacing.md
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing.md
+  },
+  heroScoreBlock: {
+    flex: 1,
+    minWidth: 0
   },
   heroLabel: {
-    color: "#9A6A1C",
+    color: "#8F6A2B",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -350,64 +274,72 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.display,
+    lineHeight: 40,
     fontWeight: "700"
   },
+  rankBadge: {
+    minWidth: 82,
+    alignItems: "flex-end",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255, 248, 231, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(223, 154, 31, 0.33)"
+  },
+  rankBadgeLabel: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11
+  },
+  rankBadgeValue: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 26,
+    lineHeight: 28,
+    fontWeight: "700"
+  },
+  heroPillsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs
+  },
   streakPill: {
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(243, 183, 78, 0.18)",
+    backgroundColor: "rgba(243, 183, 78, 0.26)",
     borderWidth: 1,
-    borderColor: "rgba(243, 183, 78, 0.4)"
+    borderColor: "rgba(223, 154, 31, 0.55)"
   },
   streakPillText: {
-    color: theme.colors.reward,
+    color: "#7A5412",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
-  heroAccuracyRow: {
-    flexDirection: "row",
-    gap: theme.spacing.lg
+  percentilePill: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 248, 231, 0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(223, 154, 31, 0.32)"
   },
-  heroAccuracyText: {
-    color: "#8F6A2B",
+  percentilePillText: {
+    color: "#8B6318",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
-  },
-  heroStatsRow: {
-    flexDirection: "row",
-    gap: theme.spacing.lg
-  },
-  heroStat: {
-    flex: 1
-  },
-  heroStatLabel: {
-    color: "#8F6A2B",
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
-  heroStatValue: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
-  },
-  heroSubMeta: {
-    color: "#9A6A1C",
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
   },
   heroMeta: {
-    color: theme.colors.reward,
+    color: "#8F6A2B",
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "600"
+    fontSize: theme.typography.small
   },
   sectionTitle: {
     color: theme.colors.ink,
@@ -418,7 +350,7 @@ const styles = StyleSheet.create({
   sectionMeta: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.body
   },
   metricRow: {
     flexDirection: "row",
@@ -433,12 +365,13 @@ const styles = StyleSheet.create({
   metricValue: {
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "600"
+    fontSize: theme.typography.title,
+    lineHeight: 28,
+    fontWeight: "700"
   },
   bar: {
     flexDirection: "row",
-    height: 8,
+    height: 10,
     borderRadius: 999,
     overflow: "hidden",
     backgroundColor: "rgba(11, 14, 20, 0.08)"
@@ -452,15 +385,14 @@ const styles = StyleSheet.create({
   barWrong: {
     backgroundColor: theme.colors.danger
   },
-  legendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
+  legendList: {
+    gap: theme.spacing.xs
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6
+    gap: 8,
+    minWidth: 0
   },
   legendDot: {
     width: 8,
@@ -476,7 +408,8 @@ const styles = StyleSheet.create({
   legendLabel: {
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    flexShrink: 1
   },
   friendRow: {
     borderTopWidth: 1,
@@ -488,9 +421,11 @@ const styles = StyleSheet.create({
   friendHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
   },
   friendName: {
+    flex: 1,
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
@@ -500,11 +435,7 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
-    fontWeight: "600"
-  },
-  friendMetaRow: {
-    flexDirection: "row",
-    gap: theme.spacing.lg
+    fontWeight: "700"
   },
   friendMeta: {
     color: theme.colors.muted,
@@ -513,7 +444,7 @@ const styles = StyleSheet.create({
   },
   historyRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: "rgba(15, 23, 42, 0.06)",
@@ -536,6 +467,7 @@ const styles = StyleSheet.create({
   },
   historyMeta: {
     flex: 1,
+    minWidth: 0,
     gap: 2
   },
   historyHeadline: {
@@ -548,80 +480,5 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
-  },
-  reviewCard: {
-    gap: theme.spacing.md,
-    backgroundColor: "rgba(255, 252, 244, 0.9)",
-    borderColor: "rgba(223, 154, 31, 0.24)"
-  },
-  reviewHeader: {
-    gap: 2
-  },
-  reviewTitle: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
-    fontWeight: "600"
-  },
-  reviewSubtitle: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
-  },
-  reviewList: {
-    gap: theme.spacing.md
-  },
-  questionItem: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.md,
-    backgroundColor: "rgba(245, 247, 251, 0.9)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15, 23, 42, 0.08)",
-    gap: theme.spacing.sm
-  },
-  questionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.spacing.sm
-  },
-  questionIndex: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "600"
-  },
-  questionPrompt: {
-    flex: 1,
-    color: theme.colors.ink,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.body,
-    fontWeight: "600"
-  },
-  answerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm
-  },
-  answerLabel: {
-    width: 110,
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    lineHeight: 18
-  },
-  correctPill: {
-    backgroundColor: "rgba(43, 158, 102, 0.14)",
-    borderRadius: 999,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(43, 158, 102, 0.3)",
-    flexShrink: 1
-  },
-  correctPillText: {
-    color: theme.colors.success,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    fontWeight: "600"
   }
 });
