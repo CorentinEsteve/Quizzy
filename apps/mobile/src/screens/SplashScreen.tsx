@@ -50,7 +50,6 @@ export function SplashScreen({ locale }: Props) {
         <View style={styles.footer}>
           <View style={styles.loadingPill}>
             <ActivityIndicator size="small" color={theme.colors.cta} />
-            <Text style={styles.loading}>{t(locale, "pleaseWait")}</Text>
           </View>
           <View style={styles.sparkRow}>
             <View style={[styles.spark, { backgroundColor: theme.colors.primary }]} />
@@ -202,12 +201,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.75)",
     borderWidth: 1,
     borderColor: "rgba(229, 231, 236, 0.85)"
-  },
-  loading: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    textAlign: "center"
   },
   sparkRow: {
     flexDirection: "row",

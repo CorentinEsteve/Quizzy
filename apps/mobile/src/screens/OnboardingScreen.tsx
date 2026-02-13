@@ -78,7 +78,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: theme.spacing.lg }
+          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg }
         ]}
         showsVerticalScrollIndicator={false}
       >

@@ -135,7 +135,14 @@ export function AuthScreen({
   const isAppleProfileNameValid = appleProfileName.trim().length >= 2;
 
   return (
-    <View style={[styles.container, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingBottom: theme.spacing.lg + insets.bottom
+        }
+      ]}
+    >
       <LinearGradient
         colors={["#F7F8FF", "#FFFFFF", "#F9F2E6"]}
         style={StyleSheet.absoluteFill}
@@ -151,7 +158,7 @@ export function AuthScreen({
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: theme.spacing.lg + insets.top }]}
         >
           <View style={styles.card}>
             <Text style={styles.eyebrow}>{t(locale, "appName")}</Text>
@@ -747,7 +754,7 @@ export function AuthScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
     justifyContent: "center"
   },
   keyboardWrapper: {

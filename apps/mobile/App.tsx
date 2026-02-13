@@ -8,6 +8,7 @@ import {
   Linking,
   PanResponder,
   Platform,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -24,7 +25,7 @@ import * as Localization from "expo-localization";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { API_BASE_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
+import { API_BASE_URL, APP_DOWNLOAD_URL, SUPPORT_EMAIL, SUPPORT_URL } from "./src/config";
 import { theme } from "./src/theme";
 import { Locale, t } from "./src/i18n";
 import { AuthScreen, AuthMode } from "./src/screens/AuthScreen";
@@ -1660,6 +1661,23 @@ export default function App() {
     );
   }
 
+  async function handleShareInvite() {
+    if (!room) return;
+    const roomMessage = t(locale, "shareInviteMessage", { code: room.code });
+    const appMessage = APP_DOWNLOAD_URL
+      ? t(locale, "shareInviteAppLink", { url: APP_DOWNLOAD_URL })
+      : t(locale, "shareInviteAppMessage");
+    const message = `${roomMessage}\n\n${appMessage}`;
+    try {
+      await Share.share({
+        title: t(locale, "shareInviteTitle"),
+        message
+      });
+    } catch (err) {
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    }
+  }
+
   const lobbyScreen = !loading && token && user && !room && hasSeenOnboarding ? (
     <LobbyScreen
       quizzes={quizzes}
@@ -1693,6 +1711,8 @@ export default function App() {
             splashVisible
               ? []
               : panelSwipeEnabled ||
+                (!token && !restoringAuth) ||
+                (!loading && token && user && !room && !hasSeenOnboarding) ||
                 panel === "leaderboard" ||
                 dailyStage === "quiz" ||
                 dailyStage === "results" ||
@@ -1896,6 +1916,7 @@ export default function App() {
             user={user}
             onStart={handleStartRoom}
             onLeave={handleLeaveRoom}
+            onShareInvite={handleShareInvite}
             onInviteOpponent={handleInviteOpponent}
             onCancelInvite={handleCancelInvite}
             recentOpponents={stats?.opponents ?? []}

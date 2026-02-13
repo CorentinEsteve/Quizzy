@@ -16,6 +16,7 @@ type Props = {
   user: User;
   onStart: () => void;
   onLeave: () => void;
+  onShareInvite: () => void;
   onInviteOpponent: (opponentId: number, opponentName: string) => void;
   onCancelInvite: (opponentId: number, opponentName: string) => void;
   recentOpponents: StatsResponse["opponents"];
@@ -32,6 +33,7 @@ export function RoomLobbyScreen({
   user,
   onStart,
   onLeave,
+  onShareInvite,
   onInviteOpponent,
   onCancelInvite,
   recentOpponents,
@@ -189,14 +191,31 @@ export function RoomLobbyScreen({
 
         {!hasBothPlayers ? (
           <GlassCard style={[styles.card, styles.inviteCard]}>
-            <View style={styles.sectionHeading}>
-              <View style={[styles.sectionIcon, styles.sectionIconPrimary]}>
-                <FontAwesome name="paper-plane" size={15} color={theme.colors.primary} />
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeading}>
+                <View style={[styles.sectionIcon, styles.sectionIconPrimary]}>
+                  <FontAwesome name="paper-plane" size={15} color={theme.colors.primary} />
+                </View>
+                <View style={styles.sectionHeadingText}>
+                  <Text style={styles.sectionTitle}>{t(locale, "inviteFriendTitle")}</Text>
+                  <Text style={styles.sectionMeta}>{t(locale, "inviteFriendBody")}</Text>
+                </View>
               </View>
-              <View style={styles.sectionHeadingText}>
-                <Text style={styles.sectionTitle}>{t(locale, "inviteFriendTitle")}</Text>
-                <Text style={styles.sectionMeta}>{t(locale, "inviteFriendBody")}</Text>
-              </View>
+              {isHost ? (
+                <Pressable
+                  onPress={onShareInvite}
+                  style={({ pressed }) => [
+                    styles.shareAction,
+                    pressed && styles.shareActionPressed
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(locale, "shareInvite")}
+                  accessibilityHint={t(locale, "inviteBody")}
+                >
+                  <FontAwesome name="share-alt" size={12} color={theme.colors.primary} />
+                  <Text style={styles.shareActionText}>{t(locale, "shareInvite")}</Text>
+                </Pressable>
+              ) : null}
             </View>
             {isHost ? (
               <View style={styles.inviteRecentBlock}>
@@ -578,12 +597,15 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
   },
   sectionHeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 0
   },
   sectionHeadingText: {
     flex: 1,
@@ -626,6 +648,29 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: 13,
     lineHeight: 18
+  },
+  shareAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(94, 124, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(94, 124, 255, 0.24)",
+    flexShrink: 0,
+    marginTop: 2
+  },
+  shareActionPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }]
+  },
+  shareActionText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
   },
   playerRow: {
     flexDirection: "row",
