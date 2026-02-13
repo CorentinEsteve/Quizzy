@@ -514,8 +514,7 @@ export function LobbyScreen({
           progress: `Q${Math.min(nextMyProgress, nextTotalQuestions)}/${Math.max(
             nextTotalQuestions,
             1
-          )}`,
-          status: nextStatus
+          )}`
         }
       : null;
   const mascotBob = mascotFloat.interpolate({
@@ -880,7 +879,7 @@ export function LobbyScreen({
                 <Text style={styles.nextActionLabel}>{t(locale, "nextAction")}</Text>
               </View>
               <View style={styles.nextActionHeaderBadge}>
-                <Text style={styles.nextActionHeaderBadgeText}>🎯</Text>
+                <Text style={styles.nextActionHeaderBadgeText}>{nextStatus}</Text>
               </View>
             </View>
             <View style={styles.nextActionHero}>
@@ -892,26 +891,21 @@ export function LobbyScreen({
                   <View style={styles.nextActionMetaRow}>
                     <Text style={styles.nextActionMeta}>{nextMeta.category}</Text>
                     <Text style={styles.nextActionMetaDot}>•</Text>
-                    <Text style={styles.nextActionMeta}>{nextMeta.progress}</Text>
-                    <View style={styles.nextActionTurnPill}>
-                      <Text style={[styles.nextActionMeta, styles.nextActionMetaAhead]}>
-                        {nextMeta.status}
-                      </Text>
+                    <View style={styles.nextActionProgressMetaGroup}>
+                      <Text style={styles.nextActionMeta}>{nextMeta.progress}</Text>
+                      <View style={styles.nextActionProgress}>
+                        <View
+                          style={[
+                            styles.nextActionProgressFill,
+                            { width: `${Math.min((nextMyProgress / Math.max(nextTotalQuestions, 1)) * 100, 100)}%` }
+                          ]}
+                        />
+                      </View>
                     </View>
                   </View>
                 ) : null}
               </View>
             </View>
-            {nextTotalQuestions ? (
-              <View style={styles.nextActionProgress}>
-                <View
-                  style={[
-                    styles.nextActionProgressFill,
-                    { width: `${Math.min((nextMyProgress / Math.max(nextTotalQuestions, 1)) * 100, 100)}%` }
-                  ]}
-                />
-              </View>
-            ) : null}
             <View style={styles.nextActionButtons}>
               <PrimaryButton
                 label={t(locale, "continueMatch")}
@@ -2583,17 +2577,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1
   },
   nextActionHeaderBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    backgroundColor: "rgba(43, 158, 102, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(80, 87, 189, 0.24)"
+    borderColor: "rgba(43, 158, 102, 0.28)"
   },
   nextActionHeaderBadgeText: {
-    fontSize: 12
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16
   },
   nextActionMiniAvatar: {
     width: 18,
@@ -2644,32 +2642,17 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: 12
   },
-  nextActionTurnPill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: "rgba(43, 158, 102, 0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(43, 158, 102, 0.28)"
-  },
-  nextActionMetaAhead: {
-    color: theme.colors.success,
-    fontWeight: "600"
-  },
-  nextActionMetaBehind: {
-    color: theme.colors.danger,
-    fontWeight: "600"
-  },
-  nextActionMetaTied: {
-    color: theme.colors.reward,
-    fontWeight: "600"
+  nextActionProgressMetaGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
   nextActionProgress: {
     height: 5,
+    width: 64,
     borderRadius: 999,
     backgroundColor: "rgba(11, 14, 20, 0.1)",
-    overflow: "hidden",
-    marginTop: theme.spacing.xs
+    overflow: "hidden"
   },
   nextActionProgressFill: {
     height: "100%",
