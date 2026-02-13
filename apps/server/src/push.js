@@ -1,4 +1,5 @@
 import { SignJWT, importPKCS8 } from "jose";
+import http2 from "node:http2";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -18,6 +19,83 @@ const apnsConfig = {
 
 let fcmAccessTokenCache = { token: "", expiresAtMs: 0 };
 let apnsJwtCache = { token: "", expiresAtMs: 0 };
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatError(err, fallback) {
+  if (!err) return fallback;
+  const message = err instanceof Error ? err.message : String(err);
+  const code =
+    typeof err === "object" && err !== null && "code" in err ? String(err.code) : "";
+  const cause =
+    err instanceof Error && err.cause
+      ? err.cause instanceof Error
+        ? err.cause.message
+        : String(err.cause)
+      : "";
+  return [message, code ? `code=${code}` : "", cause ? `cause=${cause}` : ""]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+async function sendApnsHttp2({ useProduction, token, jwt, bundleId, body }) {
+  const authority = useProduction
+    ? "https://api.push.apple.com"
+    : "https://api.sandbox.push.apple.com";
+  const client = http2.connect(authority);
+
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const finishResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      client.close();
+      resolve(value);
+    };
+    const finishReject = (err) => {
+      if (settled) return;
+      settled = true;
+      client.close();
+      reject(err);
+    };
+
+    client.on("error", (err) => finishReject(err));
+
+    const req = client.request({
+      ":method": "POST",
+      ":path": `/3/device/${token}`,
+      authorization: `bearer ${jwt}`,
+      "apns-topic": bundleId,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      "content-type": "application/json"
+    });
+
+    let status = 0;
+    const chunks = [];
+
+    req.on("response", (headers) => {
+      status = Number(headers[":status"] || 0);
+    });
+    req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on("error", (err) => finishReject(err));
+    req.on("end", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      finishResolve({ status, body: parsed, rawBody: text });
+    });
+
+    req.setEncoding("utf8");
+    req.end(body);
+  });
+}
 
 function toStringMap(data = {}) {
   const result = {};
@@ -166,44 +244,50 @@ export async function sendNativePush(device, payload) {
   }
 
   if (device.provider === "apns") {
-    try {
-      const jwt = await getApnsJwt();
-      const token = normalizeApnsToken(device.token);
-      const baseUrl = apnsConfig.useProduction
-        ? "https://api.push.apple.com"
-        : "https://api.sandbox.push.apple.com";
-      const response = await fetch(`${baseUrl}/3/device/${token}`, {
-        method: "POST",
-        headers: {
-          authorization: `bearer ${jwt}`,
-          "apns-topic": apnsConfig.bundleId,
-          "apns-push-type": "alert",
-          "apns-priority": "10",
-          "content-type": "application/json"
+    const jwt = await getApnsJwt().catch((err) => {
+      throw new Error(formatError(err, "APNs auth token error"));
+    });
+    const token = normalizeApnsToken(device.token);
+    const requestBody = JSON.stringify({
+      aps: {
+        alert: {
+          title: payload.title,
+          body: payload.body
         },
-        body: JSON.stringify({
-          aps: {
-            alert: {
-              title: payload.title,
-              body: payload.body
-            },
-            sound: "default"
-          },
-          ...payload.data
-        })
-      });
-      if (response.ok) {
-        return { ok: true, invalidToken: false };
+        sound: "default"
+      },
+      ...payload.data
+    });
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await sendApnsHttp2({
+          useProduction: apnsConfig.useProduction,
+          token,
+          jwt,
+          bundleId: apnsConfig.bundleId,
+          body: requestBody
+        });
+        if (response.status >= 200 && response.status < 300) {
+          return { ok: true, invalidToken: false };
+        }
+        const reason = response.body?.reason || `APNs ${response.status} ${response.rawBody || ""}`.trim();
+        return {
+          ok: false,
+          invalidToken: isInvalidApnsReason(reason),
+          error: reason
+        };
+      } catch (err) {
+        if (attempt < 2) {
+          await sleep(300);
+          continue;
+        }
+        return {
+          ok: false,
+          invalidToken: false,
+          error: formatError(err, "APNs network error")
+        };
       }
-      const responseBody = await response.json().catch(() => ({}));
-      const reason = responseBody?.reason || `APNs ${response.status}`;
-      return {
-        ok: false,
-        invalidToken: isInvalidApnsReason(reason),
-        error: reason
-      };
-    } catch (err) {
-      return { ok: false, invalidToken: false, error: err instanceof Error ? err.message : "APNs error" };
     }
   }
 
