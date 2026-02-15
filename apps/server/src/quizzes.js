@@ -1587,9 +1587,9 @@ const extraQuestionsByCategory = {
     },
     {
       id: "f49",
-      prompt: text("Which continent has the largest land area?", "Quel continent a la plus grande superficie terrestre ?"),
-      options: options(["Africa", "Asia", "Europe", "North America"], ["Afrique", "Asie", "Europe", "Amérique du Nord"]),
-      answer: 1
+      prompt: text("What is the hardest substance in the human body?", "Quelle est la substance la plus dure du corps humain ?"),
+      options: options(["Bone", "Cartilage", "Tooth enamel", "Nail"], ["Os", "Cartilage", "Émail dentaire", "Ongle"]),
+      answer: 2
     },
     {
       id: "f50",
@@ -1801,8 +1801,8 @@ const extraQuestionsByCategory = {
     },
     {
       id: "s27",
-      prompt: text("Which planet is famous for the Great Red Spot?", "Quelle planète est célèbre pour la Grande Tache rouge ?"),
-      options: options(["Mars", "Jupiter", "Saturn", "Neptune"], ["Mars", "Jupiter", "Saturne", "Neptune"]),
+      prompt: text("What is the largest part of the human brain?", "Quelle est la plus grande partie du cerveau humain ?"),
+      options: options(["Cerebellum", "Cerebrum", "Brainstem", "Thalamus"], ["Cervelet", "Cerveau", "Tronc cérébral", "Thalamus"]),
       answer: 1
     },
     {
@@ -2306,12 +2306,12 @@ const extraQuestionsByCategory = {
     },
     {
       id: "n22",
-      prompt: text("Which process in plants releases oxygen?", "Quel processus chez les plantes libère de l'oxygène ?"),
+      prompt: text("Which process moves water through a plant and out of its leaves?", "Quel processus fait circuler l'eau dans la plante et la libère par les feuilles ?"),
       options: options(
         ["Respiration", "Photosynthesis", "Fermentation", "Transpiration"],
         ["Respiration", "Photosynthèse", "Fermentation", "Transpiration"]
       ),
-      answer: 1
+      answer: 3
     },
     {
       id: "n23",
@@ -2369,8 +2369,8 @@ const extraQuestionsByCategory = {
     },
     {
       id: "n31",
-      prompt: text("What process turns water vapor into clouds?", "Quel processus transforme la vapeur d'eau en nuages ?"),
-      options: options(["Evaporation", "Condensation", "Sublimation", "Fusion"], ["Évaporation", "Condensation", "Sublimation", "Fusion"]),
+      prompt: text("What do we call animals that are mainly active at night?", "Comment appelle-t-on les animaux principalement actifs la nuit ?"),
+      options: options(["Diurnal", "Nocturnal", "Migratory", "Aquatic"], ["Diurnes", "Nocturnes", "Migrateurs", "Aquatiques"]),
       answer: 1
     },
     {

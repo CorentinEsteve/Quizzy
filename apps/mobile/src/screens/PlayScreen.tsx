@@ -29,6 +29,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
     questionId: string;
     selectedIndex: number;
     isCorrect: boolean | null;
+    correctIndex: number | null;
     mode: "answer" | "reveal";
   } | null>(null);
   const [timerWidth, setTimerWidth] = useState(0);
@@ -229,6 +230,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
             questionId: question.id,
             selectedIndex: correctIndex,
             isCorrect: null,
+            correctIndex,
             mode: "reveal"
           });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -255,6 +257,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
           questionId: question.id,
           selectedIndex: correctIndex,
           isCorrect: null,
+          correctIndex,
           mode: "reveal"
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -446,11 +449,13 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
             <Text style={styles.prompt}>{prompt}</Text>
             <View style={styles.options}>
               {options.map((option, index) => {
-                const isFeedbackSelected = feedbackActive && feedback?.selectedIndex === index;
-                const showFeedback = feedbackActive && isFeedbackSelected;
-                const isReveal = showFeedback && feedback?.mode === "reveal";
-                const isCorrect = showFeedback ? feedback?.isCorrect === true : false;
-                const isIncorrect = showFeedback ? feedback?.isCorrect === false : false;
+                const showFeedback = feedbackActive;
+                const isFeedbackSelected = showFeedback && feedback?.selectedIndex === index;
+                const isReveal = isFeedbackSelected && feedback?.mode === "reveal";
+                const isCorrectOption = showFeedback && feedback?.correctIndex === index;
+                const isIncorrectSelected =
+                  showFeedback && isFeedbackSelected && feedback?.isCorrect === false;
+                const shouldEmphasize = isCorrectOption || isIncorrectSelected || isReveal;
                 return (
                   <PrimaryButton
                     key={`${question.id}-${index}`}
@@ -472,6 +477,7 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
                         questionId: question.id,
                         selectedIndex: index,
                         isCorrect: isAnswerCorrect,
+                        correctIndex,
                         mode: "answer"
                       });
                       clearTimerForQuestion(question.id);
@@ -485,10 +491,10 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
                     variant="ghost"
                     style={[
                       styles.optionButton,
-                      showFeedback && styles.optionFeedback,
-                      showFeedback && isReveal && styles.optionReveal,
-                      showFeedback && isCorrect && styles.optionCorrect,
-                      showFeedback && isIncorrect && styles.optionIncorrect
+                      shouldEmphasize && styles.optionFeedback,
+                      isReveal && styles.optionReveal,
+                      isCorrectOption && styles.optionCorrect,
+                      isIncorrectSelected && styles.optionIncorrect
                     ]}
                   />
                 );

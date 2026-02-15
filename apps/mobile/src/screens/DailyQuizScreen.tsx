@@ -41,6 +41,7 @@ export function DailyQuizScreen({
     questionId: string;
     selectedIndex: number;
     isCorrect: boolean | null;
+    correctIndex: number | null;
   } | null>(null);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const questionIndex = quiz.questions.findIndex(
@@ -108,7 +109,8 @@ export function DailyQuizScreen({
     setFeedback({
       questionId: question.id,
       selectedIndex: index,
-      isCorrect: isAnswerCorrect
+      isCorrect: isAnswerCorrect,
+      correctIndex
     });
     if (feedbackTimeoutRef.current) {
       clearTimeout(feedbackTimeoutRef.current);
@@ -170,10 +172,12 @@ export function DailyQuizScreen({
             <Text style={styles.prompt}>{prompt}</Text>
             <View style={styles.options}>
               {options.map((option, index) => {
-                const isFeedbackSelected = feedbackActive && feedback?.selectedIndex === index;
-                const showFeedback = feedbackActive && isFeedbackSelected;
-                const isCorrect = showFeedback ? feedback?.isCorrect === true : false;
-                const isIncorrect = showFeedback ? feedback?.isCorrect === false : false;
+                const showFeedback = feedbackActive;
+                const isFeedbackSelected = showFeedback && feedback?.selectedIndex === index;
+                const isCorrectOption = showFeedback && feedback?.correctIndex === index;
+                const isIncorrectSelected =
+                  showFeedback && isFeedbackSelected && feedback?.isCorrect === false;
+                const shouldEmphasize = isCorrectOption || isIncorrectSelected;
                 return (
                   <PrimaryButton
                     key={`${question.id}-${index}`}
@@ -182,9 +186,9 @@ export function DailyQuizScreen({
                     variant="ghost"
                     style={[
                       styles.optionButton,
-                      showFeedback && styles.optionFeedback,
-                      showFeedback && isCorrect && styles.optionCorrect,
-                      showFeedback && isIncorrect && styles.optionIncorrect
+                      shouldEmphasize && styles.optionFeedback,
+                      isCorrectOption && styles.optionCorrect,
+                      isIncorrectSelected && styles.optionIncorrect
                     ]}
                   />
                 );
