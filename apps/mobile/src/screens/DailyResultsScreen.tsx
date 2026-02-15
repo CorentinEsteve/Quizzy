@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,6 +25,22 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
   });
   const percentile = results.my.percentile ?? 0;
   const historyRows = history.filter((item) => item.date !== results.date).slice(0, 5);
+  const reviewItems = useMemo(() => {
+    if (!results.questions?.length) return [];
+    return results.questions.map((question) => {
+      const prompt = question.prompt?.[locale] ?? question.prompt?.en ?? "";
+      const options = question.options?.[locale] ?? question.options?.en ?? [];
+      const correctText =
+        typeof question.answer === "number"
+          ? options[question.answer] ?? t(locale, "noAnswer")
+          : t(locale, "noAnswer");
+      return {
+        id: question.id,
+        prompt,
+        correctText
+      };
+    });
+  }, [results.questions, locale]);
 
   return (
     <View style={styles.page}>
@@ -180,6 +196,31 @@ export function DailyResultsScreen({ results, history, streakCount, onBack, loca
                 </View>
               );
             })}
+          </GlassCard>
+        ) : null}
+
+        {reviewItems.length > 0 ? (
+          <GlassCard style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.reviewTitle}>{t(locale, "answerReviewTitle")}</Text>
+              <Text style={styles.reviewSubtitle}>{t(locale, "answerReviewSubtitle")}</Text>
+            </View>
+            <View style={styles.reviewList}>
+              {reviewItems.map((item, index) => (
+                <View key={item.id} style={styles.questionItem}>
+                  <View style={styles.questionHeader}>
+                    <Text style={styles.questionIndex}>{index + 1}.</Text>
+                    <Text style={styles.questionPrompt}>{item.prompt}</Text>
+                  </View>
+                  <View style={styles.answerRow}>
+                    <Text style={styles.answerLabel}>{t(locale, "correctAnswer")}</Text>
+                    <View style={styles.correctPill}>
+                      <Text style={styles.correctPillText}>{item.correctText}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
           </GlassCard>
         ) : null}
       </ScrollView>
@@ -480,5 +521,80 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  reviewCard: {
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(255, 252, 244, 0.9)",
+    borderColor: "rgba(223, 154, 31, 0.24)"
+  },
+  reviewHeader: {
+    gap: 2
+  },
+  reviewTitle: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.title,
+    fontWeight: "600"
+  },
+  reviewSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  reviewList: {
+    gap: theme.spacing.md
+  },
+  questionItem: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(245, 247, 251, 0.9)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    gap: theme.spacing.sm
+  },
+  questionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
+  },
+  questionIndex: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  questionPrompt: {
+    flex: 1,
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "600"
+  },
+  answerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  answerLabel: {
+    width: 110,
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    lineHeight: 18
+  },
+  correctPill: {
+    backgroundColor: "rgba(43, 158, 102, 0.14)",
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(43, 158, 102, 0.3)",
+    flexShrink: 1
+  },
+  correctPillText: {
+    color: theme.colors.success,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
   }
 });
