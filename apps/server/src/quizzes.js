@@ -704,7 +704,7 @@ export const quizzes = [
         id: "l29",
         prompt: text("What comes next: 5, 7, 10, 14, 19, ?", "Quelle est la suite : 5, 7, 10, 14, 19, ?"),
         options: options(["23", "24", "25", "26"], ["23", "24", "25", "26"]),
-        answer: 1
+        answer: 2
       },
       {
         id: "l30",
@@ -1584,6 +1584,54 @@ const extraQuestionsByCategory = {
       prompt: text("How many sides does a heptagon have?", "Combien de côtés a un heptagone ?"),
       options: options(["6", "7", "8", "9"], ["6", "7", "8", "9"]),
       answer: 1
+    },
+    {
+      id: "f49",
+      prompt: text("Which continent has the largest land area?", "Quel continent a la plus grande superficie terrestre ?"),
+      options: options(["Africa", "Asia", "Europe", "North America"], ["Afrique", "Asie", "Europe", "Amérique du Nord"]),
+      answer: 1
+    },
+    {
+      id: "f50",
+      prompt: text("What is the currency of the United Kingdom?", "Quelle est la monnaie du Royaume-Uni ?"),
+      options: options(["Euro", "Pound sterling", "Dollar", "Franc"], ["Euro", "Livre sterling", "Dollar", "Franc"]),
+      answer: 1
+    },
+    {
+      id: "f51",
+      prompt: text("What is the first element in the periodic table?", "Quel est le premier élément du tableau périodique ?"),
+      options: options(["Helium", "Hydrogen", "Oxygen", "Carbon"], ["Hélium", "Hydrogène", "Oxygène", "Carbone"]),
+      answer: 1
+    },
+    {
+      id: "f52",
+      prompt: text("Which ocean lies between Africa and Australia?", "Quel océan se situe entre l'Afrique et l'Australie ?"),
+      options: options(["Atlantic Ocean", "Pacific Ocean", "Indian Ocean", "Arctic Ocean"], ["Océan Atlantique", "Océan Pacifique", "Océan Indien", "Océan Arctique"]),
+      answer: 2
+    },
+    {
+      id: "f53",
+      prompt: text("Who wrote 'Les Miserables'?", "Qui a écrit 'Les Misérables' ?"),
+      options: options(["Victor Hugo", "Emile Zola", "Alexandre Dumas", "Albert Camus"], ["Victor Hugo", "Émile Zola", "Alexandre Dumas", "Albert Camus"]),
+      answer: 0
+    },
+    {
+      id: "f54",
+      prompt: text("Which vitamin is produced when skin is exposed to sunlight?", "Quelle vitamine est produite lorsque la peau est exposée au soleil ?"),
+      options: options(["Vitamin A", "Vitamin C", "Vitamin D", "Vitamin K"], ["Vitamine A", "Vitamine C", "Vitamine D", "Vitamine K"]),
+      answer: 2
+    },
+    {
+      id: "f55",
+      prompt: text("Which instrument records earthquakes?", "Quel instrument enregistre les tremblements de terre ?"),
+      options: options(["Barometer", "Seismograph", "Thermometer", "Altimeter"], ["Baromètre", "Sismographe", "Thermomètre", "Altimètre"]),
+      answer: 1
+    },
+    {
+      id: "f56",
+      prompt: text("What is the capital of Australia?", "Quelle est la capitale de l'Australie ?"),
+      options: options(["Sydney", "Melbourne", "Canberra", "Perth"], ["Sydney", "Melbourne", "Canberra", "Perth"]),
+      answer: 2
     }
   ],
   logic: [
@@ -1648,6 +1696,57 @@ const extraQuestionsByCategory = {
       id: "l38",
       prompt: text("What comes next: 2, 6, 12, 20, 30, ?", "Quelle est la suite : 2, 6, 12, 20, 30, ?"),
       options: options(["36", "40", "42", "48"], ["36", "40", "42", "48"]),
+      answer: 2
+    },
+    {
+      id: "l39",
+      prompt: text("What comes next: 1, 2, 4, 7, 11, ?", "Quelle est la suite : 1, 2, 4, 7, 11, ?"),
+      options: options(["14", "15", "16", "17"], ["14", "15", "16", "17"]),
+      answer: 2
+    },
+    {
+      id: "l40",
+      prompt: text("Find the odd one out: 2, 3, 5, 9", "Trouvez l'intrus : 2, 3, 5, 9"),
+      options: options(["2", "3", "5", "9"], ["2", "3", "5", "9"]),
+      answer: 3
+    },
+    {
+      id: "l41",
+      prompt: text(
+        "If all A are B and no B are C, can any A be C?",
+        "Si tous les A sont des B et qu'aucun B n'est C, un A peut-il être C ?"
+      ),
+      options: options(["Yes", "No", "Only sometimes", "Cannot tell"], ["Oui", "Non", "Seulement parfois", "Impossible à dire"]),
+      answer: 1
+    },
+    {
+      id: "l42",
+      prompt: text("What comes next: B, D, G, K, ?", "Quelle est la suite : B, D, G, K, ?"),
+      options: options(["N", "O", "P", "Q"], ["N", "O", "P", "Q"]),
+      answer: 2
+    },
+    {
+      id: "l43",
+      prompt: text("Find the missing number: 81, 27, 9, 3, ?", "Trouvez le nombre manquant : 81, 27, 9, 3, ?"),
+      options: options(["0", "1", "2", "3"], ["0", "1", "2", "3"]),
+      answer: 1
+    },
+    {
+      id: "l44",
+      prompt: text("If yesterday was Monday, what day is the day after tomorrow?", "Si hier était lundi, quel jour sera après-demain ?"),
+      options: options(["Tuesday", "Wednesday", "Thursday", "Friday"], ["Mardi", "Mercredi", "Jeudi", "Vendredi"]),
+      answer: 2
+    },
+    {
+      id: "l45",
+      prompt: text("How many degrees are in a straight angle?", "Combien de degrés y a-t-il dans un angle plat ?"),
+      options: options(["90", "120", "180", "360"], ["90", "120", "180", "360"]),
+      answer: 2
+    },
+    {
+      id: "l46",
+      prompt: text("What comes next: 7, 14, 28, 56, ?", "Quelle est la suite : 7, 14, 28, 56, ?"),
+      options: options(["84", "98", "112", "120"], ["84", "98", "112", "120"]),
       answer: 2
     }
   ],
@@ -1717,6 +1816,57 @@ const extraQuestionsByCategory = {
         ["Mitochondrie", "Noyau", "Chloroplaste", "Ribosome"]
       ),
       answer: 2
+    },
+    {
+      id: "s29",
+      prompt: text("What molecule carries oxygen in human blood?", "Quelle molécule transporte l'oxygène dans le sang humain ?"),
+      options: options(["Glucose", "Hemoglobin", "Insulin", "Collagen"], ["Glucose", "Hémoglobine", "Insuline", "Collagène"]),
+      answer: 1
+    },
+    {
+      id: "s30",
+      prompt: text("What is the SI unit of force?", "Quelle est l'unité SI de la force ?"),
+      options: options(["Joule", "Pascal", "Newton", "Watt"], ["Joule", "Pascal", "Newton", "Watt"]),
+      answer: 2
+    },
+    {
+      id: "s31",
+      prompt: text("What is the pH of pure water at room temperature?", "Quel est le pH de l'eau pure à température ambiante ?"),
+      options: options(["5", "6", "7", "8"], ["5", "6", "7", "8"]),
+      answer: 2
+    },
+    {
+      id: "s32",
+      prompt: text(
+        "What is the smallest unit of an element that keeps its chemical properties?",
+        "Quelle est la plus petite unité d'un élément qui conserve ses propriétés chimiques ?"
+      ),
+      options: options(["Molecule", "Atom", "Cell", "Ion"], ["Molécule", "Atome", "Cellule", "Ion"]),
+      answer: 1
+    },
+    {
+      id: "s33",
+      prompt: text("What is the process of liquid turning into gas called?", "Comment s'appelle le passage de l'état liquide à l'état gazeux ?"),
+      options: options(["Condensation", "Fusion", "Evaporation", "Sublimation"], ["Condensation", "Fusion", "Évaporation", "Sublimation"]),
+      answer: 2
+    },
+    {
+      id: "s34",
+      prompt: text("What is Earth's natural satellite?", "Quel est le satellite naturel de la Terre ?"),
+      options: options(["Mars", "The Moon", "Venus", "Europa"], ["Mars", "La Lune", "Vénus", "Europe"]),
+      answer: 1
+    },
+    {
+      id: "s35",
+      prompt: text("Which metal was traditionally used in thermometers?", "Quel métal était traditionnellement utilisé dans les thermomètres ?"),
+      options: options(["Lead", "Mercury", "Aluminum", "Zinc"], ["Plomb", "Mercure", "Aluminium", "Zinc"]),
+      answer: 1
+    },
+    {
+      id: "s36",
+      prompt: text("Which instrument measures electric current?", "Quel instrument mesure l'intensité du courant électrique ?"),
+      options: options(["Voltmeter", "Ammeter", "Barometer", "Ohmmeter"], ["Voltmètre", "Ampèremètre", "Baromètre", "Ohmmètre"]),
+      answer: 1
     }
   ],
   geography: [
@@ -1782,6 +1932,57 @@ const extraQuestionsByCategory = {
       prompt: text("Which country is known as the Land of the Rising Sun?", "Quel pays est appelé le pays du Soleil levant ?"),
       options: options(["China", "South Korea", "Japan", "Thailand"], ["Chine", "Corée du Sud", "Japon", "Thaïlande"]),
       answer: 2
+    },
+    {
+      id: "g29",
+      prompt: text("What is the capital of Argentina?", "Quelle est la capitale de l'Argentine ?"),
+      options: options(["Santiago", "Lima", "Buenos Aires", "Montevideo"], ["Santiago", "Lima", "Buenos Aires", "Montevideo"]),
+      answer: 2
+    },
+    {
+      id: "g30",
+      prompt: text("Which river flows through London?", "Quel fleuve traverse Londres ?"),
+      options: options(["Seine", "Thames", "Rhine", "Tiber"], ["Seine", "Tamise", "Rhin", "Tibre"]),
+      answer: 1
+    },
+    {
+      id: "g31",
+      prompt: text("Nairobi is the capital of which country?", "Nairobi est la capitale de quel pays ?"),
+      options: options(["Tanzania", "Kenya", "Uganda", "Ethiopia"], ["Tanzanie", "Kenya", "Ouganda", "Éthiopie"]),
+      answer: 1
+    },
+    {
+      id: "g32",
+      prompt: text("Which is the largest country by area?", "Quel est le plus grand pays du monde par superficie ?"),
+      options: options(["China", "Canada", "Russia", "United States"], ["Chine", "Canada", "Russie", "États-Unis"]),
+      answer: 2
+    },
+    {
+      id: "g33",
+      prompt: text("What is the capital of Egypt?", "Quelle est la capitale de l'Égypte ?"),
+      options: options(["Alexandria", "Cairo", "Giza", "Luxor"], ["Alexandrie", "Le Caire", "Gizeh", "Louxor"]),
+      answer: 1
+    },
+    {
+      id: "g34",
+      prompt: text("Mount Kilimanjaro is located in which country?", "Le mont Kilimandjaro se trouve dans quel pays ?"),
+      options: options(["Kenya", "Tanzania", "Ethiopia", "South Africa"], ["Kenya", "Tanzanie", "Éthiopie", "Afrique du Sud"]),
+      answer: 1
+    },
+    {
+      id: "g35",
+      prompt: text("Which country has the longest coastline in the world?", "Quel pays possède le plus long littoral du monde ?"),
+      options: options(["Australia", "Russia", "Canada", "Indonesia"], ["Australie", "Russie", "Canada", "Indonésie"]),
+      answer: 2
+    },
+    {
+      id: "g36",
+      prompt: text("What is the name of the strait between Spain and Morocco?", "Quel est le nom du détroit entre l'Espagne et le Maroc ?"),
+      options: options(
+        ["Strait of Hormuz", "Bering Strait", "Strait of Gibraltar", "Bosporus"],
+        ["Détroit d'Ormuz", "Détroit de Béring", "Détroit de Gibraltar", "Bosphore"]
+      ),
+      answer: 2
     }
   ],
   history: [
@@ -1841,6 +2042,54 @@ const extraQuestionsByCategory = {
         ["Égypte", "Grèce", "Italie", "Turquie"]
       ),
       answer: 0
+    },
+    {
+      id: "h29",
+      prompt: text("In which year did Christopher Columbus first reach the Americas?", "En quelle année Christophe Colomb a-t-il atteint les Amériques pour la première fois ?"),
+      options: options(["1492", "1498", "1502", "1510"], ["1492", "1498", "1502", "1510"]),
+      answer: 0
+    },
+    {
+      id: "h30",
+      prompt: text("Who was the first emperor of Rome?", "Qui fut le premier empereur de Rome ?"),
+      options: options(["Julius Caesar", "Augustus", "Nero", "Trajan"], ["Jules César", "Auguste", "Néron", "Trajan"]),
+      answer: 1
+    },
+    {
+      id: "h31",
+      prompt: text("Which war ended with the Treaty of Versailles?", "Quelle guerre s'est terminée avec le traité de Versailles ?"),
+      options: options(["World War I", "World War II", "Franco-Prussian War", "Crimean War"], ["Première Guerre mondiale", "Seconde Guerre mondiale", "Guerre franco-prussienne", "Guerre de Crimée"]),
+      answer: 0
+    },
+    {
+      id: "h32",
+      prompt: text("Which British prime minister was nicknamed the Iron Lady?", "Quelle Première ministre britannique était surnommée la Dame de fer ?"),
+      options: options(["Theresa May", "Margaret Thatcher", "Indira Gandhi", "Angela Merkel"], ["Theresa May", "Margaret Thatcher", "Indira Gandhi", "Angela Merkel"]),
+      answer: 1
+    },
+    {
+      id: "h33",
+      prompt: text("The ancient city of Troy is in which modern-day country?", "La cité antique de Troie se trouve dans quel pays actuel ?"),
+      options: options(["Greece", "Turkey", "Italy", "Syria"], ["Grèce", "Turquie", "Italie", "Syrie"]),
+      answer: 1
+    },
+    {
+      id: "h34",
+      prompt: text("In which year was the United Nations founded?", "En quelle année l'Organisation des Nations unies a-t-elle été fondée ?"),
+      options: options(["1942", "1945", "1948", "1950"], ["1942", "1945", "1948", "1950"]),
+      answer: 1
+    },
+    {
+      id: "h35",
+      prompt: text("Who developed the theory of relativity?", "Qui a développé la théorie de la relativité ?"),
+      options: options(["Isaac Newton", "Albert Einstein", "Niels Bohr", "Max Planck"], ["Isaac Newton", "Albert Einstein", "Niels Bohr", "Max Planck"]),
+      answer: 1
+    },
+    {
+      id: "h36",
+      prompt: text("Who became President of South Africa in 1994 after apartheid?", "Qui est devenu président de l'Afrique du Sud en 1994 après l'apartheid ?"),
+      options: options(["Nelson Mandela", "Desmond Tutu", "F. W. de Klerk", "Thabo Mbeki"], ["Nelson Mandela", "Desmond Tutu", "F. W. de Klerk", "Thabo Mbeki"]),
+      answer: 0
     }
   ],
   sports: [
@@ -1891,6 +2140,54 @@ const extraQuestionsByCategory = {
       prompt: text("In baseball, how many feet is it from home plate to first base?", "Au baseball, quelle distance en pieds sépare le marbre de la première base ?"),
       options: options(["60", "70", "80", "90"], ["60", "70", "80", "90"]),
       answer: 3
+    },
+    {
+      id: "sp29",
+      prompt: text("How many players are on court for one volleyball team?", "Combien de joueurs sont sur le terrain pour une équipe de volley-ball ?"),
+      options: options(["5", "6", "7", "8"], ["5", "6", "7", "8"]),
+      answer: 1
+    },
+    {
+      id: "sp30",
+      prompt: text("Which Grand Slam tennis tournament is played on clay?", "Quel tournoi du Grand Chelem se joue sur terre battue ?"),
+      options: options(["Wimbledon", "US Open", "Australian Open", "French Open"], ["Wimbledon", "US Open", "Open d'Australie", "Roland-Garros"]),
+      answer: 3
+    },
+    {
+      id: "sp31",
+      prompt: text("In Formula 1, what does a checkered flag indicate?", "En Formule 1, que signifie un drapeau à damier ?"),
+      options: options(["Rain", "Race finished", "Safety car", "Penalty"], ["Pluie", "Course terminée", "Voiture de sécurité", "Pénalité"]),
+      answer: 1
+    },
+    {
+      id: "sp32",
+      prompt: text("Biathlon combines skiing with which other discipline?", "Le biathlon combine le ski avec quelle autre discipline ?"),
+      options: options(["Fencing", "Shooting", "Cycling", "Skating"], ["Escrime", "Tir", "Cyclisme", "Patinage"]),
+      answer: 1
+    },
+    {
+      id: "sp33",
+      prompt: text("In soccer, what usually happens when a player receives a red card?", "Au football, que se passe-t-il généralement lorsqu'un joueur reçoit un carton rouge ?"),
+      options: options(["Nothing", "He gets a warning only", "He is sent off", "His team gets a penalty kick"], ["Rien", "Il reçoit seulement un avertissement", "Il est expulsé", "Son équipe obtient un penalty"]),
+      answer: 2
+    },
+    {
+      id: "sp34",
+      prompt: text("In cricket, a score of 100 runs by one batter is called a:", "Au cricket, un score de 100 points par un batteur s'appelle :"),
+      options: options(["Double", "Century", "Hat-trick", "Maiden"], ["Double", "Century", "Hat-trick", "Maiden"]),
+      answer: 1
+    },
+    {
+      id: "sp35",
+      prompt: text("In chess, what is it called when the king is under immediate attack?", "Aux échecs, comment appelle-t-on la situation où le roi est attaqué immédiatement ?"),
+      options: options(["Check", "Mate", "Stalemate", "Fork"], ["Échec", "Mat", "Pat", "Fourchette"]),
+      answer: 0
+    },
+    {
+      id: "sp36",
+      prompt: text("In modern table tennis, a game is usually played to how many points?", "Au tennis de table moderne, une manche se joue généralement en combien de points ?"),
+      options: options(["11", "15", "21", "25"], ["11", "15", "21", "25"]),
+      answer: 0
     }
   ],
   pop: [
@@ -1947,6 +2244,54 @@ const extraQuestionsByCategory = {
         ["Jane Austen", "Emily Bronte", "Virginia Woolf", "Mary Shelley"]
       ),
       answer: 0
+    },
+    {
+      id: "p29",
+      prompt: text("Who sings 'Shape of You'?", "Qui chante 'Shape of You' ?"),
+      options: options(["Ed Sheeran", "Shawn Mendes", "Justin Bieber", "Harry Styles"], ["Ed Sheeran", "Shawn Mendes", "Justin Bieber", "Harry Styles"]),
+      answer: 0
+    },
+    {
+      id: "p30",
+      prompt: text("Who created the 'Star Wars' saga?", "Qui a créé la saga 'Star Wars' ?"),
+      options: options(["George Lucas", "Steven Spielberg", "James Cameron", "Peter Jackson"], ["George Lucas", "Steven Spielberg", "James Cameron", "Peter Jackson"]),
+      answer: 0
+    },
+    {
+      id: "p31",
+      prompt: text("Captain Jack Sparrow appears in which film series?", "Le capitaine Jack Sparrow apparaît dans quelle série de films ?"),
+      options: options(["The Mummy", "Pirates of the Caribbean", "Indiana Jones", "The Matrix"], ["La Momie", "Pirates des Caraïbes", "Indiana Jones", "Matrix"]),
+      answer: 1
+    },
+    {
+      id: "p32",
+      prompt: text("Which group is known for the song 'Dancing Queen'?", "Quel groupe est connu pour la chanson 'Dancing Queen' ?"),
+      options: options(["ABBA", "Bee Gees", "Queen", "Boney M."], ["ABBA", "Bee Gees", "Queen", "Boney M."]),
+      answer: 0
+    },
+    {
+      id: "p33",
+      prompt: text("Which series features a character named Eleven?", "Quelle série met en scène un personnage nommé Eleven ?"),
+      options: options(["Dark", "Stranger Things", "The Witcher", "Black Mirror"], ["Dark", "Stranger Things", "The Witcher", "Black Mirror"]),
+      answer: 1
+    },
+    {
+      id: "p34",
+      prompt: text("PlayStation is a brand owned by which company?", "PlayStation est une marque appartenant à quelle entreprise ?"),
+      options: options(["Nintendo", "Sega", "Sony", "Microsoft"], ["Nintendo", "Sega", "Sony", "Microsoft"]),
+      answer: 2
+    },
+    {
+      id: "p35",
+      prompt: text("Which actor plays Tony Stark in the Marvel Cinematic Universe?", "Quel acteur joue Tony Stark dans l'univers cinématographique Marvel ?"),
+      options: options(["Chris Evans", "Robert Downey Jr.", "Chris Hemsworth", "Mark Ruffalo"], ["Chris Evans", "Robert Downey Jr.", "Chris Hemsworth", "Mark Ruffalo"]),
+      answer: 1
+    },
+    {
+      id: "p36",
+      prompt: text("Which animated movie is about emotions inside a young girl's mind?", "Quel film d'animation parle des émotions dans l'esprit d'une jeune fille ?"),
+      options: options(["Coco", "Inside Out", "Soul", "Up"], ["Coco", "Vice-versa", "Soul", "Là-haut"]),
+      answer: 1
     }
   ],
   nature: [
@@ -2008,6 +2353,54 @@ const extraQuestionsByCategory = {
       id: "n28",
       prompt: text("Coral reefs are built by tiny animals called:", "Les récifs coralliens sont construits par de minuscules animaux appelés :"),
       options: options(["Sponges", "Polyps", "Plankton", "Mollusks"], ["Éponges", "Polypes", "Plancton", "Mollusques"]),
+      answer: 1
+    },
+    {
+      id: "n29",
+      prompt: text("What is the largest bear species?", "Quelle est la plus grande espèce d'ours ?"),
+      options: options(["Brown bear", "Polar bear", "Black bear", "Panda"], ["Ours brun", "Ours polaire", "Ours noir", "Panda"]),
+      answer: 1
+    },
+    {
+      id: "n30",
+      prompt: text("Which marine mammal is well known for echolocation?", "Quel mammifère marin est bien connu pour l'écholocation ?"),
+      options: options(["Seal", "Dolphin", "Walrus", "Manatee"], ["Phoque", "Dauphin", "Morse", "Lamantin"]),
+      answer: 1
+    },
+    {
+      id: "n31",
+      prompt: text("What process turns water vapor into clouds?", "Quel processus transforme la vapeur d'eau en nuages ?"),
+      options: options(["Evaporation", "Condensation", "Sublimation", "Fusion"], ["Évaporation", "Condensation", "Sublimation", "Fusion"]),
+      answer: 1
+    },
+    {
+      id: "n32",
+      prompt: text("Which tree produces acorns?", "Quel arbre produit des glands ?"),
+      options: options(["Pine", "Birch", "Oak", "Maple"], ["Pin", "Bouleau", "Chêne", "Érable"]),
+      answer: 2
+    },
+    {
+      id: "n33",
+      prompt: text("On which continent do penguins live in the wild?", "Sur quel continent les manchots vivent-ils à l'état sauvage ?"),
+      options: options(["Europe", "South America", "Antarctica", "Asia"], ["Europe", "Amérique du Sud", "Antarctique", "Asie"]),
+      answer: 2
+    },
+    {
+      id: "n34",
+      prompt: text("Which snake is the longest venomous snake in the world?", "Quel serpent est le plus long serpent venimeux du monde ?"),
+      options: options(["Black mamba", "King cobra", "Rattlesnake", "Taipan"], ["Mamba noir", "Cobra royal", "Crotale", "Taïpan"]),
+      answer: 1
+    },
+    {
+      id: "n35",
+      prompt: text("Which animal is commonly called the ship of the desert?", "Quel animal est couramment appelé le vaisseau du désert ?"),
+      options: options(["Llama", "Camel", "Horse", "Donkey"], ["Lama", "Chameau", "Cheval", "Âne"]),
+      answer: 1
+    },
+    {
+      id: "n36",
+      prompt: text("What do bees collect from flowers to make honey?", "Que récoltent les abeilles des fleurs pour fabriquer le miel ?"),
+      options: options(["Pollen only", "Nectar", "Seeds", "Resin"], ["Uniquement du pollen", "Nectar", "Graines", "Résine"]),
       answer: 1
     }
   ]
