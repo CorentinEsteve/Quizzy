@@ -633,13 +633,13 @@ const styles = StyleSheet.create({
     borderRadius: 999
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     flexShrink: 1

@@ -165,7 +165,7 @@ export function AccountScreen({
   if (route !== "main") {
     return (
       <View style={styles.page}>
-        <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
         <ScrollView
           contentContainerStyle={[
             styles.container,
@@ -184,7 +184,7 @@ export function AccountScreen({
               accessibilityLabel={t(locale, "back")}
               hitSlop={8}
             >
-              <FontAwesome name="arrow-left" size={16} color={theme.colors.ink} />
+              <FontAwesome name="arrow-left" size={16} color="#EAF1FF" />
             </Pressable>
             <Text style={styles.title}>
               {route === "profile"
@@ -531,7 +531,7 @@ export function AccountScreen({
 
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#F4F6FB", "#FFFFFF"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
       <ScrollView
@@ -552,7 +552,7 @@ export function AccountScreen({
             accessibilityLabel={t(locale, "back")}
             hitSlop={8}
           >
-            <FontAwesome name="arrow-left" size={16} color={theme.colors.ink} />
+            <FontAwesome name="arrow-left" size={16} color="#EAF1FF" />
           </Pressable>
           <View style={styles.headerTextBlock}>
             <Text style={styles.title}>{t(locale, "account")}</Text>
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: "rgba(94, 124, 255, 0.12)"
+    backgroundColor: "rgba(82, 125, 255, 0.2)"
   },
   backgroundOrbBottom: {
     position: "absolute",
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: "rgba(46, 196, 182, 0.1)"
+    backgroundColor: "rgba(86, 70, 184, 0.16)"
   },
   container: {
     padding: theme.spacing.lg,
@@ -857,16 +857,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.06)"
+    backgroundColor: "rgba(214, 228, 255, 0.16)"
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
   headerSubtitle: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12
   },

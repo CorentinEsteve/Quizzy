@@ -19,7 +19,7 @@ export function SplashScreen({ locale }: Props) {
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#F2F4FF", "#FFFFFF"]}
+        colors={["#08112E", "#0D1B4A", "#142A60"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -78,21 +78,21 @@ const styles = StyleSheet.create({
     height: 230,
     top: -70,
     right: -40,
-    backgroundColor: "rgba(94, 124, 255, 0.18)"
+    backgroundColor: "rgba(105, 139, 255, 0.22)"
   },
   orbSecondary: {
     width: 180,
     height: 180,
     top: 110,
     left: -80,
-    backgroundColor: "rgba(46, 196, 182, 0.16)"
+    backgroundColor: "rgba(86, 70, 184, 0.18)"
   },
   orbAccent: {
     width: 220,
     height: 220,
     bottom: -90,
     left: 30,
-    backgroundColor: "rgba(245, 195, 92, 0.14)"
+    backgroundColor: "rgba(243, 194, 88, 0.16)"
   },
   dot: {
     position: "absolute",
@@ -103,14 +103,14 @@ const styles = StyleSheet.create({
     height: 10,
     top: 140,
     right: 54,
-    backgroundColor: "rgba(94, 124, 255, 0.32)"
+    backgroundColor: "rgba(105, 139, 255, 0.36)"
   },
   dotSecondary: {
     width: 8,
     height: 8,
     top: 190,
     right: 30,
-    backgroundColor: "rgba(46, 196, 182, 0.32)"
+    backgroundColor: "rgba(86, 70, 184, 0.36)"
   },
   dotAccent: {
     width: 12,
@@ -133,26 +133,26 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.76)",
+    backgroundColor: "rgba(214, 228, 255, 0.16)",
     borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.9)"
+    borderColor: "rgba(171, 198, 255, 0.3)"
   },
   badgeText: {
-    color: theme.colors.muted,
+    color: "rgba(226, 236, 255, 0.9)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     letterSpacing: 1.1,
     textTransform: "uppercase"
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: 42,
     fontWeight: "700",
     textAlign: "center"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     textAlign: "center",
@@ -169,15 +169,15 @@ const styles = StyleSheet.create({
     width: "94%",
     height: "94%",
     borderRadius: 999,
-    backgroundColor: "rgba(94, 124, 255, 0.14)"
+    backgroundColor: "rgba(105, 139, 255, 0.24)"
   },
   heroCard: {
     width: "82%",
     aspectRatio: 1,
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
+    backgroundColor: "rgba(214, 228, 255, 0.18)",
     borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.75)",
+    borderColor: "rgba(171, 198, 255, 0.28)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden"
@@ -198,9 +198,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     borderRadius: 999,
-    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    backgroundColor: "rgba(214, 228, 255, 0.16)",
     borderWidth: 1,
-    borderColor: "rgba(229, 231, 236, 0.85)"
+    borderColor: "rgba(171, 198, 255, 0.3)"
   },
   sparkRow: {
     flexDirection: "row",

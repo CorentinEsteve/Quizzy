@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -70,6 +72,9 @@ type Props = {
   dailyLoading: boolean;
   onOpenDailyQuiz: () => void;
   onOpenDailyResults: () => void;
+  playEntryAnimation?: boolean;
+  entryRevealReady?: boolean;
+  onEntryAnimationEnd?: () => void;
 };
 
 const ALL_CATEGORY_ID = "all";
@@ -95,6 +100,33 @@ function formatInviteRelative(locale: Locale, fromMs: number, nowMs: number) {
   return locale === "fr" ? `il y a ${deltaHours} h` : `${deltaHours}h ago`;
 }
 
+function formatOpponentNames(names: string[], maxChars = 32) {
+  if (names.length === 0) return "-";
+  const full = names.join(", ");
+  if (full.length <= maxChars) return full;
+
+  let result = "";
+  for (let i = 0; i < names.length; i += 1) {
+    const next = result ? `${result}, ${names[i]}` : names[i];
+    if (next.length + 3 > maxChars) {
+      return result ? `${result}...` : `${names[i].slice(0, Math.max(1, maxChars - 3))}...`;
+    }
+    result = next;
+  }
+  return result;
+}
+
+const BACKGROUND_STARS = [
+  { left: "8%", top: 84, size: 2.2, baseOpacity: 0.58, tone: "cool" as const },
+  { left: "22%", top: 138, size: 1.8, baseOpacity: 0.45, tone: "gold" as const },
+  { left: "34%", top: 96, size: 2.4, baseOpacity: 0.64, tone: "cool" as const },
+  { left: "48%", top: 164, size: 1.6, baseOpacity: 0.4, tone: "cool" as const },
+  { left: "62%", top: 112, size: 2.6, baseOpacity: 0.56, tone: "gold" as const },
+  { left: "76%", top: 182, size: 1.7, baseOpacity: 0.42, tone: "cool" as const },
+  { left: "86%", top: 72, size: 2.2, baseOpacity: 0.52, tone: "cool" as const },
+  { left: "92%", top: 148, size: 1.9, baseOpacity: 0.44, tone: "gold" as const }
+];
+
 export function LobbyScreen({
   quizzes,
   onCreateRoom,
@@ -114,7 +146,10 @@ export function LobbyScreen({
   dailyResults,
   dailyLoading,
   onOpenDailyQuiz,
-  onOpenDailyResults
+  onOpenDailyResults,
+  playEntryAnimation = false,
+  entryRevealReady = true,
+  onEntryAnimationEnd
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -132,8 +167,15 @@ export function LobbyScreen({
   const mascotFloat = useRef(new Animated.Value(0)).current;
   const fabFloat = useRef(new Animated.Value(0)).current;
   const invitePulse = useRef(new Animated.Value(0)).current;
+  const starTwinkle = useRef(new Animated.Value(0)).current;
+  const starTwinkleAlt = useRef(new Animated.Value(0)).current;
+  const starDrift = useRef(new Animated.Value(0)).current;
+  const introInterfaceOpacity = useRef(new Animated.Value(playEntryAnimation ? 0 : 1)).current;
+  const introHasMeasuredContentRef = useRef(false);
   const inviteFirstSeenRef = useRef<Map<string, number>>(new Map());
+  const [introActive, setIntroActive] = useState(playEntryAnimation);
   const [inviteNowMs, setInviteNowMs] = useState(() => Date.now());
+  const [introCanRevealInterface, setIntroCanRevealInterface] = useState(!playEntryAnimation);
   const dialogMaxHeight = Math.min(
     height - insets.top - insets.bottom - theme.spacing.xl * 2,
     height * 0.88
@@ -490,6 +532,124 @@ export function LobbyScreen({
     return () => animation.stop();
   }, [invitePulse, showInvitedCard]);
 
+  useEffect(() => {
+    const drift = Animated.loop(
+      Animated.sequence([
+        Animated.timing(starDrift, {
+          toValue: 1,
+          duration: 17000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(starDrift, {
+          toValue: 0,
+          duration: 17000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    const twinkle = Animated.loop(
+      Animated.sequence([
+        Animated.timing(starTwinkle, {
+          toValue: 1,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(starTwinkle, {
+          toValue: 0,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    const twinkleAlt = Animated.loop(
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(starTwinkleAlt, {
+          toValue: 1,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(starTwinkleAlt, {
+          toValue: 0,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    drift.start();
+    twinkle.start();
+    twinkleAlt.start();
+    return () => {
+      drift.stop();
+      twinkle.stop();
+      twinkleAlt.stop();
+    };
+  }, [starDrift, starTwinkle, starTwinkleAlt]);
+
+  useEffect(() => {
+    if (!playEntryAnimation) {
+      introInterfaceOpacity.setValue(1);
+      introHasMeasuredContentRef.current = false;
+      setIntroCanRevealInterface(true);
+      setIntroActive(false);
+      return;
+    }
+
+    setIntroActive(true);
+    setIntroCanRevealInterface(false);
+    introHasMeasuredContentRef.current = false;
+    introInterfaceOpacity.setValue(0);
+  }, [introInterfaceOpacity, playEntryAnimation]);
+
+  useEffect(() => {
+    if (!playEntryAnimation) return;
+
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      if (introHasMeasuredContentRef.current) {
+        setIntroCanRevealInterface(true);
+      }
+    });
+    const fallbackTimer = setTimeout(() => {
+      setIntroCanRevealInterface(true);
+    }, 2600);
+
+    return () => {
+      interactionTask.cancel();
+      clearTimeout(fallbackTimer);
+    };
+  }, [playEntryAnimation]);
+
+  useEffect(() => {
+    if (!playEntryAnimation || !introCanRevealInterface || !entryRevealReady) return;
+    const reveal = Animated.sequence([
+      Animated.delay(220),
+      Animated.timing(introInterfaceOpacity, {
+        toValue: 1,
+        duration: 760,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true
+      })
+    ]);
+    reveal.start(({ finished }) => {
+      if (!finished) return;
+      setIntroActive(false);
+      onEntryAnimationEnd?.();
+    });
+    return () => reveal.stop();
+  }, [
+    entryRevealReady,
+    introCanRevealInterface,
+    introInterfaceOpacity,
+    onEntryAnimationEnd,
+    playEntryAnimation
+  ]);
+
   const nextOpponents = nextSession?.players.filter((player) => player.id !== userId) ?? [];
   const nextOpponentName =
     nextOpponents.length === 0
@@ -549,6 +709,34 @@ export function LobbyScreen({
     inputRange: [0, 1],
     outputRange: [0.35, 0]
   });
+  const starLayerDriftX = starDrift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-3, 3]
+  });
+  const starLayerDriftY = starDrift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, -2]
+  });
+  const starGlow = starTwinkle.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1]
+  });
+  const starGlowAlt = starTwinkleAlt.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.28, 0.82]
+  });
+  const introInterfaceLift = introInterfaceOpacity.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 0]
+  });
+  const introTaglineOpacity = introInterfaceOpacity.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [1, 0.2, 0]
+  });
+  const introTaglineLift = introInterfaceOpacity.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6]
+  });
 
   const openCreateDialog = () => {
     Haptics.selectionAsync();
@@ -565,42 +753,107 @@ export function LobbyScreen({
     setIsDialogOpen(true);
   };
 
+  const handleIntroContentReady = useCallback(() => {
+    if (!playEntryAnimation || introHasMeasuredContentRef.current) return;
+    introHasMeasuredContentRef.current = true;
+    requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(() => {
+        setIntroCanRevealInterface(true);
+      });
+    });
+  }, [playEntryAnimation]);
+
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#F3F6FF", "#FFF3EE", "#FFF8EF"]}
+        colors={["#08112E", "#0D1B4A", "#142960"]}
         style={StyleSheet.absoluteFillObject}
       />
       <LinearGradient
-        colors={["rgba(47, 70, 212, 0.34)", "rgba(47, 70, 212, 0)"]}
+        colors={["rgba(105, 139, 255, 0.4)", "rgba(105, 139, 255, 0)"]}
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.7, y: 0.7 }}
         style={styles.backgroundSweep}
       />
       <LinearGradient
-        colors={["rgba(227, 92, 76, 0.2)", "rgba(227, 92, 76, 0)"]}
+        colors={["rgba(86, 70, 184, 0.18)", "rgba(86, 70, 184, 0)"]}
         start={{ x: 0.95, y: 0.05 }}
         end={{ x: 0.25, y: 0.65 }}
         style={styles.backgroundWarmSweep}
       />
+      <LinearGradient
+        colors={["rgba(243, 194, 88, 0.18)", "rgba(243, 194, 88, 0)"]}
+        start={{ x: 0.7, y: 0.85 }}
+        end={{ x: 0.15, y: 0.25 }}
+        style={styles.backgroundGoldSweep}
+      />
       <View style={styles.backgroundOrb} pointerEvents="none" />
       <View style={styles.backgroundOrbAccent} pointerEvents="none" />
       <View style={styles.backgroundOrbWarm} pointerEvents="none" />
+      <View style={styles.backgroundNebula} pointerEvents="none" />
+      <View style={styles.backgroundNebulaTwo} pointerEvents="none" />
       <View style={styles.backgroundRibbon} pointerEvents="none" />
+      <View style={styles.backgroundRing} pointerEvents="none" />
       <View style={styles.backgroundGlow} pointerEvents="none" />
       <View style={styles.backgroundGlass} pointerEvents="none" />
-      <LinearGradient
-        colors={["rgba(255, 255, 255, 0)", "rgba(248, 251, 255, 0.92)", "rgba(248, 251, 255, 0.98)"]}
-        style={[styles.bottomFade, { paddingBottom: insets.bottom }]}
+      <Animated.View
         pointerEvents="none"
-      />
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + 64 + insets.bottom }
+        style={[
+          styles.starLayer,
+          {
+            transform: [{ translateX: starLayerDriftX }, { translateY: starLayerDriftY }]
+          }
         ]}
-        showsVerticalScrollIndicator={false}
       >
+        {BACKGROUND_STARS.map((star, index) => {
+          const isEven = index % 2 === 0;
+          const opacity = (isEven ? starGlow : starGlowAlt).interpolate({
+            inputRange: [0, 1],
+            outputRange: [star.baseOpacity * 0.45, star.baseOpacity]
+          });
+          return (
+            <Animated.View
+              key={`star-${index}`}
+              style={[
+                styles.starDot,
+                {
+                  left: star.left,
+                  top: star.top,
+                  width: star.size,
+                  height: star.size,
+                  borderRadius: star.size / 2,
+                  opacity,
+                  backgroundColor:
+                    star.tone === "gold" ? "rgba(244, 207, 125, 1)" : "rgba(217, 230, 255, 1)"
+                }
+              ]}
+            />
+          );
+        })}
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.interfaceLayer,
+          {
+            opacity: introInterfaceOpacity,
+            transform: [{ translateY: introInterfaceLift }]
+          }
+        ]}
+        pointerEvents={introActive ? "none" : "auto"}
+      >
+        <LinearGradient
+          colors={["rgba(9, 16, 42, 0)", "rgba(12, 24, 58, 0.8)", "rgba(13, 28, 66, 0.95)"]}
+          style={[styles.bottomFade, { paddingBottom: insets.bottom }]}
+          pointerEvents="none"
+        />
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + 64 + insets.bottom }
+          ]}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={handleIntroContentReady}
+        >
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>
@@ -628,10 +881,10 @@ export function LobbyScreen({
         <GlassCard style={styles.heroCard}>
           <LinearGradient
             colors={[
-              "#F3F7FF",
-              "#DEE6FF",
-              "#FFDCCE",
-              "#FFDCA5"
+              "#F2F5FF",
+              "#D9DFFF",
+              "#F5D6EC",
+              "#F4E3B7"
             ]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -709,7 +962,7 @@ export function LobbyScreen({
                 <Animated.View style={{ transform: [{ translateY: inviteNudge }, { scale: inviteGlow }] }}>
                   <GlassCard style={[styles.introCard, styles.homeInviteCard]} accent={theme.colors.secondary}>
                     <LinearGradient
-                      colors={["rgba(63, 84, 220, 0.2)", "rgba(224, 97, 80, 0.13)", "rgba(255, 255, 255, 0.98)"]}
+                      colors={["rgba(57, 72, 175, 0.2)", "rgba(191, 58, 142, 0.14)", "rgba(255, 255, 255, 0.98)"]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.homeInviteBackdrop}
@@ -763,7 +1016,7 @@ export function LobbyScreen({
           >
             <GlassCard style={[styles.introCard, styles.homeInviteCard, styles.homeHostCard]} accent={theme.colors.primary}>
               <LinearGradient
-                colors={["rgba(63, 84, 220, 0.14)", "rgba(242, 166, 67, 0.11)", "rgba(255, 255, 255, 0.98)"]}
+                colors={["rgba(57, 72, 175, 0.16)", "rgba(216, 164, 58, 0.16)", "rgba(255, 255, 255, 0.98)"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.homeInviteBackdrop}
@@ -833,7 +1086,7 @@ export function LobbyScreen({
                 </View>
               </View>
               <View style={styles.recapHeaderAction}>
-                <FontAwesome name="chevron-right" size={14} color={theme.colors.muted} />
+                <FontAwesome name="chevron-right" size={14} color="#FFFFFF" />
               </View>
             </View>
             <View style={styles.recapTopList}>
@@ -864,7 +1117,7 @@ export function LobbyScreen({
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
             <LinearGradient
-              colors={["rgba(63, 84, 220, 0.18)", "rgba(224, 97, 80, 0.1)", "rgba(255, 255, 255, 0.98)"]}
+              colors={["rgba(255, 255, 255, 0.96)", "rgba(233, 241, 255, 0.95)", "rgba(255, 240, 209, 0.9)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.nextActionBackdrop}
@@ -919,12 +1172,12 @@ export function LobbyScreen({
         ) : null}
 
         {remainingSessions.length > 0 ? (
-          <GlassCard style={styles.introCard}>
+          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
             <View style={styles.sectionHeading}>
               <View style={[styles.sectionIcon, styles.sectionIconPrimary]}>
-                <FontAwesome name="play-circle" size={18} color={theme.colors.ink} />
+                <FontAwesome name="play-circle" size={18} color={theme.colors.primary} />
               </View>
-              <Text style={styles.sectionTitle}>{t(locale, "ongoingMatches")}</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "ongoingMatches")}</Text>
             </View>
             {remainingSessions
               .slice(0, 3)
@@ -933,9 +1186,12 @@ export function LobbyScreen({
                 const opponentsLabel =
                   otherPlayers.length === 0
                     ? "-"
-                    : otherPlayers.length === 1
-                      ? otherPlayers[0].displayName
-                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
+                    : formatOpponentNames(otherPlayers.map((player) => player.displayName));
+                const categoryLabel = localizedCategoryLabel(
+                  locale,
+                  session.quiz.categoryId ?? ALL_CATEGORY_ID,
+                  session.quiz.categoryLabel ?? t(locale, "allCategories")
+                );
                 const totalQuestions = session.quiz.questions?.length ?? 0;
                 const myProgress = session.progress?.[String(userId)] ?? 0;
                 const otherProgressValues = otherPlayers.map(
@@ -960,41 +1216,60 @@ export function LobbyScreen({
                       onResumeRoom(session.code);
                     }}
                   >
-                  <View
-                    style={[
-                      styles.sessionCard,
-                      !canContinue && styles.sessionCardDisabled,
-                      isLast && styles.sessionCardLast
-                    ]}
-                  >
+                    <View
+                      style={[
+                        styles.sessionCard,
+                        styles.sessionCardLight,
+                        !canContinue && styles.sessionCardDisabled,
+                        isLast && styles.sessionCardLast
+                      ]}
+                    >
                     <View style={styles.sessionHeader}>
-                      <View>
-                        <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
-                        <Text style={styles.sessionSubtitle}>
-                          {t(locale, "withOpponent")} {opponentsLabel}
+                      <View style={styles.sessionHeaderCopy}>
+                        <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{opponentsLabel}</Text>
+                        <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
+                          {categoryLabel}
                         </Text>
-                        <Text style={styles.sessionMetaSubtle}>
-                          {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
-                          {totalQuestions} {t(locale, "questionsLabel")}
+                      </View>
+                      <View
+                        style={[
+                          styles.statusChip,
+                          styles.statusChipLight,
+                          isWaitingForOpponent ? styles.statusChipWait : styles.statusChipOngoing
+                        ]}
+                      >
+                        <FontAwesome
+                          name={isWaitingForOpponent ? "clock-o" : "bolt"}
+                          size={10}
+                          color="#1F327F"
+                        />
+                        <Text style={[styles.statusChipText, styles.statusChipTextLight]}>
+                          {isWaitingForOpponent ? t(locale, "waitingOpponent") : t(locale, "continueMatch")}
                         </Text>
                       </View>
                     </View>
+                    <View style={styles.sessionProgressRow}>
+                      <View style={[styles.sessionProgress, styles.sessionProgressLight]}>
+                        <View
+                          style={[
+                            styles.sessionProgressFill,
+                            styles.sessionProgressFillLight,
+                            { width: `${Math.min((myProgress / Math.max(totalQuestions, 1)) * 100, 100)}%` }
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.sessionProgressText, styles.sessionProgressTextLight]}>{myProgress}/{totalQuestions}</Text>
+                    </View>
                     <View style={styles.sessionFooter}>
-                      {isWaitingForOpponent ? (
-                        <View style={styles.sessionMetaRow}>
-                          <Text style={styles.sessionMeta}>{t(locale, "waitingOpponent")}</Text>
-                          <FontAwesome name="angle-right" size={12} color={theme.colors.muted} />
-                        </View>
-                      ) : (
-                        <Text style={styles.sessionMeta}>
-                          {myProgress} {t(locale, "questionsLabel")} / {totalQuestions}
-                        </Text>
-                      )}
+                      <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>
+                        {myProgress} {t(locale, "questionsLabel")} / {totalQuestions}
+                      </Text>
                       {canContinue ? (
                         <Animated.View
                           style={[
                             styles.ctaPill,
                             styles.ctaPrimary,
+                            styles.ctaPrimaryLight,
                             {
                               transform: [
                                 {
@@ -1011,10 +1286,15 @@ export function LobbyScreen({
                             }
                           ]}
                         >
-                          <Text style={styles.ctaText}>{t(locale, "continueMatch")}</Text>
-                          <FontAwesome name="arrow-right" size={12} color={theme.colors.ink} />
+                          <Text style={[styles.ctaText, styles.ctaTextLight]}>{t(locale, "continueMatch")}</Text>
+                          <FontAwesome name="arrow-right" size={12} color="#1F327F" />
                         </Animated.View>
-                      ) : null}
+                      ) : (
+                        <View style={styles.sessionMetaRow}>
+                          <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>{t(locale, "waitingOpponent")}</Text>
+                          <FontAwesome name="angle-right" size={12} color="#6D7380" />
+                        </View>
+                      )}
                     </View>
                   </View>
                 </Pressable>
@@ -1024,12 +1304,12 @@ export function LobbyScreen({
         ) : null}
 
         {sessions.filter((s) => s.status === "complete" && s.rematchReady?.length && !s.rematchReady?.includes(userId)).length > 0 ? (
-          <GlassCard style={styles.introCard}>
+          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
             <View style={styles.sectionHeading}>
               <View style={[styles.sectionIcon, styles.sectionIconAccent]}>
-                <FontAwesome name="refresh" size={18} color={theme.colors.ink} />
+                <FontAwesome name="refresh" size={18} color={theme.colors.reward} />
               </View>
-              <Text style={styles.sectionTitle}>{t(locale, "rematchRequested")}</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "rematchRequested")}</Text>
             </View>
             {sessions
               .filter((s) => s.status === "complete" && s.rematchReady?.length && !s.rematchReady?.includes(userId))
@@ -1050,21 +1330,21 @@ export function LobbyScreen({
                     key={session.code}
                     onPress={() => onOpenRecap(session.code)}
                   >
-                    <View style={[styles.sessionCard, isLast && styles.sessionCardLast]}>
+                    <View style={[styles.sessionCard, styles.sessionCardLight, isLast && styles.sessionCardLast]}>
                       <View style={styles.sessionHeader}>
-                        <View>
-                          <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
-                          <Text style={styles.sessionSubtitle}>
+                        <View style={styles.sessionHeaderCopy}>
+                          <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{session.quiz.title}</Text>
+                          <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
                             {t(locale, "withOpponent")} {opponentsLabel}
                           </Text>
                         </View>
-                        <View style={[styles.ctaPill, styles.ctaPrimary]}>
-                          <Text style={styles.ctaText}>{t(locale, "replayLabel")}</Text>
-                          <FontAwesome name="play" size={12} color={theme.colors.ink} />
+                        <View style={[styles.ctaPill, styles.ctaPrimary, styles.ctaPrimaryLight]}>
+                          <Text style={[styles.ctaText, styles.ctaTextLight]}>{t(locale, "replayLabel")}</Text>
+                          <FontAwesome name="play" size={12} color="#1F327F" />
                         </View>
                       </View>
                       <View style={styles.sessionFooter}>
-                        <Text style={styles.rematchNote}>
+                        <Text style={[styles.rematchNote, styles.sessionMetaLight]}>
                           {rematchByOpponent ? t(locale, "rematchByOpponent") : t(locale, "rematchByYou")}
                         </Text>
                         <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
@@ -1076,9 +1356,9 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
-        <GlassCard style={styles.shareCard}>
+        <GlassCard style={[styles.shareCard, styles.activityCardLight]}>
           <LinearGradient
-            colors={["rgba(63, 84, 220, 0.08)", "rgba(245, 138, 43, 0.06)", "rgba(255, 255, 255, 0.98)"]}
+            colors={["rgba(106, 143, 255, 0.16)", "rgba(243, 194, 88, 0.12)", "rgba(255, 252, 244, 0.96)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.shareCardBackdrop}
@@ -1089,7 +1369,7 @@ export function LobbyScreen({
               <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
             </View>
             <View style={styles.shareArrowPill}>
-              <FontAwesome name="arrow-right" size={11} color="rgba(71, 85, 105, 0.72)" />
+              <FontAwesome name="arrow-right" size={11} color={theme.colors.primary} />
             </View>
             <Pressable
               style={styles.qrWrap}
@@ -1109,8 +1389,14 @@ export function LobbyScreen({
         {showDailyCard ? (
           <GlassCard
             accent={theme.colors.reward}
-            style={[styles.introCard, styles.dailyQuizCard, dailyCompleted && styles.dailyQuizCardCompact]}
+            style={[styles.introCard, styles.dailyQuizCard, styles.activityCardLight, dailyCompleted && styles.dailyQuizCardCompact]}
           >
+            <LinearGradient
+              colors={["rgba(242, 188, 74, 0.22)", "rgba(255, 248, 228, 0.92)", "rgba(255, 252, 243, 0.98)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.dailyQuizBackdrop}
+            />
             <View style={styles.dailyQuizHeader}>
               <View style={styles.dailyQuizHeaderLeft}>
                 <View style={styles.dailyQuizBadge}>
@@ -1155,7 +1441,7 @@ export function LobbyScreen({
             ) : (
               <>
                 <View style={styles.dailyQuizHero}>
-                  <Text style={styles.nextActionTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
+                  <Text style={styles.dailyQuizTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
                 </View>
                 <View style={styles.dailyQuizButtons}>
                   <PrimaryButton
@@ -1173,12 +1459,12 @@ export function LobbyScreen({
         ) : null}
 
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
-          <GlassCard style={styles.introCard}>
+          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
             <View style={styles.sectionHeading}>
               <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
-                <FontAwesome name="history" size={18} color={theme.colors.ink} />
+                <FontAwesome name="history" size={18} color={theme.colors.primary} />
               </View>
-              <Text style={styles.sectionTitle}>{t(locale, "recentMatches")}</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "recentMatches")}</Text>
             </View>
             {sessions
               .filter((s) => s.status === "complete")
@@ -1229,14 +1515,14 @@ export function LobbyScreen({
                     key={session.code}
                     onPress={() => onOpenRecap(session.code)}
                   >
-                    <View style={[styles.sessionCard, isLast && styles.sessionCardLast]}>
+                    <View style={[styles.sessionCard, styles.sessionCardLight, isLast && styles.sessionCardLast]}>
                       <View style={styles.sessionHeader}>
-                        <View>
-                          <Text style={styles.sessionTitle}>{session.quiz.title}</Text>
-                          <Text style={styles.sessionSubtitle}>
+                        <View style={styles.sessionHeaderCopy}>
+                          <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{session.quiz.title}</Text>
+                          <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
                             {t(locale, "withOpponent")} {opponentsLabel}
                           </Text>
-                          <Text style={styles.sessionMetaSubtle}>
+                          <Text style={[styles.sessionMetaSubtle, styles.sessionMetaSubtleLight]}>
                             {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
                             {myScore !== undefined ? `${myScore} / ${totalQuestions}` : `0 / ${totalQuestions}`}{" "}
                             {t(locale, "questionsLabel")}
@@ -1246,18 +1532,18 @@ export function LobbyScreen({
                           <View style={styles.badgeRow}>
                             {rematchByYou ? (
                               <View style={[styles.statusChip, styles.statusChipRematch, styles.statusChipRound]}>
-                                <FontAwesome name="refresh" size={10} color={theme.colors.ink} />
+                                <FontAwesome name="refresh" size={10} color="#1F327F" />
                               </View>
                             ) : null}
-                            <View style={[styles.statusChip, resultStyle]}>
+                            <View style={[styles.statusChip, styles.statusChipLight, resultStyle]}>
                               <FontAwesome name={resultIcon} size={10} color={resultIconColor} />
-                              <Text style={styles.statusChipText}>{resultLabel}</Text>
+                              <Text style={[styles.statusChipText, styles.statusChipTextLight]}>{resultLabel}</Text>
                             </View>
                           </View>
                         ) : null}
                       </View>
                       <View style={styles.sessionFooter}>
-                        <Text style={styles.sessionMeta}>{t(locale, "reviewMatch")}</Text>
+                        <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>{t(locale, "reviewMatch")}</Text>
                         <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
                       </View>
                     </View>
@@ -1267,7 +1553,7 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
-      </ScrollView>
+        </ScrollView>
 
       <Animated.View style={[styles.fabWrap, { bottom: theme.spacing.sm + insets.bottom }]}>
         <Animated.View
@@ -1305,22 +1591,48 @@ export function LobbyScreen({
             <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
           </Pressable>
         </Animated.View>
+        </Animated.View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.joinFab,
+            { bottom: theme.spacing.sm + insets.bottom, right: theme.spacing.lg },
+            pressed && styles.joinFabPressed
+          ]}
+          onPress={openJoinDialog}
+          accessibilityRole="button"
+          accessibilityLabel={locale === "fr" ? "Rejoindre" : "Join"}
+          accessibilityHint={t(locale, "joinInviteHint")}
+        >
+          <FontAwesome name="plus" size={16} color={theme.colors.surface} />
+          <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
+        </Pressable>
       </Animated.View>
-      <Pressable
-        style={({ pressed }) => [
-          styles.joinFab,
-          { bottom: theme.spacing.sm + insets.bottom, right: theme.spacing.lg },
-          pressed && styles.joinFabPressed
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.entryTaglineWrap,
+          {
+            opacity: introTaglineOpacity,
+            transform: [{ translateY: introTaglineLift }]
+          }
         ]}
-        onPress={openJoinDialog}
-        accessibilityRole="button"
-        accessibilityLabel={locale === "fr" ? "Rejoindre" : "Join"}
-        accessibilityHint={t(locale, "joinInviteHint")}
       >
-        <FontAwesome name="plus" size={16} color={theme.colors.surface} />
-        <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
-      </Pressable>
-
+        <Text style={styles.entryTaglineText}>{"let's quiz"}</Text>
+      </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.entryLoaderOverlay,
+          {
+            bottom: Math.max(insets.bottom + theme.spacing.xl, height * 0.24),
+            opacity: introTaglineOpacity
+          }
+        ]}
+      >
+        <View style={styles.entryLoaderWrap}>
+          <ActivityIndicator size="small" color="rgba(214, 228, 255, 0.72)" />
+        </View>
+      </Animated.View>
       <Modal
         transparent
         visible={isDialogOpen}
@@ -1738,6 +2050,43 @@ const styles = StyleSheet.create({
   page: {
     flex: 1
   },
+  interfaceLayer: {
+    flex: 1
+  },
+  entryTaglineWrap: {
+    position: "absolute",
+    top: "26%",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  entryTaglineText: {
+    color: "rgba(230, 238, 255, 0.96)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 30,
+    fontWeight: "500",
+    letterSpacing: 0.4,
+    textTransform: "lowercase"
+  },
+  entryLoaderOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  entryLoaderWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(214, 228, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(214, 228, 255, 0.18)",
+    opacity: 0.85
+  },
   backgroundOrb: {
     position: "absolute",
     top: -220,
@@ -1745,7 +2094,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(56, 78, 214, 0.26)"
+    backgroundColor: "rgba(82, 125, 255, 0.28)"
   },
   backgroundOrbAccent: {
     position: "absolute",
@@ -1754,7 +2103,7 @@ const styles = StyleSheet.create({
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(224, 102, 86, 0.18)"
+    backgroundColor: "rgba(86, 70, 184, 0.2)"
   },
   backgroundOrbWarm: {
     position: "absolute",
@@ -1763,7 +2112,25 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(245, 138, 43, 0.2)"
+    backgroundColor: "rgba(243, 194, 88, 0.24)"
+  },
+  backgroundNebula: {
+    position: "absolute",
+    top: "28%",
+    left: -110,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(125, 153, 255, 0.12)"
+  },
+  backgroundNebulaTwo: {
+    position: "absolute",
+    top: "52%",
+    right: -110,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(117, 85, 206, 0.13)"
   },
   backgroundRibbon: {
     position: "absolute",
@@ -1773,7 +2140,17 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 44,
     transform: [{ rotate: "-16deg" }],
-    backgroundColor: "rgba(220, 110, 82, 0.14)"
+    backgroundColor: "rgba(243, 194, 88, 0.1)"
+  },
+  backgroundRing: {
+    position: "absolute",
+    top: 74,
+    right: -56,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    borderWidth: 18,
+    borderColor: "rgba(243, 194, 88, 0.14)"
   },
   backgroundGlow: {
     position: "absolute",
@@ -1782,12 +2159,15 @@ const styles = StyleSheet.create({
     width: 440,
     height: 440,
     borderRadius: 220,
-    backgroundColor: "rgba(255, 255, 255, 0.6)"
+    backgroundColor: "rgba(41, 75, 176, 0.24)"
   },
   backgroundSweep: {
     ...StyleSheet.absoluteFillObject
   },
   backgroundWarmSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundGoldSweep: {
     ...StyleSheet.absoluteFillObject
   },
   backgroundGlass: {
@@ -1797,10 +2177,16 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 60,
-    backgroundColor: "rgba(255, 242, 235, 0.62)",
+    backgroundColor: "rgba(236, 244, 255, 0.09)",
     transform: [{ rotate: "12deg" }],
     borderWidth: 1,
-    borderColor: "rgba(255, 228, 216, 0.95)"
+    borderColor: "rgba(170, 203, 255, 0.25)"
+  },
+  starLayer: {
+    ...StyleSheet.absoluteFillObject
+  },
+  starDot: {
+    position: "absolute"
   },
   container: {
     padding: theme.spacing.lg,
@@ -1834,12 +2220,12 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(94, 124, 255, 0.22)",
+    backgroundColor: "rgba(176, 201, 255, 0.18)",
     borderWidth: 1,
-    borderColor: "rgba(94, 124, 255, 0.25)"
+    borderColor: "rgba(176, 201, 255, 0.36)"
   },
   accountAvatarText: {
-    color: theme.colors.ink,
+    color: "#EAF1FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: 16,
     fontWeight: "700"
@@ -1850,27 +2236,27 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm
   },
   title: {
-    color: "#12193D",
+    color: "#F4F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
   },
   subtitle: {
-    color: "rgba(45, 55, 101, 0.8)",
+    color: "rgba(217, 228, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
   heroCard: {
     gap: theme.spacing.md,
     overflow: "hidden",
-    borderColor: "rgba(90, 102, 201, 0.42)",
+    borderColor: "rgba(66, 84, 179, 0.42)",
     borderWidth: 1,
     borderTopWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderLeftWidth: 1,
-    backgroundColor: "rgba(250, 251, 255, 0.98)",
-    shadowColor: "rgba(48, 68, 151, 0.3)",
+    backgroundColor: "rgba(248, 250, 255, 0.98)",
+    shadowColor: "rgba(43, 58, 143, 0.32)",
     shadowOpacity: 0.24,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
@@ -1882,7 +2268,7 @@ const styles = StyleSheet.create({
   heroSparkle: {
     position: "absolute",
     borderRadius: 999,
-    backgroundColor: "rgba(255, 235, 190, 0.9)"
+    backgroundColor: "rgba(240, 205, 126, 0.92)"
   },
   heroSparkleOne: {
     width: 10,
@@ -1912,7 +2298,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   heroKicker: {
-    color: "#AD6500",
+    color: "#A56E08",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "700",
@@ -1920,14 +2306,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2
   },
   heroTitle: {
-    color: "#111C48",
+    color: "#101B49",
     fontFamily: theme.typography.fontFamily,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 31
   },
   heroBody: {
-    color: "rgba(47, 60, 103, 0.88)",
+    color: "rgba(43, 55, 102, 0.9)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     lineHeight: 19
@@ -1943,7 +2329,7 @@ const styles = StyleSheet.create({
     width: 82,
     height: 82,
     borderRadius: 41,
-    backgroundColor: "rgba(82, 106, 213, 0.22)"
+    backgroundColor: "rgba(66, 86, 182, 0.22)"
   },
   mascotBody: {
     width: 52,
@@ -1962,7 +2348,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 18,
     borderRadius: 10,
-    backgroundColor: "rgba(255, 230, 204, 0.94)"
+    backgroundColor: "rgba(255, 233, 206, 0.94)"
   },
   mascotHeadShine: {
     position: "absolute",
@@ -1971,7 +2357,7 @@ const styles = StyleSheet.create({
     width: 9,
     height: 6,
     borderRadius: 4,
-    backgroundColor: "rgba(255, 248, 238, 0.92)"
+    backgroundColor: "rgba(248, 220, 242, 0.9)"
   },
   mascotEarLeft: {
     position: "absolute",
@@ -2032,7 +2418,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 2,
     borderRadius: 12,
-    backgroundColor: "#FFF9ED"
+    backgroundColor: "#FFF8E9"
   },
   mascotNose: {
     width: 0,
@@ -2070,8 +2456,8 @@ const styles = StyleSheet.create({
   heroActionPrimary: {
     width: "100%",
     minHeight: 46,
-    backgroundColor: "#3149D8",
-    shadowColor: "rgba(53, 73, 194, 0.46)",
+    backgroundColor: "#1F327F",
+    shadowColor: "rgba(31, 50, 127, 0.48)",
     shadowOpacity: 0.32,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 7 },
@@ -2080,16 +2466,16 @@ const styles = StyleSheet.create({
   heroActionSecondary: {
     width: "100%",
     minHeight: 46,
-    backgroundColor: "rgba(255, 249, 236, 0.72)",
-    borderColor: "rgba(225, 140, 40, 0.36)",
+    backgroundColor: "rgba(255, 246, 229, 0.8)",
+    borderColor: "rgba(216, 164, 58, 0.4)",
     borderWidth: 1
   },
   introCard: {
     gap: theme.spacing.sm,
     backgroundColor: "rgba(252, 254, 255, 0.98)",
     borderWidth: 1,
-    borderColor: "rgba(90, 98, 206, 0.18)",
-    shadowColor: "rgba(47, 45, 119, 0.2)",
+    borderColor: "rgba(72, 88, 178, 0.18)",
+    shadowColor: "rgba(42, 50, 115, 0.2)",
     shadowOpacity: 0.14,
     shadowRadius: 15,
     shadowOffset: { width: 0, height: 8 },
@@ -2100,6 +2486,22 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "600"
+  },
+  sectionTitleCompact: {
+    fontSize: 20,
+    lineHeight: 24
+  },
+  sectionTitleOnDark: {
+    color: "#F3F7FF"
+  },
+  activityCard: {
+    backgroundColor: "rgba(12, 26, 66, 0.68)",
+    borderColor: "rgba(132, 167, 255, 0.24)",
+    shadowColor: "rgba(8, 17, 46, 0.5)",
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6
   },
   sectionHeading: {
     flexDirection: "row",
@@ -2116,13 +2518,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(11, 14, 20, 0.08)"
   },
   sectionIconPrimary: {
-    backgroundColor: "rgba(72, 95, 224, 0.16)"
+    backgroundColor: "rgba(57, 72, 175, 0.16)"
   },
   sectionIconAccent: {
-    backgroundColor: "rgba(242, 166, 67, 0.26)"
+    backgroundColor: "rgba(216, 164, 58, 0.25)"
   },
   sectionIconMuted: {
-    backgroundColor: "rgba(86, 109, 202, 0.12)"
+    backgroundColor: "rgba(185, 55, 136, 0.14)"
   },
   sectionSubtitle: {
     color: theme.colors.muted,
@@ -2133,14 +2535,14 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     overflow: "hidden",
-    borderColor: "rgba(95, 104, 178, 0.18)",
+    borderColor: "rgba(57, 72, 175, 0.16)",
     borderWidth: 1,
-    backgroundColor: "rgba(253, 254, 255, 0.99)",
-    shadowColor: "rgba(50, 58, 110, 0.14)",
-    shadowOpacity: 0.1,
+    backgroundColor: "rgba(251, 253, 255, 0.96)",
+    shadowColor: "rgba(30, 43, 95, 0.16)",
+    shadowOpacity: 0.12,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
-    elevation: 3
+    elevation: 4
   },
   shareCardBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2156,13 +2558,13 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   shareTitle: {
-    color: "#182045",
+    color: "#121A46",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.title,
     fontWeight: "700"
   },
   shareSubtitle: {
-    color: "rgba(56, 63, 98, 0.74)",
+    color: "rgba(70, 84, 130, 0.8)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     marginTop: 4,
@@ -2174,20 +2576,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(243, 245, 252, 0.94)",
+    backgroundColor: "rgba(57, 72, 175, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(95, 104, 178, 0.18)"
+    borderColor: "rgba(57, 72, 175, 0.24)"
   },
   qrWrap: {
     width: 76,
     height: 76,
     borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    backgroundColor: "rgba(229, 239, 255, 0.95)",
     borderWidth: 1,
-    borderColor: "rgba(95, 104, 178, 0.22)",
+    borderColor: "rgba(171, 198, 255, 0.34)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "rgba(50, 58, 110, 0.16)",
+    shadowColor: "rgba(8, 17, 46, 0.28)",
     shadowOpacity: 0.1,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -2256,7 +2658,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   recapTitleText: {
-    color: "rgba(44, 52, 93, 0.8)",
+    color: "#FFFFFF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textTransform: "uppercase",
@@ -2283,7 +2685,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: "rgba(255, 255, 255, 0.72)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(65, 72, 127, 0.16)"
+    borderColor: "rgba(57, 72, 140, 0.18)"
   },
   recapTopBadge: {
     width: 18,
@@ -2308,7 +2710,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(255, 255, 255, 0.62)",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 6
@@ -2323,9 +2725,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(71, 83, 202, 0.16)",
+    backgroundColor: "rgba(57, 72, 175, 0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(71, 83, 202, 0.32)"
+    borderColor: "rgba(57, 72, 175, 0.34)"
   },
   recapYouRank: {
     color: theme.colors.primary,
@@ -2350,18 +2752,18 @@ const styles = StyleSheet.create({
   },
   recapCard: {
     gap: 6,
-    backgroundColor: "rgba(104, 128, 216, 0.25)",
-    borderColor: "rgba(88, 108, 203, 0.32)",
-    shadowColor: "rgba(46, 68, 145, 0.28)",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7
+    backgroundColor: "rgba(220, 233, 252, 0.28)",
+    borderColor: "rgba(220, 236, 255, 0.44)",
+    shadowColor: "rgba(138, 174, 230, 0.34)",
+    shadowOpacity: 0.24,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8
   },
   homeInviteCard: {
     overflow: "hidden",
     gap: 6,
-    borderColor: "rgba(92, 109, 201, 0.26)",
+    borderColor: "rgba(74, 91, 181, 0.28)",
     backgroundColor: "rgba(252, 254, 255, 0.98)"
   },
   homeHostCard: {
@@ -2387,7 +2789,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.78)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(74, 79, 169, 0.26)"
+    borderColor: "rgba(66, 84, 167, 0.28)"
   },
   homeHostBadge: {
     paddingVertical: 4
@@ -2406,7 +2808,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 197, 94, 0.45)"
   },
   homeInvitePingJoined: {
-    backgroundColor: "rgba(63, 84, 220, 0.42)"
+    backgroundColor: "rgba(185, 55, 136, 0.42)"
   },
   homeInvitePingDot: {
     width: 6,
@@ -2415,13 +2817,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 197, 94, 0.98)"
   },
   homeInvitePingDotJoined: {
-    backgroundColor: "rgba(63, 84, 220, 0.98)"
+    backgroundColor: "rgba(185, 55, 136, 0.96)"
   },
   homeHostBadgeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(242, 166, 67, 0.98)"
+    backgroundColor: "rgba(216, 164, 58, 0.98)"
   },
   homeInviteBadgeText: {
     color: theme.colors.primary,
@@ -2518,7 +2920,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255, 255, 255, 0.7)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(74, 79, 169, 0.3)"
+    borderColor: "rgba(66, 84, 167, 0.3)"
   },
   homeInviteCodeText: {
     color: theme.colors.primary,
@@ -2535,9 +2937,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(80, 87, 189, 0.16)",
+    backgroundColor: "rgba(57, 72, 175, 0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(80, 87, 189, 0.34)"
+    borderColor: "rgba(57, 72, 175, 0.34)"
   },
   homeInviteActionText: {
     color: theme.colors.primary,
@@ -2546,15 +2948,15 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   nextActionCard: {
-    borderColor: "rgba(90, 109, 201, 0.24)",
-    backgroundColor: "rgba(252, 254, 255, 0.98)",
+    borderColor: "rgba(243, 194, 88, 0.42)",
+    backgroundColor: "rgba(255, 252, 244, 0.96)",
     padding: theme.spacing.md,
     overflow: "hidden",
-    shadowColor: "rgba(48, 67, 138, 0.2)",
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 9 },
-    elevation: 6
+    shadowColor: "rgba(243, 194, 88, 0.32)",
+    shadowOpacity: 0.42,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 9
   },
   nextActionBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -2570,7 +2972,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   nextActionLabel: {
-    color: theme.colors.muted,
+    color: "rgba(30, 42, 90, 0.72)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textTransform: "uppercase",
@@ -2582,12 +2984,12 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(43, 158, 102, 0.14)",
+    backgroundColor: "rgba(243, 194, 88, 0.28)",
     borderWidth: 1,
-    borderColor: "rgba(43, 158, 102, 0.28)"
+    borderColor: "rgba(243, 194, 88, 0.42)"
   },
   nextActionHeaderBadgeText: {
-    color: theme.colors.success,
+    color: "#7E4E00",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "600",
@@ -2599,12 +3001,12 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(80, 87, 189, 0.16)",
+    backgroundColor: "rgba(57, 72, 175, 0.14)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(80, 87, 189, 0.28)"
+    borderColor: "rgba(57, 72, 175, 0.3)"
   },
   nextActionMiniAvatarText: {
-    color: theme.colors.ink,
+    color: "#1F327F",
     fontFamily: theme.typography.fontFamily,
     fontSize: 10,
     fontWeight: "700"
@@ -2619,13 +3021,13 @@ const styles = StyleSheet.create({
     gap: 4
   },
   nextActionTitle: {
-    color: theme.colors.ink,
+    color: "#111C48",
     fontFamily: theme.typography.fontFamily,
     fontSize: 20,
     fontWeight: "600"
   },
   nextActionMeta: {
-    color: theme.colors.muted,
+    color: "rgba(45, 59, 106, 0.82)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     lineHeight: 16
@@ -2638,7 +3040,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   nextActionMetaDot: {
-    color: theme.colors.muted,
+    color: "rgba(45, 59, 106, 0.82)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12
   },
@@ -2651,13 +3053,13 @@ const styles = StyleSheet.create({
     height: 5,
     width: 64,
     borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.1)",
+    backgroundColor: "rgba(57, 72, 175, 0.14)",
     overflow: "hidden"
   },
   nextActionProgressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: theme.colors.primary
+    backgroundColor: "#F3C258"
   },
   nextActionButtons: {
     marginTop: theme.spacing.xs,
@@ -2666,7 +3068,8 @@ const styles = StyleSheet.create({
   nextActionPrimary: {
     width: "100%",
     paddingVertical: 12,
-    minHeight: 40
+    minHeight: 40,
+    backgroundColor: "#1F327F"
   },
   nextActionSecondary: {
     alignSelf: "center",
@@ -2679,21 +3082,25 @@ const styles = StyleSheet.create({
     opacity: 0.7
   },
   nextActionSecondaryText: {
-    color: theme.colors.muted,
+    color: "rgba(45, 59, 106, 0.82)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
   dailyQuizCard: {
-    borderColor: "rgba(224, 137, 43, 0.34)",
-    backgroundColor: "rgba(255, 248, 236, 0.92)",
+    borderColor: "rgba(215, 163, 56, 0.42)",
+    backgroundColor: "rgba(255, 250, 236, 0.98)",
     padding: theme.spacing.md,
     gap: theme.spacing.xs,
-    shadowColor: "rgba(163, 93, 36, 0.24)",
-    shadowOpacity: 0.15,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
+    overflow: "hidden",
+    shadowColor: "rgba(210, 152, 34, 0.28)",
+    shadowOpacity: 0.26,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
     elevation: 5
+  },
+  dailyQuizBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   dailyQuizCardCompact: {
     paddingVertical: theme.spacing.md,
@@ -2715,19 +3122,19 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(245, 138, 43, 0.22)",
+    backgroundColor: "rgba(215, 163, 56, 0.24)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(224, 137, 43, 0.4)"
+    borderColor: "rgba(215, 163, 56, 0.46)"
   },
   dailyQuizLabel: {
-    color: theme.colors.muted,
+    color: "rgba(124, 82, 10, 0.9)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textTransform: "uppercase",
     letterSpacing: 1.1
   },
   dailyQuizNew: {
-    color: theme.colors.reward,
+    color: "#8C5600",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
@@ -2737,31 +3144,31 @@ const styles = StyleSheet.create({
     gap: 4
   },
   dailyQuizTitle: {
-    color: theme.colors.ink,
+    color: "#121A46",
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.title,
+    fontSize: 20,
     fontWeight: "600"
   },
   dailyQuizMeta: {
-    color: theme.colors.muted,
+    color: "rgba(67, 78, 115, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
   dailyQuizProgress: {
     height: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(180, 133, 34, 0.18)",
     overflow: "hidden",
     marginTop: theme.spacing.xs
   },
   dailyQuizProgressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: theme.colors.reward
+    backgroundColor: "#C8922A"
   },
   dailyQuizCompleted: {
     marginTop: theme.spacing.xs,
-    color: theme.colors.success,
+    color: "#8C5600",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
@@ -2771,7 +3178,7 @@ const styles = StyleSheet.create({
   },
   dailyQuizPrimary: {
     width: "100%",
-    backgroundColor: theme.colors.reward
+    backgroundColor: "#C8922A"
   },
   dailyQuizCompactRow: {
     marginTop: theme.spacing.xs,
@@ -2789,13 +3196,13 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   dailyQuizTitleCompact: {
-    color: theme.colors.ink,
+    color: "#121A46",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     fontWeight: "600"
   },
   dailyQuizMetaCompact: {
-    color: theme.colors.muted,
+    color: "rgba(67, 78, 115, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -2807,14 +3214,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(186, 140, 58, 0.2)",
+    backgroundColor: "rgba(201, 146, 42, 0.16)",
     borderWidth: 1,
-    borderColor: "rgba(186, 140, 58, 0.42)",
+    borderColor: "rgba(180, 133, 34, 0.42)",
     minWidth: 96,
     justifyContent: "center"
   },
   dailyQuizMiniButtonText: {
-    color: theme.colors.reward,
+    color: "#8C5600",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
@@ -2845,7 +3252,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(235, 87, 87, 0.3)"
   },
   recapPillTie: {
-    borderColor: "rgba(186, 140, 58, 0.34)"
+    borderColor: "rgba(216, 164, 58, 0.34)"
   },
   recapPillValue: {
     color: theme.colors.ink,
@@ -2870,13 +3277,13 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(107, 113, 191, 0.22)",
+    borderColor: "rgba(89, 103, 181, 0.24)",
     backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   categoryChipSelected: {
-    borderColor: "rgba(66, 84, 205, 0.48)",
-    backgroundColor: "rgba(232, 237, 255, 0.92)",
-    shadowColor: "rgba(73, 82, 182, 0.3)",
+    borderColor: "rgba(57, 72, 175, 0.5)",
+    backgroundColor: "rgba(230, 236, 255, 0.94)",
+    shadowColor: "rgba(57, 72, 175, 0.32)",
     shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -2902,14 +3309,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(222, 227, 248, 0.82)",
+    backgroundColor: "rgba(221, 228, 252, 0.86)",
     marginLeft: "auto",
     marginRight: 6
   },
   selectedPillActive: {
-    backgroundColor: "rgba(70, 87, 207, 0.22)",
+    backgroundColor: "rgba(57, 72, 175, 0.2)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(70, 87, 207, 0.5)"
+    borderColor: "rgba(57, 72, 175, 0.5)"
   },
   selectedPillHidden: {
     opacity: 0
@@ -2923,7 +3330,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(236, 239, 255, 0.95)",
     borderWidth: 1,
-    borderColor: "rgba(106, 112, 202, 0.26)"
+    borderColor: "rgba(89, 103, 181, 0.28)"
   },
   lengthGrid: {
     gap: theme.spacing.sm
@@ -2934,7 +3341,7 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(107, 113, 191, 0.22)",
+    borderColor: "rgba(89, 103, 181, 0.24)",
     backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   lengthHeader: {
@@ -2966,13 +3373,13 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(107, 113, 191, 0.22)",
+    borderColor: "rgba(89, 103, 181, 0.24)",
     backgroundColor: "rgba(249, 250, 255, 0.95)"
   },
   choiceCardSelected: {
-    borderColor: "rgba(66, 84, 205, 0.5)",
-    backgroundColor: "rgba(232, 237, 255, 0.92)",
-    shadowColor: "rgba(73, 82, 182, 0.32)",
+    borderColor: "rgba(57, 72, 175, 0.52)",
+    backgroundColor: "rgba(230, 236, 255, 0.94)",
+    shadowColor: "rgba(57, 72, 175, 0.34)",
     shadowOpacity: 0.22,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -3007,19 +3414,19 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body
   },
   joinButton: {
-    backgroundColor: "#16BFA8"
+    backgroundColor: "#1F327F"
   },
   buttonDisabled: {
     opacity: 0.6
   },
   sessionTitle: {
-    color: theme.colors.ink,
+    color: "#F4F8FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     fontWeight: "600"
   },
   sessionSubtitle: {
-    color: "rgba(11, 14, 20, 0.58)",
+    color: "rgba(214, 228, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -3105,13 +3512,21 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
     borderRadius: theme.radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(15, 23, 42, 0.1)",
-    backgroundColor: "rgba(255, 255, 255, 0.82)",
-    shadowColor: "rgba(15, 23, 42, 0.18)",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    borderColor: "rgba(140, 172, 255, 0.2)",
+    backgroundColor: "rgba(18, 37, 88, 0.58)",
+    shadowColor: "rgba(8, 17, 46, 0.28)",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 2
+  },
+  sessionCardLight: {
+    borderColor: "rgba(57, 72, 140, 0.14)",
+    backgroundColor: "rgba(252, 254, 255, 0.94)",
+    shadowColor: "rgba(30, 43, 95, 0.18)",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }
   },
   sessionCardLast: {
     marginBottom: 0
@@ -3119,7 +3534,45 @@ const styles = StyleSheet.create({
   sessionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "flex-start",
+    gap: theme.spacing.sm
+  },
+  sessionHeaderCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  sessionProgressRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  sessionProgress: {
+    flex: 1,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(214, 228, 255, 0.2)",
+    overflow: "hidden"
+  },
+  sessionProgressLight: {
+    backgroundColor: "rgba(57, 72, 175, 0.12)"
+  },
+  sessionProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#F3C258"
+  },
+  sessionProgressFillLight: {
+    backgroundColor: "#1F327F"
+  },
+  sessionProgressText: {
+    color: "rgba(226, 236, 255, 0.86)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "600"
+  },
+  sessionProgressTextLight: {
+    color: "rgba(45, 59, 106, 0.82)"
   },
   badgeRow: {
     flexDirection: "row",
@@ -3127,7 +3580,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs
   },
   sessionBadge: {
-    color: theme.colors.muted,
+    color: "rgba(218, 230, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -3140,38 +3593,45 @@ const styles = StyleSheet.create({
     minHeight: 26,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)",
-    backgroundColor: "rgba(11, 14, 20, 0.05)"
+    borderColor: "rgba(171, 198, 255, 0.28)",
+    backgroundColor: "rgba(148, 180, 255, 0.16)"
+  },
+  statusChipLight: {
+    borderColor: "rgba(57, 72, 140, 0.2)",
+    backgroundColor: "rgba(57, 72, 175, 0.08)"
   },
   statusChipText: {
-    color: theme.colors.ink,
+    color: "#F4F8FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
+  statusChipTextLight: {
+    color: "#1F327F"
+  },
   statusChipOngoing: {
-    backgroundColor: "rgba(35, 61, 118, 0.14)",
-    borderColor: "rgba(35, 61, 118, 0.34)"
+    backgroundColor: "rgba(107, 145, 255, 0.2)",
+    borderColor: "rgba(131, 166, 255, 0.38)"
   },
   statusChipTurn: {
-    backgroundColor: "rgba(33, 98, 93, 0.16)",
-    borderColor: "rgba(33, 98, 93, 0.34)"
+    backgroundColor: "rgba(107, 145, 255, 0.2)",
+    borderColor: "rgba(131, 166, 255, 0.38)"
   },
   statusChipWait: {
-    backgroundColor: "rgba(11, 14, 20, 0.04)",
-    borderColor: "rgba(11, 14, 20, 0.12)"
+    backgroundColor: "rgba(148, 180, 255, 0.14)",
+    borderColor: "rgba(171, 198, 255, 0.26)"
   },
   statusChipComplete: {
-    backgroundColor: "rgba(43, 158, 102, 0.14)",
-    borderColor: "rgba(43, 158, 102, 0.35)"
+    backgroundColor: "rgba(243, 194, 88, 0.2)",
+    borderColor: "rgba(243, 194, 88, 0.38)"
   },
   statusChipLost: {
-    backgroundColor: "rgba(235, 87, 87, 0.14)",
-    borderColor: "rgba(235, 87, 87, 0.35)"
+    backgroundColor: "rgba(185, 55, 136, 0.24)",
+    borderColor: "rgba(202, 86, 157, 0.4)"
   },
   statusChipRematch: {
-    backgroundColor: "rgba(186, 140, 58, 0.2)",
-    borderColor: "rgba(186, 140, 58, 0.4)"
+    backgroundColor: "rgba(216, 164, 58, 0.2)",
+    borderColor: "rgba(216, 164, 58, 0.42)"
   },
   statusChipRound: {
     width: 26,
@@ -3187,26 +3647,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.06)",
+    backgroundColor: "rgba(148, 180, 255, 0.16)",
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.12)"
+    borderColor: "rgba(171, 198, 255, 0.28)"
   },
   ctaPrimary: {
-    backgroundColor: "rgba(35, 61, 118, 0.16)",
-    borderColor: "rgba(35, 61, 118, 0.36)"
+    backgroundColor: "rgba(243, 194, 88, 0.22)",
+    borderColor: "rgba(243, 194, 88, 0.4)"
+  },
+  ctaPrimaryLight: {
+    backgroundColor: "rgba(57, 72, 175, 0.12)",
+    borderColor: "rgba(57, 72, 175, 0.3)"
   },
   ctaDisabled: {
     backgroundColor: "rgba(11, 14, 20, 0.04)",
     borderColor: "rgba(11, 14, 20, 0.08)"
   },
   ctaText: {
-    color: theme.colors.ink,
+    color: "#F4F8FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
+  ctaTextLight: {
+    color: "#1F327F"
+  },
   rematchNote: {
-    color: theme.colors.muted,
+    color: "rgba(218, 230, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -3217,16 +3684,28 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   sessionMeta: {
-    color: theme.colors.muted,
+    color: "rgba(218, 230, 255, 0.88)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
+  sessionMetaLight: {
+    color: "rgba(45, 59, 106, 0.82)"
+  },
   sessionMetaSubtle: {
-    color: theme.colors.muted,
+    color: "rgba(204, 220, 255, 0.78)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     opacity: 0.85,
     marginTop: 2
+  },
+  sessionMetaSubtleLight: {
+    color: "rgba(70, 84, 130, 0.76)"
+  },
+  sessionTitleLight: {
+    color: "#121A46"
+  },
+  sessionSubtitleLight: {
+    color: "rgba(45, 59, 106, 0.8)"
   },
   sessionMetaRow: {
     flexDirection: "row",
@@ -3247,7 +3726,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.25)",
     shadowColor: "#000000",
     shadowOpacity: 0.26,
     shadowRadius: 18,
@@ -3263,9 +3742,9 @@ const styles = StyleSheet.create({
     width: 180,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "rgba(35, 61, 118, 0.14)",
+    backgroundColor: "rgba(57, 72, 175, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(35, 61, 118, 0.34)"
+    borderColor: "rgba(57, 72, 175, 0.34)"
   },
   fabLabel: {
     color: theme.colors.surface,
@@ -3281,10 +3760,10 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.secondary,
+    backgroundColor: "#B93788",
     borderWidth: 1,
-    borderColor: "rgba(46, 196, 182, 0.38)",
-    shadowColor: "rgba(15, 118, 110, 0.5)",
+    borderColor: "rgba(185, 55, 136, 0.38)",
+    shadowColor: "rgba(138, 35, 101, 0.5)",
     shadowOpacity: 0.28,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
@@ -3305,7 +3784,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 17, 24, 0.35)",
+    backgroundColor: "rgba(16, 22, 48, 0.38)",
     justifyContent: "center",
     paddingVertical: theme.spacing.xl,
     paddingHorizontal: theme.spacing.lg
@@ -3320,7 +3799,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.md,
     borderWidth: 1,
-    borderColor: "rgba(106, 112, 210, 0.28)",
+    borderColor: "rgba(89, 103, 181, 0.3)",
     width: "100%"
   },
   dialogClose: {
@@ -3334,16 +3813,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(236, 239, 255, 0.92)",
     borderWidth: 1,
-    borderColor: "rgba(93, 101, 192, 0.26)"
+    borderColor: "rgba(89, 103, 181, 0.28)"
   },
   dialogGlow: {
-    shadowColor: "rgba(64, 61, 170, 0.34)",
+    shadowColor: "rgba(57, 72, 175, 0.34)",
     shadowOpacity: 0.22,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 }
   },
   dialogTitle: {
-    color: "#121A3D",
+    color: "#121A46",
     fontFamily: theme.typography.fontFamily,
     fontSize: 22,
     fontWeight: "700"
@@ -3376,7 +3855,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(157, 166, 201, 0.26)"
   },
   dialogProgressSegmentActive: {
-    backgroundColor: "rgba(64, 83, 199, 0.62)"
+    backgroundColor: "rgba(57, 72, 175, 0.62)"
   },
   dialogProgressMeta: {
     color: "rgba(64, 72, 116, 0.74)",
@@ -3428,9 +3907,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: "rgba(238, 241, 255, 0.8)",
+    backgroundColor: "rgba(236, 241, 255, 0.84)",
     borderWidth: 1,
-    borderColor: "rgba(113, 117, 211, 0.16)"
+    borderColor: "rgba(89, 103, 181, 0.2)"
   },
   dialogSectionText: {
     flex: 1,
@@ -3446,16 +3925,16 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   dialogSectionIconCategory: {
-    backgroundColor: "rgba(68, 96, 214, 0.14)",
-    borderColor: "rgba(68, 96, 214, 0.28)"
+    backgroundColor: "rgba(57, 72, 175, 0.15)",
+    borderColor: "rgba(57, 72, 175, 0.32)"
   },
   dialogSectionIconLength: {
-    backgroundColor: "rgba(236, 163, 68, 0.18)",
-    borderColor: "rgba(214, 143, 52, 0.34)"
+    backgroundColor: "rgba(216, 164, 58, 0.2)",
+    borderColor: "rgba(216, 164, 58, 0.34)"
   },
   dialogSectionIconMode: {
-    backgroundColor: "rgba(204, 73, 132, 0.16)",
-    borderColor: "rgba(177, 61, 113, 0.3)"
+    backgroundColor: "rgba(185, 55, 136, 0.18)",
+    borderColor: "rgba(185, 55, 136, 0.3)"
   },
   dialogSectionTitle: {
     color: "#151F47",

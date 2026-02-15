@@ -38,7 +38,6 @@ import { PlayScreen } from "./src/screens/PlayScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
 import { DailyQuizScreen } from "./src/screens/DailyQuizScreen";
 import { DailyResultsScreen } from "./src/screens/DailyResultsScreen";
-import { SplashScreen } from "./src/screens/SplashScreen";
 import { EdgeSwipeBack } from "./src/components/EdgeSwipeBack";
 import {
   InAppNotification,
@@ -256,8 +255,9 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [splashVisible, setSplashVisible] = useState(true);
   const [restoringAuth, setRestoringAuth] = useState(true);
+  const [hasPlayedLobbyEntry, setHasPlayedLobbyEntry] = useState(false);
+  const [lobbyBootstrapDone, setLobbyBootstrapDone] = useState(false);
   const [panel, setPanel] = useState<"lobby" | "account" | "leaderboard">("lobby");
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -277,6 +277,7 @@ export default function App() {
   const [dailyStage, setDailyStage] = useState<"quiz" | "results" | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailySubmitting, setDailySubmitting] = useState(false);
+  const lobbyBootstrapKeyRef = useRef<string | null>(null);
 
   const dailyStreaks = useMemo(() => {
     const dates = new Set<string>();
@@ -515,8 +516,6 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const start = Date.now();
     const bootstrap = async () => {
       try {
         const [
@@ -559,17 +558,11 @@ export default function App() {
         // ignore bootstrap errors
       } finally {
         if (isMounted) setRestoringAuth(false);
-        const elapsed = Date.now() - start;
-        const remaining = Math.max(0, 1200 - elapsed);
-        timeoutId = setTimeout(() => {
-          if (isMounted) setSplashVisible(false);
-        }, remaining);
       }
     };
     bootstrap();
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
 
@@ -739,12 +732,99 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
-    setLoading(true);
     fetchQuizzes()
       .then(setQuizzes)
-      .catch(() => setRoomError(t(locale, "unableQuizzes")))
-      .finally(() => setLoading(false));
+      .catch(() => setRoomError(t(locale, "unableQuizzes")));
   }, [token, locale]);
+
+  useEffect(() => {
+    if (!token || !user || !hasSeenOnboarding) {
+      setLobbyBootstrapDone(false);
+      lobbyBootstrapKeyRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    const bootstrapKey = `${token}:${user.id}:${user.country}:${hasSeenOnboarding ? "1" : "0"}`;
+    if (lobbyBootstrapKeyRef.current === bootstrapKey) {
+      return;
+    }
+    lobbyBootstrapKeyRef.current = bootstrapKey;
+    setLobbyBootstrapDone(false);
+    const LOBBY_BOOTSTRAP_TIMEOUT_MS = 4500;
+    const LOBBY_BOOTSTRAP_MAX_BLOCK_MS = 7000;
+    const settleWithin = (promise: Promise<unknown>, ms = LOBBY_BOOTSTRAP_TIMEOUT_MS) =>
+      Promise.race([
+        promise,
+        new Promise<void>((resolve) => {
+          setTimeout(() => resolve(), ms);
+        })
+      ]);
+    const forceDoneTimer = setTimeout(() => {
+      if (!cancelled) {
+        setLobbyBootstrapDone(true);
+      }
+    }, LOBBY_BOOTSTRAP_MAX_BLOCK_MS);
+
+    const loadLobbyBootstrap = async () => {
+      const tasks: Promise<unknown>[] = [
+        settleWithin(
+          fetchMyRooms(token)
+          .then((data) => {
+            if (cancelled) return;
+            setMyRooms(data.rooms);
+            processRoomListSnapshots(data.rooms);
+            if (!hasLoadedRoomsRef.current) {
+              hasLoadedRoomsRef.current = true;
+            }
+          })
+          .catch((err) => {
+            handleAuthFailure(err);
+          })
+        ),
+        settleWithin(
+          fetchStats(token)
+          .then((data) => {
+            if (!cancelled) setStats(data);
+          })
+          .catch((err) => {
+            handleAuthFailure(err);
+          })
+        ),
+        settleWithin(refreshDailyQuiz()),
+        settleWithin(
+          fetchLeaderboard(token, "global")
+          .then((data) => {
+            if (!cancelled) setLeaderboardGlobal(data);
+          })
+          .catch((err) => {
+            handleAuthFailure(err);
+          })
+        ),
+        settleWithin(
+          fetchLeaderboard(token, "country", user.country)
+          .then((data) => {
+            if (!cancelled) setLeaderboardLocal(data);
+          })
+          .catch((err) => {
+            handleAuthFailure(err);
+          })
+        )
+      ];
+
+      await Promise.allSettled(tasks);
+      if (!cancelled) {
+        setLobbyBootstrapDone(true);
+      }
+      clearTimeout(forceDoneTimer);
+    };
+
+    loadLobbyBootstrap();
+    return () => {
+      cancelled = true;
+      clearTimeout(forceDoneTimer);
+    };
+  }, [token, user?.id, user?.country, hasSeenOnboarding]);
 
   useEffect(() => {
     if (!token) return;
@@ -756,30 +836,25 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding) return;
+    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshMyRooms();
-    fetchStats(token)
-      .then(setStats)
-      .catch((err) => {
-        handleAuthFailure(err);
-      });
-  }, [token, user, panel, hasSeenOnboarding]);
+  }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
 
   useEffect(() => {
-    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding) return;
+    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshDailyQuiz();
-  }, [token, user, panel, hasSeenOnboarding]);
+  }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
 
   useEffect(() => {
-    if (!token || !user || !hasSeenOnboarding) return;
+    if (!token || !user || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshLeaderboards(false);
-  }, [token, user?.id, user?.country, hasSeenOnboarding]);
+  }, [token, user?.id, user?.country, hasSeenOnboarding, lobbyBootstrapDone]);
 
   useEffect(() => {
-    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || room || recapRoom) return;
+    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone || room || recapRoom) return;
     const interval = setInterval(() => refreshMyRooms(), 15000);
     return () => clearInterval(interval);
-  }, [token, user, panel, hasSeenOnboarding, room, recapRoom]);
+  }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone, room, recapRoom]);
 
   function refreshDailyQuiz() {
     if (!token) return Promise.resolve(null);
@@ -1588,6 +1663,8 @@ export default function App() {
     setDailyResults(null);
     setDailyHistory([]);
     setDailyStage(null);
+    setLobbyBootstrapDone(false);
+    setHasPlayedLobbyEntry(false);
     closedRoomCodesRef.current.clear();
     setPanel("lobby");
     AsyncStorage.removeItem(AUTH_TOKEN_KEY).catch(() => null);
@@ -1703,6 +1780,9 @@ export default function App() {
       dailyLoading={dailyLoading}
       onOpenDailyQuiz={handleOpenDailyQuiz}
       onOpenDailyResults={handleOpenDailyResults}
+      playEntryAnimation={!hasPlayedLobbyEntry}
+      entryRevealReady={lobbyBootstrapDone}
+      onEntryAnimationEnd={() => setHasPlayedLobbyEntry(true)}
     />
   ) : null;
 
@@ -1712,32 +1792,30 @@ export default function App() {
         <SafeAreaView
           style={styles.safe}
           edges={
-            splashVisible
-              ? []
-              : panelSwipeEnabled ||
-                (!token && !restoringAuth) ||
-                (!loading && token && user && !room && !hasSeenOnboarding) ||
-                panel === "leaderboard" ||
-                dailyStage === "quiz" ||
-                dailyStage === "results" ||
-                room?.status === "lobby" ||
-                room?.status === "active" ||
-                room?.status === "complete" ||
-                Boolean(recapRoom)
+            panelSwipeEnabled ||
+            (!token && !restoringAuth) ||
+            (!loading && token && user && !room && !hasSeenOnboarding) ||
+            panel === "leaderboard" ||
+            dailyStage === "quiz" ||
+            dailyStage === "results" ||
+            room?.status === "lobby" ||
+            room?.status === "active" ||
+            room?.status === "complete" ||
+            Boolean(recapRoom)
               ? ["left", "right"]
               : ["top", "left", "right"]
           }
         >
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <View style={styles.appBackgroundRoot} pointerEvents="none">
           <LinearGradient
-            colors={["#EEF3FF", "#F6FAFF", "#FFFFFF"]}
+            colors={["#08112E", "#0D1B4A", "#142A60"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.appBackgroundSweep}
           />
           <LinearGradient
-            colors={["rgba(94, 124, 255, 0.2)", "rgba(94, 124, 255, 0)"]}
+            colors={["rgba(105, 139, 255, 0.3)", "rgba(105, 139, 255, 0)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0.7, y: 0.7 }}
             style={styles.appBackgroundAurora}
@@ -1746,11 +1824,6 @@ export default function App() {
           <View style={styles.appOrbBottom} />
           <View style={styles.appGlow} />
         </View>
-
-      {splashVisible ? (
-        <SplashScreen locale={locale} />
-      ) : (
-        <>
 
       {loading && token && (
         <View style={styles.center}>
@@ -1872,11 +1945,11 @@ export default function App() {
         <EdgeSwipeBack enabled onBack={handleCloseDaily}>
           <View style={styles.gameBackground}>
             <LinearGradient
-              colors={["#EDF2FA", "#F9FBFF", "#FFFFFF"]}
+              colors={["#08112E", "#0D1B4A", "#142A60"]}
               style={StyleSheet.absoluteFillObject}
             />
             <LinearGradient
-              colors={["rgba(94, 124, 255, 0.24)", "rgba(94, 124, 255, 0)"]}
+              colors={["rgba(105, 139, 255, 0.32)", "rgba(105, 139, 255, 0)"]}
               start={{ x: 0.0, y: 0.0 }}
               end={{ x: 0.7, y: 0.7 }}
               style={styles.gameSweep}
@@ -1933,11 +2006,11 @@ export default function App() {
         <EdgeSwipeBack enabled onBack={handleLeaveRoom}>
           <View style={styles.gameBackground}>
             <LinearGradient
-              colors={["#EDF2FA", "#F9FBFF", "#FFFFFF"]}
+              colors={["#08112E", "#0D1B4A", "#142A60"]}
               style={StyleSheet.absoluteFillObject}
             />
             <LinearGradient
-              colors={["rgba(94, 124, 255, 0.24)", "rgba(94, 124, 255, 0)"]}
+              colors={["rgba(105, 139, 255, 0.32)", "rgba(105, 139, 255, 0)"]}
               start={{ x: 0.0, y: 0.0 }}
               end={{ x: 0.7, y: 0.7 }}
               style={styles.gameSweep}
@@ -1984,8 +2057,6 @@ export default function App() {
           <Text style={styles.toastText}>{roomError}</Text>
         </View>
       )}
-        </>
-      )}
         </SafeAreaView>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -1995,7 +2066,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#F4F6FB"
+    backgroundColor: "#08112E"
   },
   appBackgroundRoot: {
     ...StyleSheet.absoluteFillObject
@@ -2013,7 +2084,7 @@ const styles = StyleSheet.create({
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: "rgba(94, 124, 255, 0.12)"
+    backgroundColor: "rgba(82, 125, 255, 0.18)"
   },
   appOrbBottom: {
     position: "absolute",
@@ -2022,7 +2093,7 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(46, 196, 182, 0.1)"
+    backgroundColor: "rgba(86, 70, 184, 0.14)"
   },
   appGlow: {
     position: "absolute",
@@ -2031,7 +2102,7 @@ const styles = StyleSheet.create({
     width: 460,
     height: 460,
     borderRadius: 230,
-    backgroundColor: "rgba(255, 255, 255, 0.52)"
+    backgroundColor: "rgba(243, 194, 88, 0.12)"
   },
   gestureRoot: {
     flex: 1
@@ -2058,7 +2129,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(94, 124, 255, 0.16)"
+    backgroundColor: "rgba(82, 125, 255, 0.2)"
   },
   gameOrbAccent: {
     position: "absolute",
@@ -2067,7 +2138,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(46, 196, 182, 0.12)"
+    backgroundColor: "rgba(86, 70, 184, 0.14)"
   },
   gameFog: {
     position: "absolute",
@@ -2076,7 +2147,7 @@ const styles = StyleSheet.create({
     width: 480,
     height: 480,
     borderRadius: 240,
-    backgroundColor: "rgba(255, 255, 255, 0.55)"
+    backgroundColor: "rgba(243, 194, 88, 0.1)"
   },
   panelPage: {
     flex: 1

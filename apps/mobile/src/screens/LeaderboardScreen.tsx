@@ -54,7 +54,7 @@ export function LeaderboardScreen({
 
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#EAF2FF", "#F4FBFF", "#FFFDF8"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
       <View style={styles.backgroundOrbWarm} pointerEvents="none" />
@@ -76,7 +76,7 @@ export function LeaderboardScreen({
             accessibilityLabel={t(locale, "back")}
             hitSlop={8}
           >
-            <FontAwesome name="arrow-left" size={16} color={theme.colors.ink} />
+            <FontAwesome name="arrow-left" size={16} color="#EAF1FF" />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "leaderboards")}</Text>
@@ -119,6 +119,12 @@ export function LeaderboardScreen({
         </GlassCard>
 
         <GlassCard style={[styles.sectionCard, styles.recapCard]}>
+          <LinearGradient
+            colors={["rgba(94, 124, 255, 0.14)", "rgba(243, 183, 78, 0.12)", "rgba(255, 255, 255, 0.92)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.recapBackdrop}
+          />
           <View style={styles.recapHeader}>
             <View style={styles.recapHeaderText}>
               <View style={styles.recapTitleRow}>
@@ -393,7 +399,7 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(94, 124, 255, 0.16)"
+    backgroundColor: "rgba(82, 125, 255, 0.2)"
   },
   backgroundOrbBottom: {
     position: "absolute",
@@ -402,7 +408,7 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(46, 196, 182, 0.12)"
+    backgroundColor: "rgba(86, 70, 184, 0.16)"
   },
   backgroundOrbWarm: {
     position: "absolute",
@@ -411,7 +417,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "rgba(255, 204, 135, 0.12)"
+    backgroundColor: "rgba(243, 194, 88, 0.14)"
   },
   container: {
     padding: theme.spacing.lg,
@@ -428,20 +434,20 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11, 14, 20, 0.06)"
+    backgroundColor: "rgba(214, 228, 255, 0.16)"
   },
   headerText: {
     flex: 1
   },
   eyebrow: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     textTransform: "uppercase",
     letterSpacing: 1.2
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.display,
     fontWeight: "700"
@@ -671,12 +677,16 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   recapCard: {
-    backgroundColor: "rgba(94, 124, 255, 0.12)",
-    borderColor: "rgba(94, 124, 255, 0.28)",
-    shadowColor: "rgba(94, 124, 255, 0.32)",
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderColor: "rgba(15, 23, 42, 0.1)",
+    shadowColor: "rgba(11, 20, 56, 0.26)",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6
+  },
+  recapBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   recapHeader: {
     flexDirection: "row",
@@ -696,13 +706,20 @@ const styles = StyleSheet.create({
   recapHeaderAction: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)"
   },
   recapHeaderActionText: {
-    color: theme.colors.muted,
+    color: "rgba(16, 32, 78, 0.8)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
-    lineHeight: 16
+    lineHeight: 16,
+    fontWeight: "600"
   },
   recapRow: {
     flexDirection: "row",
@@ -714,12 +731,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    borderRadius: 14,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.08)"
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.12)"
   },
   recapPillWin: {
     borderColor: "rgba(43, 158, 102, 0.3)"
@@ -743,9 +760,9 @@ const styles = StyleSheet.create({
   },
   recapBar: {
     flexDirection: "row",
-    height: 6,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(12, 24, 58, 0.08)",
     overflow: "hidden",
     marginTop: theme.spacing.xs
   },
@@ -762,7 +779,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(243, 183, 78, 0.5)"
   },
   recapBarEmpty: {
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(12, 24, 58, 0.08)",
     flex: 1
   },
   recapStreakRow: {
@@ -793,7 +810,13 @@ const styles = StyleSheet.create({
   opponentRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(15, 23, 42, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8
   },
   opponentName: {
     color: theme.colors.ink,

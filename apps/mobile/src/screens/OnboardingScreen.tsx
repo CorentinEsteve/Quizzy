@@ -48,7 +48,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#F6F8FF", "#FFFFFF", "#F9F2E6"]}
+        colors={["#08112E", "#0D1B4A", "#142A60"]}
         style={StyleSheet.absoluteFill}
       />
       <View
@@ -151,14 +151,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-start"
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: 30,
     fontWeight: "700",
     maxWidth: 300
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     lineHeight: 22,
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(94, 124, 255, 0.14)",
+    backgroundColor: "rgba(105, 139, 255, 0.24)",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -182,13 +182,13 @@ const styles = StyleSheet.create({
     gap: 4
   },
   heroTitle: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: 16,
     fontWeight: "600"
   },
   heroBody: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     lineHeight: 18
