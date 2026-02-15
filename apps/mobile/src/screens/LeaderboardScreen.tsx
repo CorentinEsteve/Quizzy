@@ -129,7 +129,6 @@ export function LeaderboardScreen({
             </View>
             <View style={styles.recapHeaderAction}>
               <Text style={styles.recapHeaderActionText}>{t(locale, "seeRecap")}</Text>
-              <FontAwesome name="chevron-right" size={12} color={theme.colors.muted} />
             </View>
           </View>
           <View style={styles.recapRow}>
