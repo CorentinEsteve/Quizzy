@@ -1431,7 +1431,10 @@ export const quizzes = [
       },
       {
         id: "n7",
-        prompt: text("Which is the tallest living bird?", "Quel est l'oiseau vivant le plus grand ?"),
+        prompt: text(
+          "Which living bird is the tallest when standing?",
+          "Quel oiseau vivant est le plus grand debout ?"
+        ),
         options: options(["Ostrich", "Eagle", "Swan", "Albatross"], ["Autruche", "Aigle", "Cygne", "Albatros"]),
         answer: 0
       },
