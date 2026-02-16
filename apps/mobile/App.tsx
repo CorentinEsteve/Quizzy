@@ -1623,6 +1623,13 @@ export default function App() {
     refreshMyRooms();
   }
 
+  function handleCompleteOnboarding() {
+    setHasSeenOnboarding(true);
+    setPanel("lobby");
+    panelTranslateX.current.setValue(0);
+    AsyncStorage.setItem("dq_onboarding", "seen").catch(() => null);
+  }
+
   function handleCloseRecap() {
     if (recapRoom?.code) {
       closedRoomCodesRef.current.add(recapRoom.code);
@@ -1853,10 +1860,7 @@ export default function App() {
       {!loading && token && user && !room && !hasSeenOnboarding && (
         <OnboardingScreen
           locale={locale}
-          onDone={() => {
-            setHasSeenOnboarding(true);
-            AsyncStorage.setItem("dq_onboarding", "seen").catch(() => null);
-          }}
+          onDone={handleCompleteOnboarding}
         />
       )}
 

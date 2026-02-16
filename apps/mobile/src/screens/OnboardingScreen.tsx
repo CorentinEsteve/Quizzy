@@ -19,6 +19,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
   const { width } = useWindowDimensions();
   const orbSize = Math.max(220, width * 0.64);
   const orbSizeSmall = Math.max(150, width * 0.4);
+  const footerInset = theme.spacing.lg + insets.bottom + 86;
   const steps = useMemo(
     () => [
       {
@@ -26,21 +27,24 @@ export function OnboardingScreen({ locale, onDone }: Props) {
         title: t(locale, "onboardingStep1"),
         body: t(locale, "onboardingStep1Body"),
         icon: "plus",
-        accent: theme.colors.primary
+        accent: theme.colors.primary,
+        backdrop: ["rgba(94, 124, 255, 0.18)", "rgba(255, 255, 255, 0.9)"] as const
       },
       {
         key: "02",
         title: t(locale, "onboardingStep2"),
         body: t(locale, "onboardingStep2Body"),
         icon: "clock-o",
-        accent: theme.colors.secondary
+        accent: theme.colors.secondary,
+        backdrop: ["rgba(46, 196, 182, 0.16)", "rgba(255, 255, 255, 0.9)"] as const
       },
       {
         key: "03",
         title: t(locale, "onboardingStep3"),
         body: t(locale, "onboardingStep3Body"),
         icon: "trophy",
-        accent: theme.colors.accent
+        accent: theme.colors.accent,
+        backdrop: ["rgba(216, 164, 58, 0.2)", "rgba(255, 255, 255, 0.9)"] as const
       }
     ],
     [locale]
@@ -75,22 +79,52 @@ export function OnboardingScreen({ locale, onDone }: Props) {
           }
         ]}
       />
+      <LinearGradient
+        colors={["rgba(105, 139, 255, 0.32)", "rgba(105, 139, 255, 0)"]}
+        start={{ x: 0.05, y: 0.05 }}
+        end={{ x: 0.65, y: 0.65 }}
+        style={styles.backgroundSweep}
+      />
+      <LinearGradient
+        colors={["rgba(243, 194, 88, 0.14)", "rgba(243, 194, 88, 0)"]}
+        start={{ x: 0.78, y: 0.8 }}
+        end={{ x: 0.2, y: 0.2 }}
+        style={styles.backgroundGoldSweep}
+      />
       <ScrollView
+        style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.container,
-          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg }
+          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: footerInset }
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <Pill label={t(locale, "appName")} />
+          <View style={styles.heroTopRow}>
+            <Pill label={t(locale, "appName")} />
+            <View style={styles.heroCountPill}>
+              <Text style={styles.heroCountText}>{`${steps.length + 1}`}</Text>
+            </View>
+          </View>
           <Text style={styles.title}>{t(locale, "onboardingTitle")}</Text>
           <Text style={styles.subtitle}>{t(locale, "onboardingSubtitle")}</Text>
+          <View style={styles.progressDots}>
+            {Array.from({ length: steps.length + 1 }).map((_, index) => (
+              <View key={`onboarding-dot-${index}`} style={styles.progressDot} />
+            ))}
+          </View>
         </View>
 
         <View style={styles.cards}>
           {steps.map((step) => (
-            <GlassCard key={step.key} style={styles.card} accent={step.accent}>
+            <GlassCard key={step.key} style={[styles.card, styles.stepCard]} accent={step.accent}>
+              <LinearGradient
+                colors={step.backdrop}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardBackdrop}
+              />
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
                   <View style={styles.stepBadge}>
@@ -106,7 +140,13 @@ export function OnboardingScreen({ locale, onDone }: Props) {
             </GlassCard>
           ))}
           <View style={styles.dailyDivider} />
-          <GlassCard style={styles.card} accent={theme.colors.reward}>
+          <GlassCard style={[styles.card, styles.dailyCard]} accent={theme.colors.reward}>
+            <LinearGradient
+              colors={["rgba(243, 183, 78, 0.24)", "rgba(255, 255, 255, 0.92)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.cardBackdrop}
+            />
             <View style={styles.cardHeader}>
               <View style={styles.cardHeaderLeft}>
                 <View style={[styles.stepBadge, styles.dailyBadge]}>
@@ -123,11 +163,17 @@ export function OnboardingScreen({ locale, onDone }: Props) {
         </View>
       </ScrollView>
 
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(8, 17, 46, 0)", "rgba(8, 17, 46, 0.92)"]}
+        style={styles.footerFade}
+      />
       <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
         <PrimaryButton
           label={t(locale, "getStarted")}
           icon="arrow-right"
           iconPosition="right"
+          style={styles.getStartedButton}
           onPress={onDone}
         />
       </View>
@@ -141,6 +187,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     overflow: "hidden"
   },
+  scroll: {
+    flex: 1
+  },
   container: {
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
@@ -149,6 +198,29 @@ const styles = StyleSheet.create({
   hero: {
     gap: theme.spacing.sm,
     alignItems: "flex-start"
+  },
+  heroTopRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  heroCountPill: {
+    minWidth: 34,
+    height: 24,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(214, 228, 255, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(214, 228, 255, 0.3)"
+  },
+  heroCountText: {
+    color: "rgba(236, 244, 255, 0.96)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
   },
   title: {
     color: "#F3F7FF",
@@ -163,6 +235,18 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     lineHeight: 22,
     maxWidth: 300
+  },
+  progressDots: {
+    marginTop: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  progressDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "rgba(214, 228, 255, 0.4)"
   },
   heroRow: {
     flexDirection: "row",
@@ -209,7 +293,19 @@ const styles = StyleSheet.create({
     borderColor: "rgba(243, 183, 78, 0.5)"
   },
   card: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    overflow: "hidden",
+    backgroundColor: "rgba(241, 246, 255, 0.88)",
+    borderColor: "rgba(145, 177, 244, 0.3)"
+  },
+  stepCard: {
+    minHeight: 104
+  },
+  dailyCard: {
+    borderColor: "rgba(216, 164, 58, 0.35)"
+  },
+  cardBackdrop: {
+    ...StyleSheet.absoluteFillObject
   },
   step: {
     color: theme.colors.ink,
@@ -233,7 +329,8 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
-    lineHeight: 22
+    lineHeight: 22,
+    maxWidth: "94%"
   },
   cardHeader: {
     flexDirection: "row",
@@ -257,12 +354,39 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.9)"
   },
   footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    backgroundColor: "rgba(8, 17, 46, 0.72)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(146, 176, 242, 0.22)",
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xs
+  },
+  getStartedButton: {
+    backgroundColor: theme.colors.cta,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.24)"
+  },
+  footerFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 140,
+    zIndex: 10
   },
   orb: {
     position: "absolute",
     opacity: 0.22
+  },
+  backgroundSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundGoldSweep: {
+    ...StyleSheet.absoluteFillObject
   },
   orbPrimary: {
     top: -120,

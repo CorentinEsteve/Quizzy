@@ -2531,8 +2531,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   shareCard: {
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
     overflow: "hidden",
     borderColor: "rgba(57, 72, 175, 0.16)",
     borderWidth: 1,

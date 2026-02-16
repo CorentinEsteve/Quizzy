@@ -9,6 +9,14 @@ Exemple Render:
 
 La page est générée par le backend et contient une date de mise à jour automatique.
 
+## Chiffrement (Export Compliance)
+Dans l'app iOS, la clé est déjà configurée:
+`ITSAppUsesNonExemptEncryption = false` (dans `apps/mobile/app.json`).
+
+En pratique, dans App Store Connect:
+- Réponds que l'app **n'utilise pas de chiffrement non exempté**.
+- Aucun document d'export supplémentaire n'est requis tant que vous n'ajoutez pas de chiffrement propriétaire/non standard.
+
 ## Sous-titres (3 propositions)
 1) Quiz rapides, duels fun
 2) Défie tes amis en quiz
