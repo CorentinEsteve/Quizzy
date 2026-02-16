@@ -1212,7 +1212,9 @@ export function LobbyScreen({
                 return (
                   <Pressable
                     key={session.code}
+                    disabled={!canContinue}
                     onPress={() => {
+                      if (!canContinue) return;
                       onResumeRoom(session.code);
                     }}
                   >
@@ -1244,7 +1246,7 @@ export function LobbyScreen({
                           color="#1F327F"
                         />
                         <Text style={[styles.statusChipText, styles.statusChipTextLight]}>
-                          {isWaitingForOpponent ? t(locale, "waitingOpponent") : t(locale, "continueMatch")}
+                          {isWaitingForOpponent ? t(locale, "waitingOpponent") : t(locale, "yourTurn")}
                         </Text>
                       </View>
                     </View>
@@ -1269,7 +1271,7 @@ export function LobbyScreen({
                           style={[
                             styles.ctaPill,
                             styles.ctaPrimary,
-                            styles.ctaPrimaryLight,
+                            styles.ctaOngoingContinue,
                             {
                               transform: [
                                 {
@@ -1286,15 +1288,10 @@ export function LobbyScreen({
                             }
                           ]}
                         >
-                          <Text style={[styles.ctaText, styles.ctaTextLight]}>{t(locale, "continueMatch")}</Text>
-                          <FontAwesome name="arrow-right" size={12} color="#1F327F" />
+                          <Text style={styles.ctaText}>{t(locale, "continueMatch")}</Text>
+                          <FontAwesome name="arrow-right" size={12} color="#F4F8FF" />
                         </Animated.View>
-                      ) : (
-                        <View style={styles.sessionMetaRow}>
-                          <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>{t(locale, "waitingOpponent")}</Text>
-                          <FontAwesome name="angle-right" size={12} color="#6D7380" />
-                        </View>
-                      )}
+                      ) : null}
                     </View>
                   </View>
                 </Pressable>
@@ -2456,8 +2453,10 @@ const styles = StyleSheet.create({
   heroActionPrimary: {
     width: "100%",
     minHeight: 46,
-    backgroundColor: "#1F327F",
-    shadowColor: "rgba(31, 50, 127, 0.48)",
+    backgroundColor: theme.colors.cta,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1,
+    shadowColor: "rgba(47, 70, 201, 0.5)",
     shadowOpacity: 0.32,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 7 },
@@ -3069,7 +3068,9 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: 12,
     minHeight: 40,
-    backgroundColor: "#1F327F"
+    backgroundColor: theme.colors.cta,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1
   },
   nextActionSecondary: {
     alignSelf: "center",
@@ -3658,6 +3659,10 @@ const styles = StyleSheet.create({
   ctaPrimaryLight: {
     backgroundColor: "rgba(57, 72, 175, 0.12)",
     borderColor: "rgba(57, 72, 175, 0.3)"
+  },
+  ctaOngoingContinue: {
+    backgroundColor: theme.colors.cta,
+    borderColor: "rgba(255, 255, 255, 0.24)"
   },
   ctaDisabled: {
     backgroundColor: "rgba(11, 14, 20, 0.04)",

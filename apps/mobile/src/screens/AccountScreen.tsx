@@ -166,6 +166,9 @@ export function AccountScreen({
     return (
       <View style={styles.page}>
         <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
+        <View style={styles.backgroundOrbTop} pointerEvents="none" />
+        <View style={styles.backgroundOrbBottom} pointerEvents="none" />
+        <View style={styles.backgroundOrbWarm} pointerEvents="none" />
         <ScrollView
           contentContainerStyle={[
             styles.container,
@@ -534,6 +537,7 @@ export function AccountScreen({
       <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
+      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -562,7 +566,7 @@ export function AccountScreen({
 
         <GlassCard style={styles.profileCard}>
           <LinearGradient
-            colors={["rgba(94, 124, 255, 0.2)", "rgba(46, 196, 182, 0.1)", "rgba(255, 255, 255, 0.82)"]}
+            colors={["rgba(98, 130, 245, 0.2)", "rgba(244, 203, 110, 0.13)", "rgba(242, 247, 255, 0.9)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.profileBackdrop}
@@ -839,6 +843,15 @@ const styles = StyleSheet.create({
     borderRadius: 150,
     backgroundColor: "rgba(86, 70, 184, 0.16)"
   },
+  backgroundOrbWarm: {
+    position: "absolute",
+    top: 160,
+    right: -90,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(243, 194, 88, 0.13)"
+  },
   container: {
     padding: theme.spacing.lg,
     gap: theme.spacing.lg
@@ -873,8 +886,8 @@ const styles = StyleSheet.create({
   profileCard: {
     gap: theme.spacing.sm,
     overflow: "hidden",
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderColor: "rgba(94, 124, 255, 0.22)"
+    backgroundColor: "rgba(234, 242, 255, 0.84)",
+    borderColor: "rgba(125, 157, 230, 0.32)"
   },
   profileBackdrop: {
     ...StyleSheet.absoluteFillObject
@@ -948,8 +961,8 @@ const styles = StyleSheet.create({
   },
   didYouKnowCard: {
     gap: theme.spacing.xs,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderColor: "rgba(243, 183, 78, 0.35)"
+    backgroundColor: "rgba(245, 249, 255, 0.84)",
+    borderColor: "rgba(243, 183, 78, 0.4)"
   },
   didYouKnowHeader: {
     flexDirection: "row",
@@ -973,8 +986,12 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     gap: theme.spacing.xs,
-    borderColor: "rgba(11, 14, 20, 0.08)",
-    backgroundColor: "rgba(255, 255, 255, 0.9)"
+    borderColor: "rgba(150, 181, 246, 0.32)",
+    backgroundColor: "rgba(241, 246, 255, 0.84)",
+    shadowColor: "rgba(12, 22, 58, 0.2)",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 4
   },
   listRow: {
     flexDirection: "row",
@@ -983,7 +1000,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.45)"
+    backgroundColor: "rgba(250, 252, 255, 0.5)"
   },
   rowLead: {
     flexDirection: "row",
@@ -1020,8 +1037,8 @@ const styles = StyleSheet.create({
     marginRight: 6
   },
   listRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(11, 14, 20, 0.08)"
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(126, 158, 224, 0.14)"
   },
   sectionBlock: {
     gap: theme.spacing.xs
@@ -1031,7 +1048,7 @@ const styles = StyleSheet.create({
   },
   verifyContent: {
     padding: theme.spacing.md,
-    gap: theme.spacing.xs
+    gap: theme.spacing.sm
   },
   rowText: {
     flex: 1,
@@ -1049,7 +1066,9 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   detailCard: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    borderColor: "rgba(150, 181, 246, 0.34)",
+    backgroundColor: "rgba(241, 246, 255, 0.86)"
   },
   detailTitle: {
     color: theme.colors.ink,
@@ -1059,7 +1078,7 @@ const styles = StyleSheet.create({
   },
   detailDivider: {
     height: 1,
-    backgroundColor: "rgba(11, 14, 20, 0.08)",
+    backgroundColor: "rgba(132, 162, 228, 0.22)",
     marginVertical: theme.spacing.sm
   },
   compactButton: {
@@ -1071,11 +1090,12 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm
   },
   sectionTitle: {
-    color: theme.colors.muted,
+    color: "rgba(236, 244, 255, 0.96)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
+    fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 1.1
+    letterSpacing: 1.2
   },
   sectionSubtitle: {
     color: theme.colors.muted,
@@ -1083,7 +1103,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   sectionBody: {
-    color: theme.colors.ink,
+    color: "rgba(17, 32, 76, 0.96)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body,
     fontWeight: "600"

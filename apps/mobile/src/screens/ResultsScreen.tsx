@@ -120,15 +120,15 @@ export function ResultsScreen({
     ? {
         win: {
           accent: theme.colors.success,
-          surface: "rgba(43, 158, 102, 0.24)"
+          surface: "rgba(236, 248, 241, 0.96)"
         },
         tie: {
           accent: theme.colors.reward,
-          surface: "rgba(243, 183, 78, 0.28)"
+          surface: "rgba(255, 246, 228, 0.97)"
         },
         loss: {
           accent: theme.colors.danger,
-          surface: "rgba(235, 87, 87, 0.24)"
+          surface: "rgba(253, 240, 240, 0.97)"
         }
       }[resultState]
     : null;
@@ -271,20 +271,26 @@ export function ResultsScreen({
       ]}
     >
       <LinearGradient
-        colors={["#DCEBFF", "#E8FBF7", "#FFF2DE"]}
+        colors={["#08112E", "#0D1B4A", "#142A60"]}
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={["rgba(94, 124, 255, 0.3)", "rgba(94, 124, 255, 0)"]}
+        colors={["rgba(105, 139, 255, 0.36)", "rgba(105, 139, 255, 0)"]}
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.7, y: 0.7 }}
         style={styles.backgroundSweep}
       />
       <LinearGradient
-        colors={["rgba(255, 184, 92, 0.22)", "rgba(255, 184, 92, 0)"]}
+        colors={["rgba(86, 70, 184, 0.16)", "rgba(86, 70, 184, 0)"]}
         start={{ x: 0.95, y: 0.05 }}
         end={{ x: 0.25, y: 0.65 }}
         style={styles.backgroundWarmSweep}
+      />
+      <LinearGradient
+        colors={["rgba(243, 194, 88, 0.16)", "rgba(243, 194, 88, 0)"]}
+        start={{ x: 0.72, y: 0.86 }}
+        end={{ x: 0.2, y: 0.25 }}
+        style={styles.backgroundGoldSweep}
       />
       <View style={styles.backgroundOrbTop} pointerEvents="none" />
       <View style={styles.backgroundOrbBottom} pointerEvents="none" />
@@ -455,7 +461,10 @@ export function ResultsScreen({
           ) : null}
 
           {reward ? (
-            <LinearGradient colors={["#FFF7EB", "#FFFFFF"]} style={styles.rewardCard}>
+          <LinearGradient
+            colors={["rgba(255, 247, 225, 0.96)", "rgba(241, 248, 255, 0.95)"]}
+            style={styles.rewardCard}
+          >
               <View style={styles.rewardRow}>
                 <View style={styles.rewardBadge}>
                   <Text style={styles.rewardEmoji}>{reward.emoji}</Text>
@@ -599,17 +608,19 @@ export function ResultsScreen({
         {onRematch ? (
           <PrimaryButton
             label={hasConfirmed ? t(locale, "rematchByYou") : rematchLabel}
-            variant={hasConfirmed ? "ghost" : "primary"}
-            icon="refresh"
+            variant="primary"
+            icon={hasConfirmed ? "check" : "refresh"}
             iconPosition="right"
-            style={hasConfirmed ? styles.rematchPending : undefined}
+            style={hasConfirmed ? styles.rematchPending : styles.rematchAction}
+            disabled={hasConfirmed}
             onPress={hasConfirmed ? undefined : onRematch}
           />
         ) : null}
         <PrimaryButton
           label={t(locale, "backHome")}
           icon="home"
-          variant="ghost"
+          variant="primary"
+          style={styles.backHomeButton}
           onPress={onBack}
         />
       </View>
@@ -628,7 +639,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: "rgba(94, 124, 255, 0.18)"
+    backgroundColor: "rgba(82, 125, 255, 0.22)"
   },
   backgroundOrbBottom: {
     position: "absolute",
@@ -637,7 +648,7 @@ const styles = StyleSheet.create({
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: "rgba(46, 196, 182, 0.16)"
+    backgroundColor: "rgba(86, 70, 184, 0.16)"
   },
   backgroundOrbWarm: {
     position: "absolute",
@@ -646,7 +657,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(255, 196, 112, 0.2)"
+    backgroundColor: "rgba(243, 194, 88, 0.18)"
   },
   backgroundRibbon: {
     position: "absolute",
@@ -656,7 +667,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 44,
     transform: [{ rotate: "-16deg" }],
-    backgroundColor: "rgba(109, 174, 255, 0.12)"
+    backgroundColor: "rgba(243, 194, 88, 0.1)"
   },
   backgroundGlow: {
     position: "absolute",
@@ -665,12 +676,15 @@ const styles = StyleSheet.create({
     width: 430,
     height: 430,
     borderRadius: 215,
-    backgroundColor: "rgba(255, 255, 255, 0.56)"
+    backgroundColor: "rgba(41, 75, 176, 0.24)"
   },
   backgroundSweep: {
     ...StyleSheet.absoluteFillObject
   },
   backgroundWarmSweep: {
+    ...StyleSheet.absoluteFillObject
+  },
+  backgroundGoldSweep: {
     ...StyleSheet.absoluteFillObject
   },
   scrollContent: {
@@ -685,13 +699,13 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.display,
     fontWeight: "700"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body
   },
@@ -699,13 +713,13 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "rgba(243, 183, 78, 0.25)",
+    backgroundColor: "rgba(243, 183, 78, 0.2)",
     borderWidth: 1,
     borderColor: "rgba(243, 183, 78, 0.42)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: theme.colors.reward,
-    shadowOpacity: 0.32,
+    shadowColor: "rgba(243, 183, 78, 0.58)",
+    shadowOpacity: 0.26,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 }
   },
@@ -866,8 +880,18 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   rematchPending: {
-    backgroundColor: "rgba(243, 183, 78, 0.16)",
-    borderColor: "rgba(243, 183, 78, 0.4)",
+    backgroundColor: "rgba(93, 111, 156, 0.76)",
+    borderColor: "rgba(188, 203, 236, 0.42)",
+    borderWidth: 1
+  },
+  rematchAction: {
+    backgroundColor: theme.colors.cta,
+    borderColor: "rgba(255, 255, 255, 0.26)",
+    borderWidth: 1
+  },
+  backHomeButton: {
+    backgroundColor: "rgba(24, 42, 108, 0.92)",
+    borderColor: "rgba(130, 162, 232, 0.36)",
     borderWidth: 1
   },
   resultHint: {
@@ -876,10 +900,14 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   card: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(241, 246, 255, 0.9)",
+    borderColor: "rgba(145, 177, 244, 0.28)"
   },
   reviewCard: {
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(241, 246, 255, 0.9)",
+    borderColor: "rgba(145, 177, 244, 0.28)"
   },
   reviewHeader: {
     gap: 2
@@ -1080,7 +1108,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     gap: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: "rgba(245, 246, 248, 0.92)"
+    borderTopColor: "rgba(146, 176, 242, 0.28)",
+    backgroundColor: "rgba(8, 17, 46, 0.9)"
   }
 });

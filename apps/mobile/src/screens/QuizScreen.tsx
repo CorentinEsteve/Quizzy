@@ -70,11 +70,19 @@ export function QuizScreen({
       </GlassCard>
 
       <View style={styles.footer}>
-        <PrimaryButton label="Exit" icon="times" variant="ghost" onPress={onExit} />
+        <PrimaryButton
+          label="Exit"
+          icon="times"
+          variant="primary"
+          style={styles.exitButton}
+          onPress={onExit}
+        />
         <PrimaryButton
           label={isLast ? "See results" : "Next"}
           icon={isLast ? "trophy" : "arrow-right"}
           iconPosition="right"
+          variant="primary"
+          style={styles.nextButton}
           onPress={onNext}
         />
       </View>
@@ -125,6 +133,23 @@ const styles = StyleSheet.create({
     marginTop: "auto",
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(146, 176, 242, 0.28)",
+    backgroundColor: "rgba(8, 17, 46, 0.9)"
+  },
+  exitButton: {
+    flex: 1,
+    backgroundColor: "rgba(24, 42, 108, 0.92)",
+    borderColor: "rgba(130, 162, 232, 0.36)",
+    borderWidth: 1
+  },
+  nextButton: {
+    flex: 1,
+    backgroundColor: theme.colors.cta,
+    borderColor: "rgba(255, 255, 255, 0.26)",
+    borderWidth: 1
   }
 });
