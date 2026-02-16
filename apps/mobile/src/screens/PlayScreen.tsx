@@ -336,7 +336,13 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         </GlassCard>
 
         <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
-          <PrimaryButton label={t(locale, "backHome")} icon="home" variant="ghost" onPress={onExit} />
+          <PrimaryButton
+            label={t(locale, "backHome")}
+            icon="home"
+            variant="primary"
+            style={styles.footerSecondaryButton}
+            onPress={onExit}
+          />
         </View>
       </View>
     );
@@ -364,7 +370,13 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
           {progressBlock}
         </GlassCard>
         <View style={[styles.footer, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
-          <PrimaryButton label={t(locale, "backHome")} icon="home" variant="ghost" onPress={onExit} />
+          <PrimaryButton
+            label={t(locale, "backHome")}
+            icon="home"
+            variant="primary"
+            style={styles.footerSecondaryButton}
+            onPress={onExit}
+          />
         </View>
       </View>
     );
@@ -522,9 +534,9 @@ export function PlayScreen({ room, userId, selectedAnswers, onAnswer, onExit, lo
         <PrimaryButton
           label={t(locale, "leave")}
           icon="arrow-left"
-          variant="ghost"
+          variant="primary"
           onPress={onExit}
-          style={styles.leaveButton}
+          style={[styles.leaveButton, styles.footerSecondaryButton]}
         />
       </View>
     </View>
@@ -690,8 +702,13 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: "rgba(245, 246, 248, 0.84)"
+    borderTopColor: "rgba(146, 176, 242, 0.28)",
+    backgroundColor: "rgba(8, 17, 46, 0.9)"
+  },
+  footerSecondaryButton: {
+    backgroundColor: "rgba(24, 42, 108, 0.92)",
+    borderColor: "rgba(130, 162, 232, 0.36)",
+    borderWidth: 1
   },
   leaveButton: {
     width: "100%"

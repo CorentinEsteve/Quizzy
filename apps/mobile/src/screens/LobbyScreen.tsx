@@ -3415,7 +3415,14 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body
   },
   joinButton: {
-    backgroundColor: "#1F327F"
+    backgroundColor: "#B93788",
+    borderColor: "rgba(185, 55, 136, 0.38)",
+    borderWidth: 1,
+    shadowColor: "rgba(138, 35, 101, 0.42)",
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
   },
   buttonDisabled: {
     opacity: 0.6
