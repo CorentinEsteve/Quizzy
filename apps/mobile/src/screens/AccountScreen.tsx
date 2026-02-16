@@ -32,6 +32,7 @@ type Props = {
   onChangeEmail: (payload: { newEmail: string; currentPassword: string }) => Promise<void>;
   onExportData: () => Promise<void>;
   onContactSupport: () => void;
+  supportUrl?: string;
   onResendVerification: () => void;
   emailVerified?: boolean;
   onDeactivateAccount: () => void;
@@ -69,6 +70,7 @@ export function AccountScreen({
   onChangeEmail,
   onExportData,
   onContactSupport,
+  supportUrl,
   onResendVerification,
   emailVerified,
   onDeactivateAccount
@@ -764,7 +766,9 @@ export function AccountScreen({
                 </View>
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle}>{t(locale, "support")}</Text>
-                  <Text style={styles.rowSubtitle}>{t(locale, "contactSupport")}</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {supportUrl?.trim() ? supportUrl : t(locale, "contactSupport")}
+                  </Text>
                 </View>
               </View>
               <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />

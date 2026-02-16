@@ -22,8 +22,9 @@ const io = new SocketServer(httpServer, {
 const port = process.env.PORT || 3001;
 const APP_NAME = process.env.APP_NAME || "Quiz App";
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "onboarding@resend.dev";
-const SUPPORT_URL = process.env.SUPPORT_URL || "";
 const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${port}`;
+const DEFAULT_SUPPORT_URL = `${APP_BASE_URL}/support`;
+const SUPPORT_URL = process.env.SUPPORT_URL || DEFAULT_SUPPORT_URL;
 const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || SUPPORT_EMAIL;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
@@ -1111,6 +1112,34 @@ app.get("/legal/privacy", (req, res) => {
       <p>${APP_NAME} is not directed to children under 13. If you believe a child has provided personal data, contact us to remove it.</p>
       <h2>Contact</h2>
       ${supportLine}
+    `
+  );
+  res.type("html").send(html);
+});
+
+app.get("/support", (req, res) => {
+  const html = renderSimplePage(
+    "Support",
+    `
+      <p>Need help with ${APP_NAME}? We are here to help.</p>
+      <h2>Contact</h2>
+      <ul>
+        <li>Email: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></li>
+        <li>Support URL: <a href="${SUPPORT_URL}">${SUPPORT_URL}</a></li>
+      </ul>
+      <h2>Before contacting support</h2>
+      <ul>
+        <li>Open your profile and verify your email status.</li>
+        <li>Make sure you are using the latest app version.</li>
+        <li>Try signing out and signing back in if a screen is stuck.</li>
+      </ul>
+      <h2>Include this in your message</h2>
+      <ul>
+        <li>Your platform (iOS/Android).</li>
+        <li>A short description of the issue.</li>
+        <li>Steps to reproduce it.</li>
+      </ul>
+      <p>You can also review our <a href="${APP_BASE_URL}/legal/privacy">Privacy Policy</a> and <a href="${APP_BASE_URL}/legal/terms">Terms of Service</a>.</p>
     `
   );
   res.type("html").send(html);

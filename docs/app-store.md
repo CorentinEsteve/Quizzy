@@ -1,5 +1,14 @@
 # Qwizzy App Store Text (FR)
 
+## URL de l'assistance (App Store Connect)
+Utilise l'URL publique:
+`https://<votre-domaine-api>/support`
+
+Exemple Render:
+`https://qwizzy-api.onrender.com/support`
+
+La page est générée par le backend et contient une date de mise à jour automatique.
+
 ## Sous-titres (3 propositions)
 1) Quiz rapides, duels fun
 2) Défie tes amis en quiz

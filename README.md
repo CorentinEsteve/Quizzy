@@ -26,6 +26,7 @@ Set required server env vars:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `JWT_SECRET`
 - `APP_BASE_URL`
+- `SUPPORT_EMAIL` (recommended, shown on `/support`)
 
 And set push/email provider env vars only if you use these features:
 - `FCM_PROJECT_ID`
@@ -45,6 +46,7 @@ npm run start
 ```
 
 The mobile app expects the API at `http://localhost:3001` by default. Update `apps/mobile/src/config.ts` if needed.
+The support page defaults to `${API_BASE_URL}/support` and is opened from the Profile page.
 
 ## Features
 - JWT auth (register/login)

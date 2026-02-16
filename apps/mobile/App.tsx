@@ -1892,6 +1892,7 @@ export default function App() {
                 onChangeEmail={handleChangeEmail}
                 onExportData={handleExportData}
                 onContactSupport={handleContactSupport}
+                supportUrl={SUPPORT_URL}
                 onResendVerification={handleResendVerification}
                 emailVerified={user.emailVerified}
               />
