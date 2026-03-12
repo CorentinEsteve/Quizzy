@@ -447,9 +447,17 @@ function buildDraftWithPossibleRewrite(ruleDraft, rewrittenCandidates) {
   const byId = new Map(
     (rewrittenCandidates || []).map((item) => [item.id, item])
   );
+
+  const isUsableRewrite = (value) => {
+    const prompt = String(value || "").trim();
+    if (!prompt || prompt.length < 16) return false;
+    if (/^(who|what|where|when|why|how)\b/i.test(prompt)) return false;
+    return true;
+  };
+
   return ruleDraft.map((question) => {
     const rewritten = byId.get(question.id);
-    if (!rewritten?.prompt?.en) return question;
+    if (!rewritten?.prompt?.en || !isUsableRewrite(rewritten.prompt.en)) return question;
     return {
       ...question,
       prompt: {
@@ -532,7 +540,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     ruleDraft = buildRuleDraftQuestions({
       dateKey,
       newsItems,
-      count: 14,
+      count: 22,
       excludedSourceUrls: Array.from(recentHistory.sourceUrls),
       excludedTopics: Array.from(recentHistory.topics)
     });
@@ -638,6 +646,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       eligibleNewsItems: ruleDraft.length,
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
+      rejectedQuestions: verified.rejected.length,
       fallbackQuestions: 0,
       repeatedStoriesSkipped: recentHistory.sourceUrls.size,
       topics: summarizeTopics(newsItems, 8),
@@ -661,6 +670,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       eligibleNewsItems: ruleDraft.length,
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
+      rejectedQuestions: verified.rejected.length,
       fallbackQuestions: 0,
       repeatedStoriesSkipped: recentHistory.sourceUrls.size,
       topics: summarizeTopics(newsItems, 8),

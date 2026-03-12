@@ -8,12 +8,36 @@ const DEFAULT_FEEDS = [
     url: "https://feeds.reuters.com/reuters/businessNews"
   },
   {
+    name: "Reuters Technology",
+    url: "https://feeds.reuters.com/reuters/technologyNews"
+  },
+  {
     name: "BBC World",
     url: "https://feeds.bbci.co.uk/news/world/rss.xml"
   },
   {
+    name: "BBC Business",
+    url: "https://feeds.bbci.co.uk/news/business/rss.xml"
+  },
+  {
+    name: "NPR World",
+    url: "https://feeds.npr.org/1004/rss.xml"
+  },
+  {
+    name: "NPR Business",
+    url: "https://feeds.npr.org/1006/rss.xml"
+  },
+  {
     name: "AP News",
     url: "https://apnews.com/hub/apf-topnews?output=1"
+  },
+  {
+    name: "The Guardian World",
+    url: "https://www.theguardian.com/world/rss"
+  },
+  {
+    name: "The Guardian Business",
+    url: "https://www.theguardian.com/business/rss"
   }
 ];
 
@@ -157,7 +181,7 @@ function compactHeadlineLabel(title, fallbackSource) {
     .sort((a, b) => a.length - b.length)
     .find((item) => item.length >= 18 && item.length <= 64);
 
-  return trimToWordBoundary(best || safe, 60);
+  return trimToWordBoundary(best || safe, 84);
 }
 
 function buildQuestionContext(item) {
@@ -276,7 +300,7 @@ export async function fetchNewsItems({
 export function buildRuleDraftQuestions({
   dateKey,
   newsItems,
-  count = 12,
+  count = 18,
   excludedSourceUrls = [],
   excludedTopics = []
 }) {
@@ -347,6 +371,7 @@ export function buildRuleDraftQuestions({
         sourceName: item.source,
         sourceUrl: item.link,
         sourcePublishedAt: item.publishedAt,
+        optionTitles: optionSet.map((option) => option.title),
         verificationMode: "title_match"
       }
     };
@@ -499,14 +524,14 @@ export async function rewriteDraftWithLlm({
           {
             role: "system",
             content:
-              "You rewrite quiz prompts into short, punchy multiple-choice quiz questions. Preserve factual meaning. Do not rewrite options or answers."
+              "You rewrite prompts into short, punchy clue lines for a headline-matching quiz. Preserve factual meaning. Do not rewrite options or answers."
           },
           {
             role: "user",
             content:
               `Date: ${dateKey}\n` +
-              "Rewrite each prompt as a short quiz clue. Keep each prompt under 90 characters when possible. " +
-              "Do not mention the source, date, or words like headline/story if avoidable. " +
+              "Rewrite each prompt as a short clue for selecting the correct news headline. Keep each prompt under 90 characters when possible. " +
+              "Do not transform into a direct factual question (no standalone who/where/when format). " +
               "Return only JSON matching {questions:[{id,prompt}]}. " +
               `Input: ${JSON.stringify(compactInput)}`
           }
@@ -596,8 +621,13 @@ export function verifyQuestions({ questions, newsItems }) {
       continue;
     }
 
+    const optionTitles = Array.isArray(question?.agentMeta?.optionTitles)
+      ? question.agentMeta.optionTitles
+      : [];
     const expectedAnswer = sourceItem.title.trim().toLowerCase();
-    const actualAnswer = String(options[answer] || "").trim().toLowerCase();
+    const actualAnswer = String(optionTitles[answer] || options[answer] || "")
+      .trim()
+      .toLowerCase();
     if (expectedAnswer !== actualAnswer) {
       rejected.push({ id: question?.id || "unknown", reason: "answer_not_matched_to_source" });
       continue;

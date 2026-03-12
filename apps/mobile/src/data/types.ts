@@ -244,6 +244,7 @@ export type AgenticRun = {
     eligibleNewsItems?: number;
     draftedQuestions?: number;
     verifiedQuestions?: number;
+    rejectedQuestions?: number;
     fallbackQuestions?: number;
     repeatedStoriesSkipped?: number;
     topics?: string[];

@@ -241,6 +241,10 @@ export function AgenticOpsScreen({
                 <Text style={styles.kvValue}>{latestRun.summary.verifiedQuestions ?? 0}</Text>
               </View>
               <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsRejectedQuestions")}</Text>
+                <Text style={styles.kvValue}>{latestRun.summary.rejectedQuestions ?? 0}</Text>
+              </View>
+              <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>{t(locale, "agenticOpsEligibleNewsItems")}</Text>
                 <Text style={styles.kvValue}>{latestRun.summary.eligibleNewsItems ?? 0}</Text>
               </View>
