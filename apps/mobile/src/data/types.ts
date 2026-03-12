@@ -241,9 +241,11 @@ export type AgenticRun = {
     succeededFeeds?: number;
     failedFeeds?: number;
     headlinesFetched?: number;
+    eligibleNewsItems?: number;
     draftedQuestions?: number;
     verifiedQuestions?: number;
     fallbackQuestions?: number;
+    repeatedStoriesSkipped?: number;
     topics?: string[];
     llmConfigured?: boolean;
     llmAttempted?: boolean;

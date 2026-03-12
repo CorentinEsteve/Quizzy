@@ -18,6 +18,7 @@ const DEFAULT_FEEDS = [
 ];
 
 const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1/responses";
+const RECENT_NEWS_MAX_AGE_DAYS = 365;
 
 function decodeEntities(value) {
   if (typeof value !== "string") return "";
@@ -52,6 +53,10 @@ function normalizeLink(value) {
 
 function normalizeTitle(value) {
   return stripHtml(value).toLowerCase();
+}
+
+function normalizeFingerprint(value) {
+  return normalizeSentence(value).toLowerCase();
 }
 
 function parseRssItems(xml, sourceName) {
@@ -164,11 +169,39 @@ function buildQuestionContext(item) {
 }
 
 function buildQuestionClue(item) {
-  const context = buildQuestionContext(item)
+  const description = buildQuestionContext(item)
     .replace(/^[-:,\s]+/, "")
     .replace(/[.?!]\s.*$/, "")
     .trim();
-  return trimToWordBoundary(context || item?.title || item?.source || "news story", 90);
+  const title = normalizeSentence(item?.title || "");
+  const looksInterrogative = /^(in \d{4},\s*)?(who|what|where|when|why|how)\b/i.test(description);
+  const clueSource = description && !looksInterrogative ? description : title || description;
+  return trimToWordBoundary(clueSource || item?.source || "news story", 90);
+}
+
+function buildQuestionPrompt(item, index) {
+  const clue = buildQuestionClue(item);
+  const templates = [
+    (safeClue) => `Which recent story matches this clue: ${safeClue}`,
+    (safeClue) => `Which recent news story is this about: ${safeClue}`,
+    (safeClue) => `Pick the recent story behind this clue: ${safeClue}`,
+    (safeClue) => `Which recent event fits this clue: ${safeClue}`
+  ];
+  return templates[index % templates.length](clue);
+}
+
+function isRecentNewsItem(item, nowMs = Date.now(), maxAgeDays = RECENT_NEWS_MAX_AGE_DAYS) {
+  const publishedAtMs = Date.parse(item?.publishedAt || "");
+  if (!Number.isFinite(publishedAtMs)) return true;
+  const ageMs = Math.max(nowMs - publishedAtMs, 0);
+  return ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
+}
+
+function buildQuestionFingerprint(question) {
+  const prompt = normalizeFingerprint(question?.prompt?.en || "");
+  const sourceUrl = normalizeFingerprint(question?.agentMeta?.sourceUrl || "");
+  const topic = normalizeFingerprint(question?.agentMeta?.topic || "");
+  return sourceUrl || `${topic}|${prompt}`;
 }
 
 export async function fetchNewsItems({
@@ -240,15 +273,31 @@ export async function fetchNewsItems({
   };
 }
 
-export function buildRuleDraftQuestions({ dateKey, newsItems, count = 10 }) {
+export function buildRuleDraftQuestions({
+  dateKey,
+  newsItems,
+  count = 12,
+  excludedSourceUrls = [],
+  excludedTopics = []
+}) {
   if (!Array.isArray(newsItems) || newsItems.length < 4) return [];
-  const shuffled = seededShuffle(newsItems, `${dateKey}:rule-draft`);
+  const excludedSourceUrlSet = new Set(
+    (excludedSourceUrls || []).map((value) => normalizeFingerprint(value)).filter(Boolean)
+  );
+  const excludedTopicSet = new Set(
+    (excludedTopics || []).map((value) => normalizeFingerprint(value)).filter(Boolean)
+  );
+  const eligible = newsItems.filter((item) => {
+    const sourceUrl = normalizeFingerprint(item?.link || "");
+    const topic = normalizeFingerprint(item?.title || "");
+    if (!isRecentNewsItem(item)) return false;
+    if (excludedSourceUrlSet.has(sourceUrl)) return false;
+    if (excludedTopicSet.has(topic)) return false;
+    return true;
+  });
+  if (eligible.length < 4) return [];
+  const shuffled = seededShuffle(eligible, `${dateKey}:rule-draft`);
   const picked = shuffled.slice(0, Math.min(shuffled.length, count));
-  const promptTemplates = [
-    (clue) => `Pick the headline that matches this clue: ${clue}`,
-    (clue) => `Which story fits this clue? ${clue}`,
-    (clue) => `Match this clue to the right headline: ${clue}`
-  ];
 
   return picked.map((item, index) => {
     const distractors = shuffled
@@ -285,11 +334,9 @@ export function buildRuleDraftQuestions({ dateKey, newsItems, count = 10 }) {
     const answer = optionSet.findIndex((option) => option.title === item.title);
     if (answer < 0) return null;
 
-    const clue = buildQuestionClue(item);
-    const promptTemplate = promptTemplates[index % promptTemplates.length];
     return {
       id: `news_${dateKey}_${String(index + 1).padStart(2, "0")}`,
-      prompt: asLocalized(promptTemplate(clue)),
+      prompt: asLocalized(buildQuestionPrompt(item, index)),
       options: {
         en: optionSet.map((option) => option.display),
         fr: optionSet.map((option) => option.display)
@@ -544,6 +591,10 @@ export function verifyQuestions({ questions, newsItems }) {
       rejected.push({ id: question?.id || "unknown", reason: "missing_source" });
       continue;
     }
+    if (!isRecentNewsItem(sourceItem)) {
+      rejected.push({ id: question?.id || "unknown", reason: "source_not_recent" });
+      continue;
+    }
 
     const expectedAnswer = sourceItem.title.trim().toLowerCase();
     const actualAnswer = String(options[answer] || "").trim().toLowerCase();
@@ -560,24 +611,6 @@ export function verifyQuestions({ questions, newsItems }) {
     accepted,
     rejected
   };
-}
-
-export function buildFallbackQuestions({ dateKey, pool, count = 10, startIndex = 1 }) {
-  const sourcePool = Array.isArray(pool) ? pool : [];
-  if (sourcePool.length === 0) return [];
-  return seededShuffle(sourcePool, `${dateKey}:fallback`)
-    .slice(0, count)
-    .map((question, index) => ({
-      ...question,
-      id: `fallback_${dateKey}_${String(startIndex + index).padStart(2, "0")}_${question.id}`,
-      agentMeta: {
-        sourceName: "Fallback quiz bank",
-        sourceUrl: "",
-        sourcePublishedAt: null,
-        topic: question.prompt?.en || "Fallback topic",
-        verificationMode: "banked_question"
-      }
-    }));
 }
 
 export function buildDailyQuiz({ dateKey, questions, runId, mode, generatedAt }) {
@@ -599,7 +632,7 @@ export function buildDailyQuiz({ dateKey, questions, runId, mode, generatedAt })
     categoryId: "daily",
     categoryLabel: "Daily Quiz",
     title: "Daily News Quiz",
-    subtitle: `${safeQuestions.length} verified questions`,
+    subtitle: `${safeQuestions.length} recent news questions`,
     rounds: safeQuestions.length,
     accent: "#F3B74E",
     questions: safeQuestions,
@@ -639,4 +672,4 @@ export function summarizeTopics(newsItems, limit = 6) {
     .filter(Boolean);
 }
 
-export { DEFAULT_FEEDS };
+export { DEFAULT_FEEDS, buildQuestionFingerprint, normalizeFingerprint };

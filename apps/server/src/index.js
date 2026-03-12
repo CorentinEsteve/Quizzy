@@ -14,7 +14,7 @@ import { Resend } from "resend";
 import { sendNativePush } from "./push.js";
 import {
   buildDailyQuiz,
-  buildFallbackQuestions,
+  buildQuestionFingerprint,
   buildRuleDraftQuestions,
   estimateCostUsd,
   fetchNewsItems,
@@ -323,41 +323,6 @@ async function getDailyQuiz(dateKey) {
   return result?.quiz || null;
 }
 
-function buildSeededFallbackDailyQuiz(dateKey, runId = null) {
-  const pool = quizzes.flatMap((quiz) => quiz.questions);
-  if (pool.length === 0) return null;
-  const fallbackQuestions = seededShuffle(pool, `${dateKey}:legacy-fallback`)
-    .slice(0, 10)
-    .map((question, index) => ({
-      ...question,
-      id: `fallback_${dateKey}_${String(index + 1).padStart(2, "0")}_${question.id}`,
-      agentMeta: {
-        sourceName: "Fallback quiz bank",
-        sourceUrl: "",
-        sourcePublishedAt: null,
-        topic: question.prompt?.en || "Fallback topic",
-        verificationMode: "banked_question"
-      }
-    }));
-  return {
-    id: `daily_${dateKey}`,
-    categoryId: "daily",
-    categoryLabel: "Daily Quiz",
-    title: "Daily News Quiz",
-    subtitle: `${fallbackQuestions.length} fallback questions`,
-    rounds: fallbackQuestions.length,
-    accent: "#F3B74E",
-    questions: fallbackQuestions,
-    meta: {
-      generationMode: "fallback_only",
-      generatedAt: nowIso(),
-      runId,
-      topics: [],
-      sources: ["Fallback quiz bank"]
-    }
-  };
-}
-
 async function readStoredDailyQuiz(dateKey) {
   const { data, error } = await supabase
     .from("daily_quizzes")
@@ -402,6 +367,51 @@ async function saveDailyQuizRecord(dateKey, quiz) {
   };
   const { error } = await supabase.from("daily_quizzes").upsert(payload);
   return error || null;
+}
+
+async function listRecentDailyQuizFingerprints({ excludeDateKey, limit = 30 } = {}) {
+  const { data, error } = await supabase
+    .from("daily_quizzes")
+    .select("date, quiz_json")
+    .order("date", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[daily-agent] unable to read recent quiz history", error);
+    return {
+      sourceUrls: new Set(),
+      topics: new Set(),
+      prompts: new Set(),
+      fingerprints: new Set()
+    };
+  }
+
+  const sourceUrls = new Set();
+  const topics = new Set();
+  const prompts = new Set();
+  const fingerprints = new Set();
+
+  for (const row of data || []) {
+    if (row?.date === excludeDateKey) continue;
+    try {
+      const rawQuiz = typeof row?.quiz_json === "string" ? JSON.parse(row.quiz_json) : row?.quiz_json;
+      const quiz = hydrateQuizAnswers(rawQuiz);
+      const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+      for (const question of questions) {
+        const sourceUrl = String(question?.agentMeta?.sourceUrl || "").trim().toLowerCase();
+        const topic = String(question?.agentMeta?.topic || "").trim().toLowerCase();
+        const prompt = String(question?.prompt?.en || "").trim().toLowerCase();
+        if (sourceUrl) sourceUrls.add(sourceUrl);
+        if (topic) topics.add(topic);
+        if (prompt) prompts.add(prompt);
+        const fingerprint = buildQuestionFingerprint(question);
+        if (fingerprint) fingerprints.add(String(fingerprint).trim().toLowerCase());
+      }
+    } catch (_error) {
+      continue;
+    }
+  }
+
+  return { sourceUrls, topics, prompts, fingerprints };
 }
 
 function createAgentStep(id, agent, inputCount = 0) {
@@ -477,12 +487,17 @@ function buildRunRecordBase(dateKey, trigger) {
 
 async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
   const run = buildRunRecordBase(dateKey, trigger);
-  const quizPool = quizzes.flatMap((quiz) => quiz.questions);
   let newsItems = [];
   let feedStats = { feedCount: 0, succeededFeeds: 0, failedFeeds: 0 };
   let ruleDraft = [];
   let draftQuestions = [];
   let verified = { accepted: [], rejected: [] };
+  let recentHistory = {
+    sourceUrls: new Set(),
+    topics: new Set(),
+    prompts: new Set(),
+    fingerprints: new Set()
+  };
   let llmUsed = false;
   let llmFailureReason = null;
   let llmReturnedQuestions = 0;
@@ -510,9 +525,17 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     });
     emitProgress();
 
+    recentHistory = await listRecentDailyQuizFingerprints({ excludeDateKey: dateKey, limit: 45 });
+
     const draftStep = createAgentStep("draft", "Draft Agent", newsItems.length);
     run.steps.push(draftStep);
-    ruleDraft = buildRuleDraftQuestions({ dateKey, newsItems, count: 10 });
+    ruleDraft = buildRuleDraftQuestions({
+      dateKey,
+      newsItems,
+      count: 14,
+      excludedSourceUrls: Array.from(recentHistory.sourceUrls),
+      excludedTopics: Array.from(recentHistory.topics)
+    });
     draftQuestions = ruleDraft;
 
     if (DAILY_AGENT_OPENAI_KEY && ruleDraft.length > 0) {
@@ -560,6 +583,18 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       questions: draftQuestions,
       newsItems
     });
+    verified.accepted = verified.accepted.filter((question) => {
+      const sourceUrl = String(question?.agentMeta?.sourceUrl || "").trim().toLowerCase();
+      const topic = String(question?.agentMeta?.topic || "").trim().toLowerCase();
+      const prompt = String(question?.prompt?.en || "").trim().toLowerCase();
+      const fingerprint = String(buildQuestionFingerprint(question) || "").trim().toLowerCase();
+      return !(
+        recentHistory.sourceUrls.has(sourceUrl) ||
+        recentHistory.topics.has(topic) ||
+        recentHistory.prompts.has(prompt) ||
+        recentHistory.fingerprints.has(fingerprint)
+      );
+    });
     run.steps[run.steps.length - 1] = completeAgentStep(verifyStep, {
       status: "ok",
       outputCount: verified.accepted.length,
@@ -569,22 +604,11 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
 
     const editorStep = createAgentStep("editor", "Editor Agent", verified.accepted.length);
     run.steps.push(editorStep);
-    const fallbackCount = Math.max(10 - verified.accepted.length, 0);
-    const fallback = fallbackCount
-      ? buildFallbackQuestions({
-          dateKey,
-          pool: quizPool,
-          count: fallbackCount,
-          startIndex: verified.accepted.length + 1
-        })
-      : [];
-    const finalQuestions = [...verified.accepted, ...fallback].slice(0, 10);
-    run.mode =
-      verified.accepted.length === 0
-        ? "fallback_only"
-        : llmUsed
-          ? "llm_assisted"
-          : "rules_only";
+    const finalQuestions = verified.accepted.slice(0, 10);
+    if (finalQuestions.length === 0) {
+      throw new Error("No recent news questions passed verification");
+    }
+    run.mode = llmUsed ? "llm_assisted" : "rules_only";
     const finalQuiz = buildDailyQuiz({
       dateKey,
       questions: finalQuestions,
@@ -595,10 +619,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     run.steps[run.steps.length - 1] = completeAgentStep(editorStep, {
       status: "ok",
       outputCount: finalQuestions.length,
-      notes:
-        fallback.length > 0
-          ? `Published ${finalQuestions.length} questions (${fallback.length} fallback)`
-          : `Published ${finalQuestions.length} questions`
+      notes: `Published ${finalQuestions.length} recent-news questions`
     });
     emitProgress();
 
@@ -614,9 +635,11 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       succeededFeeds: feedStats.succeededFeeds,
       failedFeeds: feedStats.failedFeeds,
       headlinesFetched: newsItems.length,
+      eligibleNewsItems: ruleDraft.length,
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
-      fallbackQuestions: Math.max(10 - verified.accepted.length, 0),
+      fallbackQuestions: 0,
+      repeatedStoriesSkipped: recentHistory.sourceUrls.size,
       topics: summarizeTopics(newsItems, 8),
       llmUsed,
       llmReturnedQuestions,
@@ -635,17 +658,18 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       succeededFeeds: feedStats.succeededFeeds,
       failedFeeds: feedStats.failedFeeds,
       headlinesFetched: newsItems.length,
+      eligibleNewsItems: ruleDraft.length,
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
-      fallbackQuestions: 10,
+      fallbackQuestions: 0,
+      repeatedStoriesSkipped: recentHistory.sourceUrls.size,
       topics: summarizeTopics(newsItems, 8),
       llmUsed,
       llmReturnedQuestions,
       llmFailureReason
     };
     emitProgress();
-    const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, run.runId);
-    return { run, quiz: fallbackQuiz };
+    return { run, quiz: null };
   }
 }
 
@@ -751,14 +775,24 @@ async function ensureDailyQuizGenerated(dateKey, options = {}) {
     const pipelineResult = await runAgenticDailyPipeline(dateKey, trigger, (progressRun) => {
       activeAgentRuns.set(dateKey, progressRun);
     });
-    const quizToSave = pipelineResult.quiz || buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
-    if (!quizToSave) return { quiz: null, generated: false, run: null };
+    const quizToSave = pipelineResult.quiz;
+    if (!quizToSave) {
+      await saveAgentRun(pipelineResult.run);
+      if (before?.quiz) {
+        return { quiz: before.quiz, generated: false, run: summarizeRunForApi(pipelineResult.run) };
+      }
+      return { quiz: null, generated: false, run: summarizeRunForApi(pipelineResult.run) };
+    }
 
     const error = await saveDailyQuizRecord(dateKey, quizToSave);
     if (error) {
       console.warn("[daily-agent] unable to save quiz", error);
-      const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
-      return { quiz: fallbackQuiz, generated: false, run: null };
+      await saveAgentRun(pipelineResult.run);
+      return {
+        quiz: before?.quiz || null,
+        generated: false,
+        run: summarizeRunForApi(pipelineResult.run)
+      };
     }
 
     pipelineResult.run.createdQuiz = !before;

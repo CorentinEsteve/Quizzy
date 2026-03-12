@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDailyQuiz,
-  buildFallbackQuestions,
   buildRuleDraftQuestions,
   verifyQuestions
 } from "../src/agenticDailyQuiz.js";
@@ -94,31 +93,52 @@ test("verifyQuestions accepts correctly grounded questions and rejects tampered 
   assert.equal(result.rejected.length, 1);
 });
 
-test("buildDailyQuiz and buildFallbackQuestions create a complete daily payload", () => {
-  const pool = [
-    {
-      id: "f1",
-      prompt: { en: "Q1", fr: "Q1" },
-      options: { en: ["A", "B", "C", "D"], fr: ["A", "B", "C", "D"] },
-      answer: 0
-    }
-  ];
-
-  const fallback = buildFallbackQuestions({
+test("buildDailyQuiz creates a complete recent-news daily payload", () => {
+  const [question] = buildRuleDraftQuestions({
     dateKey: "2026-03-12",
-    pool,
+    newsItems: [
+      {
+        title: "Alpha summit opens in Geneva",
+        link: "https://news/a",
+        description: "Leaders meet in Geneva for a new summit.",
+        publishedAt: "2026-03-12T06:00:00Z",
+        source: "Feed A"
+      },
+      {
+        title: "Beta markets close higher",
+        link: "https://news/b",
+        description: "Stocks finish the day higher.",
+        publishedAt: "2026-03-12T05:00:00Z",
+        source: "Feed B"
+      },
+      {
+        title: "Gamma mission launches",
+        link: "https://news/c",
+        description: "A space mission launches successfully.",
+        publishedAt: "2026-03-12T04:00:00Z",
+        source: "Feed C"
+      },
+      {
+        title: "Delta election heads to runoff",
+        link: "https://news/d",
+        description: "The election will go to a runoff vote.",
+        publishedAt: "2026-03-12T03:00:00Z",
+        source: "Feed D"
+      }
+    ],
     count: 1
   });
 
   const quiz = buildDailyQuiz({
     dateKey: "2026-03-12",
-    questions: fallback,
+    questions: [question],
     runId: "run_1",
-    mode: "fallback_only",
+    mode: "rules_only",
     generatedAt: "2026-03-12T08:00:00Z"
   });
 
   assert.equal(quiz.id, "daily_2026-03-12");
   assert.equal(quiz.questions.length, 1);
   assert.equal(quiz.meta.runId, "run_1");
+  assert.equal(quiz.subtitle, "1 recent news questions");
 });

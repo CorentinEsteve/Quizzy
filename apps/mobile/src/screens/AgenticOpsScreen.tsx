@@ -43,6 +43,13 @@ function formatDateLabel(value: string | null) {
   return dt.toLocaleString();
 }
 
+function formatShortDate(value: string | null) {
+  if (!value) return "-";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString();
+}
+
 function cloneQuestions(questions: ReviewQuestion[]) {
   return questions.map((question) => ({
     ...question,
@@ -78,10 +85,13 @@ export function AgenticOpsScreen({
   const latestRun = activeRun || runs[0] || null;
   const latestRefresh = new Date().toLocaleTimeString();
   const [draftQuestions, setDraftQuestions] = useState<ReviewQuestion[]>([]);
+  const latestQuiz = status?.latestQuiz || null;
+  const publishedSourceCount = latestQuiz?.sources?.length || 0;
+  const publishedTopicCount = latestQuiz?.topics?.length || 0;
 
   useEffect(() => {
-    setDraftQuestions(cloneQuestions(status?.latestQuiz?.questions || []));
-  }, [status?.latestQuiz?.runId, status?.latestQuiz?.generatedAt, status?.latestQuiz?.questions]);
+    setDraftQuestions(cloneQuestions(latestQuiz?.questions || []));
+  }, [latestQuiz?.runId, latestQuiz?.generatedAt, latestQuiz?.questions]);
 
   return (
     <View style={styles.page}>
@@ -148,6 +158,11 @@ export function AgenticOpsScreen({
         <GlassCard style={styles.card}>
           <Text style={styles.sectionTitle}>{t(locale, "agenticOpsHowItWorksTitle")}</Text>
           <Text style={styles.bodyText}>{t(locale, "agenticOpsHowItWorksBody")}</Text>
+          <View style={styles.ruleList}>
+            <Text style={styles.ruleItem}>{`\u2022 ${t(locale, "agenticOpsRuleRecentOnly")}`}</Text>
+            <Text style={styles.ruleItem}>{`\u2022 ${t(locale, "agenticOpsRuleNoRepeats")}`}</Text>
+            <Text style={styles.ruleItem}>{`\u2022 ${t(locale, "agenticOpsRuleNoBank")}`}</Text>
+          </View>
           <View style={styles.kvRow}>
             <Text style={styles.kvKey}>{t(locale, "agenticOpsOpenAiConfigured")}</Text>
             <Text style={styles.kvValue}>
@@ -159,6 +174,32 @@ export function AgenticOpsScreen({
             <Text style={styles.kvValue}>{status?.config.model ?? "-"}</Text>
           </View>
           <Text style={styles.helperText}>{t(locale, "agenticOpsAfterRunBody")}</Text>
+        </GlassCard>
+
+        <GlassCard style={styles.card}>
+          <Text style={styles.sectionTitle}>{t(locale, "agenticOpsPublishedSummary")}</Text>
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>{t(locale, "agenticOpsPublishedCount")}</Text>
+              <Text style={styles.metricValue}>{draftQuestions.length}</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>{t(locale, "agenticOpsSourceCount")}</Text>
+              <Text style={styles.metricValue}>{publishedSourceCount}</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>{t(locale, "agenticOpsTopicCount")}</Text>
+              <Text style={styles.metricValue}>{publishedTopicCount}</Text>
+            </View>
+          </View>
+          <View style={styles.kvRow}>
+            <Text style={styles.kvKey}>{t(locale, "agenticOpsPublishedAt")}</Text>
+            <Text style={styles.kvValue}>{formatDateLabel(latestQuiz?.generatedAt || null)}</Text>
+          </View>
+          <View style={styles.kvRow}>
+            <Text style={styles.kvKey}>{t(locale, "agenticOpsMode")}</Text>
+            <Text style={styles.kvValue}>{modeLabel(locale, latestQuiz?.mode || "-")}</Text>
+          </View>
         </GlassCard>
 
         <GlassCard style={styles.card}>
@@ -200,8 +241,16 @@ export function AgenticOpsScreen({
                 <Text style={styles.kvValue}>{latestRun.summary.verifiedQuestions ?? 0}</Text>
               </View>
               <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsEligibleNewsItems")}</Text>
+                <Text style={styles.kvValue}>{latestRun.summary.eligibleNewsItems ?? 0}</Text>
+              </View>
+              <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>{t(locale, "agenticOpsFallbackQuestions")}</Text>
                 <Text style={styles.kvValue}>{latestRun.summary.fallbackQuestions ?? 0}</Text>
+              </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsRepeatedStoriesSkipped")}</Text>
+                <Text style={styles.kvValue}>{latestRun.summary.repeatedStoriesSkipped ?? 0}</Text>
               </View>
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>{t(locale, "agenticOpsLlmAttempted")}</Text>
@@ -245,6 +294,15 @@ export function AgenticOpsScreen({
         <GlassCard style={styles.card}>
           <Text style={styles.sectionTitle}>{t(locale, "agenticOpsPublishedQuiz")}</Text>
           <Text style={styles.helperText}>{t(locale, "agenticOpsPublishedQuizBody")}</Text>
+          {latestQuiz?.topics?.length ? (
+            <View style={styles.tagWrap}>
+              {latestQuiz.topics.slice(0, 6).map((topic) => (
+                <View key={topic} style={styles.tagChip}>
+                  <Text style={styles.tagText}>{topic}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {draftQuestions.length ? (
             <>
               {draftQuestions.map((question, index) => (
@@ -328,8 +386,10 @@ export function AgenticOpsScreen({
                     ))}
                   </View>
                   <Text style={styles.sourceText}>
-                    {question.sourceName || "-"} {question.sourceUrl ? `· ${question.sourceUrl}` : ""}
+                    {question.sourceName || "-"} · {formatShortDate(question.sourcePublishedAt)}
                   </Text>
+                  {question.topic ? <Text style={styles.topicText}>{question.topic}</Text> : null}
+                  {question.sourceUrl ? <Text style={styles.linkText}>{question.sourceUrl}</Text> : null}
                 </View>
               ))}
               <PrimaryButton
@@ -477,6 +537,15 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: theme.colors.ink
   },
+  ruleList: {
+    gap: 4
+  },
+  ruleItem: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.ink
+  },
   helperText: {
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
@@ -612,6 +681,36 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: 11,
     color: theme.colors.muted
+  },
+  topicText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    color: theme.colors.ink,
+    fontWeight: "600"
+  },
+  linkText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    color: theme.colors.primary
+  },
+  tagWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs
+  },
+  tagChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(94,124,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(94,124,255,0.22)"
+  },
+  tagText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    color: theme.colors.primary,
+    fontWeight: "600"
   },
   runRow: {
     flexDirection: "row",
