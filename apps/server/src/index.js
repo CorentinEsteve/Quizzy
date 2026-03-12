@@ -12,6 +12,17 @@ import { quizzes } from "./quizzes.js";
 import { computeAnswerStats, computeDailyCounts, computeScore, sanitizeQuiz } from "./quizLogic.js";
 import { Resend } from "resend";
 import { sendNativePush } from "./push.js";
+import {
+  buildDailyQuiz,
+  buildFallbackQuestions,
+  buildRuleDraftQuestions,
+  estimateCostUsd,
+  fetchNewsItems,
+  rewriteDraftWithLlm,
+  summarizeRunForApi,
+  summarizeTopics,
+  verifyQuestions
+} from "./agenticDailyQuiz.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -43,9 +54,43 @@ const MAX_ROOM_PLAYERS =
   configuredMaxRoomPlayers >= MIN_MULTIPLAYER_ROOM_CAPACITY
     ? configuredMaxRoomPlayers
     : 8;
+const DAILY_AGENT_RUNS_TABLE = "daily_quiz_agent_runs";
+const DAILY_AGENT_MODEL = process.env.DAILY_AGENT_MODEL || "gpt-4.1-mini";
+const DAILY_AGENT_OPENAI_KEY = process.env.OPENAI_API_KEY || "";
+const DAILY_AGENT_OPENAI_BASE_URL =
+  process.env.DAILY_AGENT_OPENAI_BASE_URL || "https://api.openai.com/v1/responses";
+const DAILY_AGENT_INPUT_COST_PER_1M = Number(process.env.OPENAI_INPUT_COST_PER_1M || 0.3);
+const DAILY_AGENT_OUTPUT_COST_PER_1M = Number(process.env.OPENAI_OUTPUT_COST_PER_1M || 1.2);
+const DAILY_AGENT_RUN_HISTORY_LIMIT = 60;
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
+
+const inMemoryAgentRuns = [];
+const dailyGenerationLocks = new Map();
+let agentRunsTableAvailable = true;
+
+function isRelationMissing(error, relationName) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("relation") &&
+    message.includes(String(relationName || "").toLowerCase()) &&
+    message.includes("does not exist")
+  );
+}
+
+function pushAgentRunInMemory(record) {
+  inMemoryAgentRuns.unshift(record);
+  if (inMemoryAgentRuns.length > DAILY_AGENT_RUN_HISTORY_LIMIT) {
+    inMemoryAgentRuns.length = DAILY_AGENT_RUN_HISTORY_LIMIT;
+  }
+}
+
+function roundMoney(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return 0;
+  return Number(amount.toFixed(6));
+}
 
 const rateBuckets = new Map();
 function rateLimit({ windowMs, max }) {
@@ -262,45 +307,436 @@ function hydrateQuizAnswers(quiz) {
 }
 
 async function getDailyQuiz(dateKey) {
-  const { data } = await supabase
-    .from("daily_quizzes")
-    .select("quiz_json")
-    .eq("date", dateKey)
-    .maybeSingle();
-  if (data?.quiz_json) {
-    if (typeof data.quiz_json === "string") {
-      try {
-        return hydrateQuizAnswers(JSON.parse(data.quiz_json));
-      } catch (_err) {
-        // fall through to recreate
-      }
-    } else {
-      return hydrateQuizAnswers(data.quiz_json);
-    }
-  }
+  const result = await ensureDailyQuizGenerated(dateKey);
+  return result?.quiz || null;
+}
 
+function buildSeededFallbackDailyQuiz(dateKey, runId = null) {
   const pool = quizzes.flatMap((quiz) => quiz.questions);
   if (pool.length === 0) return null;
-  const selected = seededShuffle(pool, dateKey).slice(0, 10);
-  const count = selected.length;
-  const dailyQuiz = {
+  const fallbackQuestions = seededShuffle(pool, `${dateKey}:legacy-fallback`)
+    .slice(0, 10)
+    .map((question, index) => ({
+      ...question,
+      id: `fallback_${dateKey}_${String(index + 1).padStart(2, "0")}_${question.id}`,
+      agentMeta: {
+        sourceName: "Fallback quiz bank",
+        sourceUrl: "",
+        sourcePublishedAt: null,
+        topic: question.prompt?.en || "Fallback topic",
+        verificationMode: "banked_question"
+      }
+    }));
+  return {
     id: `daily_${dateKey}`,
     categoryId: "daily",
     categoryLabel: "Daily Quiz",
-    title: "Daily Quiz",
-    subtitle: `${count} questions`,
-    rounds: count,
+    title: "Daily News Quiz",
+    subtitle: `${fallbackQuestions.length} fallback questions`,
+    rounds: fallbackQuestions.length,
     accent: "#F3B74E",
-    questions: selected
+    questions: fallbackQuestions,
+    meta: {
+      generationMode: "fallback_only",
+      generatedAt: nowIso(),
+      runId,
+      topics: [],
+      sources: ["Fallback quiz bank"]
+    }
   };
+}
 
-  await supabase.from("daily_quizzes").upsert({
-    date: dateKey,
-    quiz_json: dailyQuiz,
-    created_at: nowIso()
+async function readStoredDailyQuiz(dateKey) {
+  const { data, error } = await supabase
+    .from("daily_quizzes")
+    .select("quiz_json, created_at")
+    .eq("date", dateKey)
+    .maybeSingle();
+  if (error) {
+    console.warn("[daily] unable to read stored quiz", error);
+    return null;
+  }
+  if (!data?.quiz_json) return null;
+  if (typeof data.quiz_json === "string") {
+    try {
+      return { quiz: hydrateQuizAnswers(JSON.parse(data.quiz_json)), createdAt: data.created_at || null };
+    } catch (_err) {
+      return null;
+    }
+  }
+  return { quiz: hydrateQuizAnswers(data.quiz_json), createdAt: data.created_at || null };
+}
+
+function createAgentStep(id, agent, inputCount = 0) {
+  return {
+    id,
+    agent,
+    status: "running",
+    inputCount,
+    outputCount: 0,
+    model: null,
+    estimatedCostUsd: 0,
+    startedAt: nowIso(),
+    finishedAt: null,
+    durationMs: 0,
+    notes: ""
+  };
+}
+
+function completeAgentStep(step, patch = {}) {
+  const finishedAt = nowIso();
+  const durationMs =
+    new Date(finishedAt).getTime() - new Date(step.startedAt).getTime();
+  return {
+    ...step,
+    ...patch,
+    finishedAt,
+    durationMs: Number.isFinite(durationMs) ? durationMs : 0
+  };
+}
+
+function buildDraftWithPossibleRewrite(ruleDraft, rewrittenCandidates) {
+  if (!Array.isArray(ruleDraft) || ruleDraft.length === 0) return [];
+  const byId = new Map(
+    (rewrittenCandidates || []).map((item) => [item.id, item])
+  );
+  return ruleDraft.map((question) => {
+    const rewritten = byId.get(question.id);
+    if (!rewritten?.prompt?.en) return question;
+    return {
+      ...question,
+      prompt: {
+        en: rewritten.prompt.en,
+        fr: rewritten.prompt.fr || rewritten.prompt.en
+      }
+    };
+  });
+}
+
+function buildRunRecordBase(dateKey, trigger) {
+  return {
+    runId: `${dateKey}-${randomBytes(6).toString("hex")}`,
+    quizDate: dateKey,
+    trigger: trigger || "auto",
+    status: "running",
+    mode: "rules_only",
+    startedAt: nowIso(),
+    finishedAt: null,
+    durationMs: 0,
+    createdQuiz: false,
+    updatedQuiz: false,
+    estimatedCostUsd: 0,
+    error: null,
+    summary: {},
+    steps: []
+  };
+}
+
+async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
+  const run = buildRunRecordBase(dateKey, trigger);
+  const quizPool = quizzes.flatMap((quiz) => quiz.questions);
+  let newsItems = [];
+  let feedStats = { feedCount: 0, succeededFeeds: 0, failedFeeds: 0 };
+  let ruleDraft = [];
+  let draftQuestions = [];
+  let verified = { accepted: [], rejected: [] };
+  let llmUsed = false;
+
+  try {
+    const scoutStep = createAgentStep("scout", "Scout Agent");
+    run.steps.push(scoutStep);
+    const scout = await fetchNewsItems({});
+    newsItems = scout.items || [];
+    feedStats = {
+      feedCount: scout.feedCount || 0,
+      succeededFeeds: scout.succeededFeeds || 0,
+      failedFeeds: scout.failedFeeds || 0
+    };
+    run.steps[run.steps.length - 1] = completeAgentStep(scoutStep, {
+      status: "ok",
+      outputCount: newsItems.length,
+      notes: `Fetched ${newsItems.length} headlines from ${feedStats.succeededFeeds}/${feedStats.feedCount} feeds`
+    });
+
+    const draftStep = createAgentStep("draft", "Draft Agent", newsItems.length);
+    run.steps.push(draftStep);
+    ruleDraft = buildRuleDraftQuestions({ dateKey, newsItems, count: 10 });
+    draftQuestions = ruleDraft;
+
+    if (DAILY_AGENT_OPENAI_KEY && ruleDraft.length > 0) {
+      const rewritten = await rewriteDraftWithLlm({
+        draftQuestions: ruleDraft,
+        dateKey,
+        apiKey: DAILY_AGENT_OPENAI_KEY,
+        model: DAILY_AGENT_MODEL,
+        endpoint: DAILY_AGENT_OPENAI_BASE_URL
+      });
+      if (rewritten.questions?.length > 0) {
+        llmUsed = true;
+        draftQuestions = buildDraftWithPossibleRewrite(ruleDraft, rewritten.questions);
+      }
+      const llmCost = estimateCostUsd(rewritten.usage, {
+        inputPer1M: DAILY_AGENT_INPUT_COST_PER_1M,
+        outputPer1M: DAILY_AGENT_OUTPUT_COST_PER_1M
+      });
+      run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
+        status: "ok",
+        outputCount: draftQuestions.length,
+        model: llmUsed ? DAILY_AGENT_MODEL : null,
+        estimatedCostUsd: llmCost,
+        notes: llmUsed ? "LLM rewrite applied on rule draft" : "Rule-based drafting",
+      });
+    } else {
+      run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
+        status: "ok",
+        outputCount: draftQuestions.length,
+        notes: "Rule-based drafting"
+      });
+    }
+
+    const verifyStep = createAgentStep("verify", "Verifier Agent", draftQuestions.length);
+    run.steps.push(verifyStep);
+    verified = verifyQuestions({
+      questions: draftQuestions,
+      newsItems
+    });
+    run.steps[run.steps.length - 1] = completeAgentStep(verifyStep, {
+      status: "ok",
+      outputCount: verified.accepted.length,
+      notes: `${verified.accepted.length} accepted, ${verified.rejected.length} rejected`
+    });
+
+    const editorStep = createAgentStep("editor", "Editor Agent", verified.accepted.length);
+    run.steps.push(editorStep);
+    const fallbackCount = Math.max(10 - verified.accepted.length, 0);
+    const fallback = fallbackCount
+      ? buildFallbackQuestions({
+          dateKey,
+          pool: quizPool,
+          count: fallbackCount,
+          startIndex: verified.accepted.length + 1
+        })
+      : [];
+    const finalQuestions = [...verified.accepted, ...fallback].slice(0, 10);
+    run.mode =
+      verified.accepted.length === 0
+        ? "fallback_only"
+        : llmUsed
+          ? "llm_assisted"
+          : "rules_only";
+    const finalQuiz = buildDailyQuiz({
+      dateKey,
+      questions: finalQuestions,
+      runId: run.runId,
+      mode: run.mode,
+      generatedAt: nowIso()
+    });
+    run.steps[run.steps.length - 1] = completeAgentStep(editorStep, {
+      status: "ok",
+      outputCount: finalQuestions.length,
+      notes:
+        fallback.length > 0
+          ? `Published ${finalQuestions.length} questions (${fallback.length} fallback)`
+          : `Published ${finalQuestions.length} questions`
+    });
+
+    run.status = "ok";
+    run.finishedAt = nowIso();
+    run.durationMs = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
+    run.estimatedCostUsd = roundMoney(
+      run.steps.reduce((sum, step) => sum + Number(step.estimatedCostUsd || 0), 0)
+    );
+    run.summary = {
+      feedCount: feedStats.feedCount,
+      succeededFeeds: feedStats.succeededFeeds,
+      failedFeeds: feedStats.failedFeeds,
+      headlinesFetched: newsItems.length,
+      draftedQuestions: ruleDraft.length,
+      verifiedQuestions: verified.accepted.length,
+      fallbackQuestions: Math.max(10 - verified.accepted.length, 0),
+      topics: summarizeTopics(newsItems, 8)
+    };
+    return { run, quiz: finalQuiz };
+  } catch (error) {
+    run.status = "failed";
+    run.error = error instanceof Error ? error.message : "Unknown pipeline error";
+    run.finishedAt = nowIso();
+    run.durationMs = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
+    run.summary = {
+      feedCount: feedStats.feedCount,
+      succeededFeeds: feedStats.succeededFeeds,
+      failedFeeds: feedStats.failedFeeds,
+      headlinesFetched: newsItems.length,
+      draftedQuestions: ruleDraft.length,
+      verifiedQuestions: verified.accepted.length,
+      fallbackQuestions: 10,
+      topics: summarizeTopics(newsItems, 8)
+    };
+    const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, run.runId);
+    return { run, quiz: fallbackQuiz };
+  }
+}
+
+function normalizeRunRow(row) {
+  const parseJson = (value) => {
+    if (!value) return null;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch (_err) {
+        return null;
+      }
+    }
+    return value;
+  };
+  return summarizeRunForApi({
+    runId: row.run_id,
+    quizDate: row.quiz_date,
+    status: row.status,
+    mode: row.mode,
+    trigger: row.trigger,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    durationMs: row.duration_ms,
+    createdQuiz: row.created_quiz,
+    updatedQuiz: row.updated_quiz,
+    estimatedCostUsd: row.estimated_cost_usd,
+    error: row.error_text,
+    summary: parseJson(row.summary_json) || {},
+    steps: parseJson(row.steps_json) || []
+  });
+}
+
+async function saveAgentRun(run) {
+  const summarized = summarizeRunForApi(run);
+  pushAgentRunInMemory(summarized);
+  if (!agentRunsTableAvailable) return;
+  const payload = {
+    run_id: run.runId,
+    quiz_date: run.quizDate,
+    status: run.status,
+    mode: run.mode,
+    trigger: run.trigger,
+    started_at: run.startedAt,
+    finished_at: run.finishedAt,
+    duration_ms: run.durationMs,
+    created_quiz: Boolean(run.createdQuiz),
+    updated_quiz: Boolean(run.updatedQuiz),
+    estimated_cost_usd: roundMoney(run.estimatedCostUsd),
+    error_text: run.error || null,
+    summary_json: run.summary || {},
+    steps_json: run.steps || []
+  };
+  const { error } = await supabase.from(DAILY_AGENT_RUNS_TABLE).insert(payload);
+  if (error) {
+    if (isRelationMissing(error, DAILY_AGENT_RUNS_TABLE)) {
+      agentRunsTableAvailable = false;
+      return;
+    }
+    console.warn("[daily-agent] unable to save run", error);
+  }
+}
+
+async function listAgentRuns(limit = 12) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), DAILY_AGENT_RUN_HISTORY_LIMIT);
+  if (!agentRunsTableAvailable) {
+    return inMemoryAgentRuns.slice(0, safeLimit);
+  }
+  const { data, error } = await supabase
+    .from(DAILY_AGENT_RUNS_TABLE)
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(safeLimit);
+  if (error) {
+    if (isRelationMissing(error, DAILY_AGENT_RUNS_TABLE)) {
+      agentRunsTableAvailable = false;
+      return inMemoryAgentRuns.slice(0, safeLimit);
+    }
+    console.warn("[daily-agent] unable to read run history", error);
+    return inMemoryAgentRuns.slice(0, safeLimit);
+  }
+  return (data || []).map((row) => normalizeRunRow(row));
+}
+
+async function ensureDailyQuizGenerated(dateKey, options = {}) {
+  const { force = false, trigger = "auto" } = options;
+  const existingLock = dailyGenerationLocks.get(dateKey);
+  if (existingLock) return existingLock;
+
+  const task = (async () => {
+    if (!force) {
+      const existing = await readStoredDailyQuiz(dateKey);
+      if (existing?.quiz) {
+        return { quiz: existing.quiz, generated: false, run: null };
+      }
+    }
+
+    const before = await readStoredDailyQuiz(dateKey);
+    const pipelineResult = await runAgenticDailyPipeline(dateKey, trigger);
+    const quizToSave = pipelineResult.quiz || buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
+    if (!quizToSave) return { quiz: null, generated: false, run: null };
+
+    const { error } = await supabase.from("daily_quizzes").upsert({
+      date: dateKey,
+      quiz_json: quizToSave,
+      created_at: nowIso()
+    });
+    if (error) {
+      console.warn("[daily-agent] unable to save quiz", error);
+      const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
+      return { quiz: fallbackQuiz, generated: false, run: null };
+    }
+
+    pipelineResult.run.createdQuiz = !before;
+    pipelineResult.run.updatedQuiz = Boolean(before);
+    await saveAgentRun(pipelineResult.run);
+
+    return {
+      quiz: hydrateQuizAnswers(quizToSave),
+      generated: true,
+      run: summarizeRunForApi(pipelineResult.run)
+    };
+  })().finally(() => {
+    dailyGenerationLocks.delete(dateKey);
   });
 
-  return hydrateQuizAnswers(dailyQuiz);
+  dailyGenerationLocks.set(dateKey, task);
+  return task;
+}
+
+async function getAgenticDailyStatus(dateKey, limit = 12) {
+  const runs = await listAgentRuns(limit);
+  const storedQuiz = await readStoredDailyQuiz(dateKey);
+  const latestQuiz = storedQuiz?.quiz
+    ? {
+        id: storedQuiz.quiz.id,
+        title: storedQuiz.quiz.title,
+        subtitle: storedQuiz.quiz.subtitle,
+        rounds: storedQuiz.quiz.rounds,
+        generatedAt: storedQuiz.quiz?.meta?.generatedAt || storedQuiz.createdAt || null,
+        runId: storedQuiz.quiz?.meta?.runId || null,
+        mode: storedQuiz.quiz?.meta?.generationMode || "unknown",
+        topics: Array.isArray(storedQuiz.quiz?.meta?.topics) ? storedQuiz.quiz.meta.topics : [],
+        sources: Array.isArray(storedQuiz.quiz?.meta?.sources) ? storedQuiz.quiz.meta.sources : []
+      }
+    : null;
+  const todayRuns = runs.filter((run) => run.quizDate === dateKey);
+  return {
+    date: dateKey,
+    latestQuiz,
+    activeRun: null,
+    runs,
+    totals: {
+      runCount: runs.length,
+      todayRunCount: todayRuns.length,
+      todayEstimatedCostUsd: roundMoney(
+        todayRuns.reduce((sum, run) => sum + Number(run.estimatedCostUsd || 0), 0)
+      ),
+      allEstimatedCostUsd: roundMoney(
+        runs.reduce((sum, run) => sum + Number(run.estimatedCostUsd || 0), 0)
+      )
+    }
+  };
 }
 
 async function getDailyAnswers(dateKey, userId) {
@@ -1297,6 +1733,43 @@ app.get("/daily-quiz/history", authMiddleware, async (req, res) => {
 
   res.json({ history });
 });
+
+app.get("/daily-quiz/agentic/status", authMiddleware, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 30);
+  const tzOffset = Number(req.query.tzOffset);
+  const dateKey = todayKey(tzOffset);
+  const status = await getAgenticDailyStatus(dateKey, limit);
+  res.json(status);
+});
+
+app.post(
+  "/daily-quiz/agentic/run",
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 8 }),
+  async (req, res) => {
+    const requestedDate = typeof req.body?.date === "string" ? req.body.date.trim() : "";
+    const tzOffset = Number(req.body?.tzOffset);
+    const dateKey =
+      /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayKey(tzOffset);
+    const force = req.body?.force !== false;
+
+    const generated = await ensureDailyQuizGenerated(dateKey, {
+      force,
+      trigger: "manual"
+    });
+    if (!generated?.quiz) {
+      return res.status(500).json({ error: "Unable to generate daily quiz" });
+    }
+    const status = await getAgenticDailyStatus(dateKey, 12);
+    res.json({
+      date: dateKey,
+      generated: generated.generated,
+      run: generated.run,
+      quiz: generated.quiz,
+      status
+    });
+  }
+);
 
 app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), async (req, res) => {
   const { email, password, displayName, country } = req.body;

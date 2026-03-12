@@ -25,6 +25,7 @@ import { InputField } from "../components/InputField";
 import { localizedCategoryLabel } from "../data/categories";
 import { resolveMaxRoomPlayers } from "../roomConfig";
 import {
+  AgenticStatusResponse,
   DailyQuizResults,
   DailyQuizStatus,
   LeaderboardResponse,
@@ -70,8 +71,11 @@ type Props = {
   dailyQuiz: DailyQuizStatus | null;
   dailyResults: DailyQuizResults | null;
   dailyLoading: boolean;
+  agenticStatus: AgenticStatusResponse | null;
+  agenticLoading: boolean;
   onOpenDailyQuiz: () => void;
   onOpenDailyResults: () => void;
+  onOpenAgenticOps: () => void;
   playEntryAnimation?: boolean;
   entryRevealReady?: boolean;
   onEntryAnimationEnd?: () => void;
@@ -145,8 +149,11 @@ export function LobbyScreen({
   dailyQuiz,
   dailyResults,
   dailyLoading,
+  agenticStatus,
+  agenticLoading,
   onOpenDailyQuiz,
   onOpenDailyResults,
+  onOpenAgenticOps,
   playEntryAnimation = false,
   entryRevealReady = true,
   onEntryAnimationEnd
@@ -375,6 +382,7 @@ export function LobbyScreen({
       : t(locale, "dailyQuizPlay");
   const showDailyCard = Boolean(dailyQuiz) || dailyLoading;
   const handleDailyPress = dailyCompleted ? onOpenDailyResults : onOpenDailyQuiz;
+  const latestAgentRun = agenticStatus?.runs?.[0] ?? null;
   const topGlobalEntries = (leaderboardGlobal?.entries ?? []).slice(0, 3);
   const topGlobalPreview = Array.from({ length: 3 }, (_, index) => topGlobalEntries[index] ?? null);
   const myGlobalRank = leaderboardGlobal?.me?.rank ?? null;
@@ -1454,6 +1462,37 @@ export function LobbyScreen({
             )}
           </GlassCard>
         ) : null}
+
+        <GlassCard style={[styles.introCard, styles.activityCardLight]}>
+          <View style={styles.sectionHeading}>
+            <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
+              <FontAwesome name="cogs" size={16} color={theme.colors.primary} />
+            </View>
+            <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>
+              {t(locale, "agenticOpsEntryTitle")}
+            </Text>
+          </View>
+          <Text style={styles.shareSubtitle}>{t(locale, "agenticOpsEntrySubtitle")}</Text>
+          <View style={styles.agenticOpsMetaRow}>
+            <Text style={styles.agenticOpsMetaText}>
+              {latestAgentRun
+                ? `${latestAgentRun.status} · ${latestAgentRun.mode} · $${Number(
+                    latestAgentRun.estimatedCostUsd || 0
+                  ).toFixed(4)}`
+                : t(locale, "agenticOpsNoRuns")}
+            </Text>
+            {agenticLoading ? (
+              <ActivityIndicator color={theme.colors.primary} size="small" />
+            ) : null}
+          </View>
+          <PrimaryButton
+            label={t(locale, "agenticOpsOpen")}
+            icon="line-chart"
+            iconPosition="right"
+            onPress={onOpenAgenticOps}
+            style={styles.agenticOpsButton}
+          />
+        </GlassCard>
 
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
           <GlassCard style={[styles.introCard, styles.activityCardLight]}>
@@ -2566,6 +2605,22 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     marginTop: 4,
     lineHeight: 19
+  },
+  agenticOpsMetaRow: {
+    marginTop: theme.spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  agenticOpsMetaText: {
+    flex: 1,
+    color: "rgba(35, 49, 96, 0.82)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  agenticOpsButton: {
+    marginTop: theme.spacing.sm
   },
   shareArrowPill: {
     width: 24,

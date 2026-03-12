@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config";
 import {
+  AgenticStatusResponse,
   BadgesResponse,
   DailyQuizResults,
   DailyQuizStatus,
@@ -173,6 +174,39 @@ export async function fetchDailyHistory(token: string, limit = 7) {
   });
   await ensureOk(response, "Unable to load daily history", { authRequired: true });
   return response.json() as Promise<{ history: DailyQuizHistoryItem[] }>;
+}
+
+export async function fetchAgenticStatus(token: string, limit = 12) {
+  const tzOffset = new Date().getTimezoneOffset();
+  const response = await fetch(
+    `${API_BASE_URL}/daily-quiz/agentic/status?limit=${limit}&tzOffset=${tzOffset}`,
+    {
+      headers: { Authorization: `Bearer ${token}` }
+    }
+  );
+  await ensureOk(response, "Unable to load agentic status", { authRequired: true });
+  return response.json() as Promise<AgenticStatusResponse>;
+}
+
+export async function runAgenticDaily(token: string, payload?: { date?: string; force?: boolean }) {
+  const response = await fetch(`${API_BASE_URL}/daily-quiz/agentic/run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      ...payload,
+      tzOffset: new Date().getTimezoneOffset()
+    })
+  });
+  await ensureOk(response, "Unable to run daily agentic pipeline", { authRequired: true });
+  return response.json() as Promise<{
+    date: string;
+    generated: boolean;
+    run: AgenticStatusResponse["runs"][number] | null;
+    status: AgenticStatusResponse;
+  }>;
 }
 
 export async function createRoom(

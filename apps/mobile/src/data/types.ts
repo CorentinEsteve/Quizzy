@@ -208,3 +208,66 @@ export type DailyQuizHistoryItem = {
   percentile: number | null;
   rank: number | null;
 };
+
+export type AgenticRunStep = {
+  id: string;
+  agent: string;
+  status: string;
+  inputCount: number;
+  outputCount: number;
+  model: string | null;
+  estimatedCostUsd: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number;
+  notes?: string;
+};
+
+export type AgenticRun = {
+  runId: string;
+  quizDate: string;
+  status: string;
+  mode: string;
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number;
+  createdQuiz: boolean;
+  updatedQuiz: boolean;
+  estimatedCostUsd: number;
+  error: string | null;
+  summary: {
+    feedCount?: number;
+    succeededFeeds?: number;
+    failedFeeds?: number;
+    headlinesFetched?: number;
+    draftedQuestions?: number;
+    verifiedQuestions?: number;
+    fallbackQuestions?: number;
+    topics?: string[];
+  };
+  steps: AgenticRunStep[];
+};
+
+export type AgenticStatusResponse = {
+  date: string;
+  latestQuiz: {
+    id: string;
+    title: string;
+    subtitle: string;
+    rounds: number;
+    generatedAt: string | null;
+    runId: string | null;
+    mode: string;
+    topics: string[];
+    sources: string[];
+  } | null;
+  activeRun: AgenticRun | null;
+  runs: AgenticRun[];
+  totals: {
+    runCount: number;
+    todayRunCount: number;
+    todayEstimatedCostUsd: number;
+    allEstimatedCostUsd: number;
+  };
+};

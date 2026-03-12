@@ -38,6 +38,7 @@ import { PlayScreen } from "./src/screens/PlayScreen";
 import { ResultsScreen } from "./src/screens/ResultsScreen";
 import { DailyQuizScreen } from "./src/screens/DailyQuizScreen";
 import { DailyResultsScreen } from "./src/screens/DailyResultsScreen";
+import { AgenticOpsScreen } from "./src/screens/AgenticOpsScreen";
 import { EdgeSwipeBack } from "./src/components/EdgeSwipeBack";
 import {
   InAppNotification,
@@ -52,6 +53,7 @@ import {
   exportAccountData,
   fetchDailyQuiz,
   fetchDailyResults,
+  fetchAgenticStatus,
   fetchDailyHistory,
   fetchMe,
   fetchMyRooms,
@@ -72,6 +74,7 @@ import {
   requestPasswordReset,
   registerUser,
   registerPushDevice,
+  runAgenticDaily,
   submitDailyAnswer,
   unregisterPushDevice,
   updateEmail,
@@ -80,6 +83,7 @@ import {
 } from "./src/api";
 import { getRewardForResults } from "./src/data/rewards";
 import {
+  AgenticStatusResponse,
   BadgesResponse,
   DailyQuizHistoryItem,
   DailyQuizResults,
@@ -277,6 +281,10 @@ export default function App() {
   const [dailyStage, setDailyStage] = useState<"quiz" | "results" | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailySubmitting, setDailySubmitting] = useState(false);
+  const [agenticOpsOpen, setAgenticOpsOpen] = useState(false);
+  const [agenticStatus, setAgenticStatus] = useState<AgenticStatusResponse | null>(null);
+  const [agenticLoading, setAgenticLoading] = useState(false);
+  const [agenticRunning, setAgenticRunning] = useState(false);
   const lobbyBootstrapKeyRef = useRef<string | null>(null);
 
   const dailyStreaks = useMemo(() => {
@@ -386,10 +394,10 @@ export default function App() {
   const panelIndex = MAIN_PANELS.indexOf(panel);
   const activePanelIndex = panelIndex >= 0 ? panelIndex : 0;
   const swipeEnabled =
-    !loading && token && user && !room && !recapRoom && !dailyStage && hasSeenOnboarding;
+    !loading && token && user && !room && !recapRoom && !dailyStage && !agenticOpsOpen && hasSeenOnboarding;
   const panelSwipeEnabled = swipeEnabled && panelIndex >= 0;
   const showLobby = !loading && token && user && !room && hasSeenOnboarding;
-  const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom && !dailyStage;
+  const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom && !dailyStage && !agenticOpsOpen;
 
   const snapToIndex = useCallback(
     (index: number, animated = true, velocity = 0) => {
@@ -792,6 +800,7 @@ export default function App() {
           })
         ),
         settleWithin(refreshDailyQuiz()),
+        settleWithin(refreshAgenticStatus()),
         settleWithin(
           fetchLeaderboard(token, "global")
           .then((data) => {
@@ -843,6 +852,11 @@ export default function App() {
   useEffect(() => {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshDailyQuiz();
+  }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
+
+  useEffect(() => {
+    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
+    refreshAgenticStatus();
   }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
 
   useEffect(() => {
@@ -902,6 +916,23 @@ export default function App() {
         return null;
       })
       .finally(() => setDailyLoading(false));
+  }
+
+  function refreshAgenticStatus(showLoading = false) {
+    if (!token) return Promise.resolve(null);
+    if (showLoading) setAgenticLoading(true);
+    return fetchAgenticStatus(token, 20)
+      .then((data) => {
+        setAgenticStatus(data);
+        return data;
+      })
+      .catch((err) => {
+        handleAuthFailure(err);
+        return null;
+      })
+      .finally(() => {
+        if (showLoading) setAgenticLoading(false);
+      });
   }
 
   function refreshMyRooms() {
@@ -1304,6 +1335,7 @@ export default function App() {
   async function handleOpenDailyQuiz() {
     if (!token) return;
     setRoomError(null);
+    setAgenticOpsOpen(false);
     const data = await refreshDailyQuiz();
     if (!data) return;
     setDailyStage("quiz");
@@ -1312,6 +1344,7 @@ export default function App() {
   async function handleOpenDailyResults() {
     if (!token) return;
     setRoomError(null);
+    setAgenticOpsOpen(false);
     setDailyLoading(true);
     try {
       const results = await fetchDailyResults(token);
@@ -1332,6 +1365,37 @@ export default function App() {
 
   function handleCloseDaily() {
     setDailyStage(null);
+  }
+
+  function handleOpenAgenticOps() {
+    if (!token) return;
+    setRoomError(null);
+    setDailyStage(null);
+    setPanel("lobby");
+    setAgenticOpsOpen(true);
+    refreshAgenticStatus(true);
+  }
+
+  function handleCloseAgenticOps() {
+    setAgenticOpsOpen(false);
+  }
+
+  async function handleRunAgenticNow() {
+    if (!token || agenticRunning) return;
+    setRoomError(null);
+    setAgenticRunning(true);
+    setAgenticLoading(true);
+    try {
+      const result = await runAgenticDaily(token, { force: true });
+      setAgenticStatus(result.status);
+      await refreshDailyQuiz();
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    } finally {
+      setAgenticRunning(false);
+      setAgenticLoading(false);
+    }
   }
 
   async function handleDailyAnswer(questionId: string, answerIndex: number) {
@@ -1383,6 +1447,7 @@ export default function App() {
     if (!token) return;
     setRoomError(null);
     setDailyStage(null);
+    setAgenticOpsOpen(false);
     setLoading(true);
     try {
       const state = await createRoom(token, { categoryId, questionCount, mode });
@@ -1402,6 +1467,7 @@ export default function App() {
     if (!token) return;
     setRoomError(null);
     setDailyStage(null);
+    setAgenticOpsOpen(false);
     setLoading(true);
     try {
       const state = await joinRoom(token, code);
@@ -1421,6 +1487,7 @@ export default function App() {
     if (!token) return;
     setRoomError(null);
     setDailyStage(null);
+    setAgenticOpsOpen(false);
     try {
       const [roomData, summaryData] = await Promise.all([
         fetchRoom(token, code),
@@ -1441,6 +1508,7 @@ export default function App() {
     if (!token) return;
     setRoomError(null);
     setDailyStage(null);
+    setAgenticOpsOpen(false);
     try {
       const existing = myRooms.find((item) => item.code === code);
       const amParticipant =
@@ -1670,6 +1738,10 @@ export default function App() {
     setDailyResults(null);
     setDailyHistory([]);
     setDailyStage(null);
+    setAgenticOpsOpen(false);
+    setAgenticStatus(null);
+    setAgenticLoading(false);
+    setAgenticRunning(false);
     setLobbyBootstrapDone(false);
     setHasPlayedLobbyEntry(false);
     closedRoomCodesRef.current.clear();
@@ -1785,8 +1857,11 @@ export default function App() {
       dailyQuiz={dailyQuiz}
       dailyResults={dailyResults}
       dailyLoading={dailyLoading}
+      agenticStatus={agenticStatus}
+      agenticLoading={agenticLoading}
       onOpenDailyQuiz={handleOpenDailyQuiz}
       onOpenDailyResults={handleOpenDailyResults}
+      onOpenAgenticOps={handleOpenAgenticOps}
       playEntryAnimation={!hasPlayedLobbyEntry}
       entryRevealReady={lobbyBootstrapDone}
       onEntryAnimationEnd={() => setHasPlayedLobbyEntry(true)}
@@ -1803,6 +1878,7 @@ export default function App() {
             (!token && !restoringAuth) ||
             (!loading && token && user && !room && !hasSeenOnboarding) ||
             panel === "leaderboard" ||
+            agenticOpsOpen ||
             dailyStage === "quiz" ||
             dailyStage === "results" ||
             room?.status === "lobby" ||
@@ -1921,6 +1997,25 @@ export default function App() {
               badgesLoading={badgesLoading}
               recentReward={recentReward}
               onBack={() => goToLobby(true)}
+            />
+          </EdgeSwipeBack>
+        </View>
+      )}
+
+      {!loading && token && user && !room && agenticOpsOpen && (
+        <View style={styles.stackContainer}>
+          <View style={styles.stackUnderlay} pointerEvents="none">
+            {lobbyScreen}
+          </View>
+          <EdgeSwipeBack enabled onBack={handleCloseAgenticOps}>
+            <AgenticOpsScreen
+              locale={locale}
+              status={agenticStatus}
+              loading={agenticLoading}
+              running={agenticRunning}
+              onBack={handleCloseAgenticOps}
+              onRefresh={() => refreshAgenticStatus(true)}
+              onRunNow={handleRunAgenticNow}
             />
           </EdgeSwipeBack>
         </View>

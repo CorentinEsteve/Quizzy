@@ -21,6 +21,12 @@ For native push notifications (APNs/FCM), create the device table:
 psql "$SUPABASE_DB_URL" -f ../../docs/push-devices.sql
 ```
 
+For agentic daily quiz run history/cost tracking, apply Supabase migrations:
+```bash
+# includes daily_quiz_agent_runs
+psql "$SUPABASE_DB_URL" -f ../../supabase/migrations/20260312_daily_agent_runs.sql
+```
+
 Set required server env vars:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -37,6 +43,11 @@ And set push/email provider env vars only if you use these features:
 - `APNS_PRIVATE_KEY` (use `\n` escaped line breaks)
 - `APNS_BUNDLE_ID`
 - `APNS_USE_PRODUCTION` (`true` for App Store/TestFlight, `false` for sandbox)
+
+Optional for LLM-assisted daily agent rewriting:
+- `OPENAI_API_KEY`
+- `DAILY_AGENT_MODEL` (default: `gpt-4.1-mini`)
+- `OPENAI_INPUT_COST_PER_1M` and `OPENAI_OUTPUT_COST_PER_1M` (used for estimated cost display)
 
 ### Mobile
 ```bash
