@@ -120,12 +120,55 @@ function asLocalized(text) {
   return { en: safe, fr: safe };
 }
 
+function normalizeSentence(text) {
+  return String(text || "")
+    .replace(/["“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trimToWordBoundary(text, maxLength) {
+  const safe = normalizeSentence(text);
+  if (safe.length <= maxLength) return safe;
+  const sliced = safe.slice(0, maxLength + 1);
+  const boundary = sliced.lastIndexOf(" ");
+  const trimmed = boundary > 24 ? sliced.slice(0, boundary) : safe.slice(0, maxLength);
+  return `${trimmed.trim()}...`;
+}
+
+function compactHeadlineLabel(title, fallbackSource) {
+  const safe = normalizeSentence(title);
+  if (!safe) return fallbackSource || "Headline";
+
+  const candidates = [
+    safe.split(" - ")[0],
+    safe.includes(":") ? safe.split(":").slice(1).join(":").trim() : "",
+    safe.split("|")[0]
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const best = candidates
+    .sort((a, b) => a.length - b.length)
+    .find((item) => item.length >= 18 && item.length <= 64);
+
+  return trimToWordBoundary(best || safe, 60);
+}
+
 function buildQuestionContext(item) {
   const description = stripHtml(item?.description || "");
   if (description) {
     return description.slice(0, 180);
   }
   return String(item?.title || "").slice(0, 120);
+}
+
+function buildQuestionClue(item) {
+  const context = buildQuestionContext(item)
+    .replace(/^[-:,\s]+/, "")
+    .replace(/[.?!]\s.*$/, "")
+    .trim();
+  return trimToWordBoundary(context || item?.title || item?.source || "news story", 90);
 }
 
 export async function fetchNewsItems({
@@ -201,35 +244,55 @@ export function buildRuleDraftQuestions({ dateKey, newsItems, count = 10 }) {
   if (!Array.isArray(newsItems) || newsItems.length < 4) return [];
   const shuffled = seededShuffle(newsItems, `${dateKey}:rule-draft`);
   const picked = shuffled.slice(0, Math.min(shuffled.length, count));
+  const promptTemplates = [
+    (clue) => `Pick the headline that matches this clue: ${clue}`,
+    (clue) => `Which story fits this clue? ${clue}`,
+    (clue) => `Match this clue to the right headline: ${clue}`
+  ];
 
   return picked.map((item, index) => {
     const distractors = shuffled
       .filter((candidate) => candidate.link !== item.link)
       .slice(index + 1)
       .concat(shuffled.filter((candidate) => candidate.link !== item.link).slice(0, index + 1))
-      .slice(0, 3)
-      .map((candidate) => candidate.title);
+      .slice(0, 3);
 
-    const optionSet = seededShuffle([
-      item.title,
+    const fullOptionItems = [
+      item,
       ...(distractors.length >= 3
         ? distractors
-        : [...distractors, ...seededShuffle(shuffled.map((candidate) => candidate.title), `${item.link}:fallback`)].slice(0, 3))
-    ], `${dateKey}:${item.link}`).slice(0, 4);
+        : [
+            ...distractors,
+            ...seededShuffle(
+              shuffled.filter((candidate) => candidate.link !== item.link),
+              `${item.link}:fallback`
+            )
+          ].slice(0, 3))
+    ]
+      .slice(0, 4);
 
-    const answer = optionSet.findIndex((option) => option === item.title);
-    if (answer < 0 || optionSet.length < 4) return null;
+    const optionSet = seededShuffle(
+      fullOptionItems.map((candidate) => ({
+        title: candidate.title,
+        display: compactHeadlineLabel(candidate.title, candidate.source)
+      })),
+      `${dateKey}:${item.link}`
+    ).slice(0, 4);
 
-    const dateLabel = toDisplayDate(item.publishedAt);
-    const context = buildQuestionContext(item);
+    const uniqueDisplays = new Set(optionSet.map((option) => option.display.toLowerCase()));
+    if (optionSet.length < 4 || uniqueDisplays.size !== 4) return null;
+
+    const answer = optionSet.findIndex((option) => option.title === item.title);
+    if (answer < 0) return null;
+
+    const clue = buildQuestionClue(item);
+    const promptTemplate = promptTemplates[index % promptTemplates.length];
     return {
       id: `news_${dateKey}_${String(index + 1).padStart(2, "0")}`,
-      prompt: asLocalized(
-        `Which headline matches this ${item.source} story from ${dateLabel}: ${context}`
-      ),
+      prompt: asLocalized(promptTemplate(clue)),
       options: {
-        en: optionSet,
-        fr: optionSet
+        en: optionSet.map((option) => option.display),
+        fr: optionSet.map((option) => option.display)
       },
       answer,
       agentMeta: {
@@ -291,6 +354,29 @@ function extractOutputText(responseJson) {
   return "";
 }
 
+function extractStructuredPayload(responseJson) {
+  if (!responseJson || typeof responseJson !== "object") return null;
+  if (responseJson.output_parsed && typeof responseJson.output_parsed === "object") {
+    return responseJson.output_parsed;
+  }
+  const output = Array.isArray(responseJson.output) ? responseJson.output : [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+    const content = Array.isArray(item.content) ? item.content : [];
+    for (const chunk of content) {
+      if (!chunk || typeof chunk !== "object") continue;
+      if (chunk.parsed && typeof chunk.parsed === "object") return chunk.parsed;
+      if (chunk.json && typeof chunk.json === "object") return chunk.json;
+      if (typeof chunk.text === "string") {
+        const parsed = parseJsonText(chunk.text);
+        if (parsed) return parsed;
+      }
+    }
+  }
+  const textPayload = extractOutputText(responseJson);
+  return parseJsonText(textPayload);
+}
+
 export async function rewriteDraftWithLlm({
   draftQuestions,
   dateKey,
@@ -301,11 +387,19 @@ export async function rewriteDraftWithLlm({
   timeoutMs = 15000
 }) {
   if (!apiKey || !Array.isArray(draftQuestions) || draftQuestions.length === 0) {
-    return { questions: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
+    return {
+      questions: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      error: null
+    };
   }
   const resolvedFetch = fetchImpl || globalThis.fetch;
   if (typeof resolvedFetch !== "function") {
-    return { questions: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
+    return {
+      questions: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      error: "No fetch implementation available"
+    };
   }
 
   const compactInput = draftQuestions.map((question) => ({
@@ -332,6 +426,7 @@ export async function rewriteDraftWithLlm({
           format: {
             type: "json_schema",
             name: "daily_quiz_prompt_rewrites",
+            strict: true,
             schema: {
               type: "object",
               additionalProperties: false,
@@ -357,24 +452,33 @@ export async function rewriteDraftWithLlm({
           {
             role: "system",
             content:
-              "You rewrite quiz prompts for clarity. Preserve factual meaning. Do not rewrite options or answers."
+              "You rewrite quiz prompts into short, punchy multiple-choice quiz questions. Preserve factual meaning. Do not rewrite options or answers."
           },
           {
             role: "user",
-            content: `Date: ${dateKey}\nRewrite each question prompt to be concise and engaging. Return only the schema output with {questions:[{id,prompt}]}. Input: ${JSON.stringify(compactInput)}`
+            content:
+              `Date: ${dateKey}\n` +
+              "Rewrite each prompt as a short quiz clue. Keep each prompt under 90 characters when possible. " +
+              "Do not mention the source, date, or words like headline/story if avoidable. " +
+              "Return only JSON matching {questions:[{id,prompt}]}. " +
+              `Input: ${JSON.stringify(compactInput)}`
           }
         ]
       })
     });
 
     if (!response.ok) {
-      return { questions: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
+      const errorText = await response.text().catch(() => "");
+      return {
+        questions: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        error: `OpenAI request failed (${response.status}${errorText ? `: ${trimToWordBoundary(errorText, 180)}` : ""})`
+      };
     }
 
     const data = await response.json();
     const usage = getUsageTokens(data.usage);
-    const rawText = extractOutputText(data);
-    const parsed = parseJsonText(rawText);
+    const parsed = extractStructuredPayload(data);
     const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
     const normalized = questions
       .map((item) => {
@@ -388,7 +492,17 @@ export async function rewriteDraftWithLlm({
       })
       .filter(Boolean);
 
-    return { questions: normalized, usage };
+    return {
+      questions: normalized,
+      usage,
+      error: normalized.length > 0 ? null : "OpenAI response contained no parseable question rewrites"
+    };
+  } catch (error) {
+    return {
+      questions: [],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      error: error instanceof Error ? error.message : "Unknown OpenAI error"
+    };
   } finally {
     clearTimeout(timer);
   }

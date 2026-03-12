@@ -529,7 +529,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
         llmUsed = true;
         draftQuestions = buildDraftWithPossibleRewrite(ruleDraft, rewritten.questions);
       } else {
-        llmFailureReason = "OpenAI returned no usable prompt rewrites";
+        llmFailureReason = rewritten.error || "OpenAI returned no usable prompt rewrites";
       }
       const llmCost = estimateCostUsd(rewritten.usage, {
         inputPer1M: DAILY_AGENT_INPUT_COST_PER_1M,
