@@ -68,6 +68,7 @@ app.use(express.json());
 
 const inMemoryAgentRuns = [];
 const dailyGenerationLocks = new Map();
+const activeAgentRuns = new Map();
 let agentRunsTableAvailable = true;
 
 function isRelationMissing(error, relationName) {
@@ -432,7 +433,7 @@ function buildRunRecordBase(dateKey, trigger) {
   };
 }
 
-async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
+async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
   const run = buildRunRecordBase(dateKey, trigger);
   const quizPool = quizzes.flatMap((quiz) => quiz.questions);
   let newsItems = [];
@@ -441,8 +442,14 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
   let draftQuestions = [];
   let verified = { accepted: [], rejected: [] };
   let llmUsed = false;
+  const emitProgress = () => {
+    if (typeof onProgress === "function") {
+      onProgress(summarizeRunForApi(run));
+    }
+  };
 
   try {
+    emitProgress();
     const scoutStep = createAgentStep("scout", "Scout Agent");
     run.steps.push(scoutStep);
     const scout = await fetchNewsItems({});
@@ -457,6 +464,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
       outputCount: newsItems.length,
       notes: `Fetched ${newsItems.length} headlines from ${feedStats.succeededFeeds}/${feedStats.feedCount} feeds`
     });
+    emitProgress();
 
     const draftStep = createAgentStep("draft", "Draft Agent", newsItems.length);
     run.steps.push(draftStep);
@@ -493,6 +501,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
         notes: "Rule-based drafting"
       });
     }
+    emitProgress();
 
     const verifyStep = createAgentStep("verify", "Verifier Agent", draftQuestions.length);
     run.steps.push(verifyStep);
@@ -505,6 +514,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
       outputCount: verified.accepted.length,
       notes: `${verified.accepted.length} accepted, ${verified.rejected.length} rejected`
     });
+    emitProgress();
 
     const editorStep = createAgentStep("editor", "Editor Agent", verified.accepted.length);
     run.steps.push(editorStep);
@@ -539,6 +549,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
           ? `Published ${finalQuestions.length} questions (${fallback.length} fallback)`
           : `Published ${finalQuestions.length} questions`
     });
+    emitProgress();
 
     run.status = "ok";
     run.finishedAt = nowIso();
@@ -556,6 +567,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
       fallbackQuestions: Math.max(10 - verified.accepted.length, 0),
       topics: summarizeTopics(newsItems, 8)
     };
+    emitProgress();
     return { run, quiz: finalQuiz };
   } catch (error) {
     run.status = "failed";
@@ -572,6 +584,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto") {
       fallbackQuestions: 10,
       topics: summarizeTopics(newsItems, 8)
     };
+    emitProgress();
     const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, run.runId);
     return { run, quiz: fallbackQuiz };
   }
@@ -608,32 +621,36 @@ function normalizeRunRow(row) {
 }
 
 async function saveAgentRun(run) {
-  const summarized = summarizeRunForApi(run);
-  pushAgentRunInMemory(summarized);
-  if (!agentRunsTableAvailable) return;
-  const payload = {
-    run_id: run.runId,
-    quiz_date: run.quizDate,
-    status: run.status,
-    mode: run.mode,
-    trigger: run.trigger,
-    started_at: run.startedAt,
-    finished_at: run.finishedAt,
-    duration_ms: run.durationMs,
-    created_quiz: Boolean(run.createdQuiz),
-    updated_quiz: Boolean(run.updatedQuiz),
-    estimated_cost_usd: roundMoney(run.estimatedCostUsd),
-    error_text: run.error || null,
-    summary_json: run.summary || {},
-    steps_json: run.steps || []
-  };
-  const { error } = await supabase.from(DAILY_AGENT_RUNS_TABLE).insert(payload);
-  if (error) {
-    if (isRelationMissing(error, DAILY_AGENT_RUNS_TABLE)) {
-      agentRunsTableAvailable = false;
-      return;
+  try {
+    const summarized = summarizeRunForApi(run);
+    pushAgentRunInMemory(summarized);
+    if (!agentRunsTableAvailable) return;
+    const payload = {
+      run_id: run.runId,
+      quiz_date: run.quizDate,
+      status: run.status,
+      mode: run.mode,
+      trigger: run.trigger,
+      started_at: run.startedAt,
+      finished_at: run.finishedAt,
+      duration_ms: run.durationMs,
+      created_quiz: Boolean(run.createdQuiz),
+      updated_quiz: Boolean(run.updatedQuiz),
+      estimated_cost_usd: roundMoney(run.estimatedCostUsd),
+      error_text: run.error || null,
+      summary_json: run.summary || {},
+      steps_json: run.steps || []
+    };
+    const { error } = await supabase.from(DAILY_AGENT_RUNS_TABLE).insert(payload);
+    if (error) {
+      if (isRelationMissing(error, DAILY_AGENT_RUNS_TABLE)) {
+        agentRunsTableAvailable = false;
+        return;
+      }
+      console.warn("[daily-agent] unable to save run", error);
     }
-    console.warn("[daily-agent] unable to save run", error);
+  } catch (error) {
+    console.warn("[daily-agent] saveAgentRun threw unexpectedly", error);
   }
 }
 
@@ -672,7 +689,9 @@ async function ensureDailyQuizGenerated(dateKey, options = {}) {
     }
 
     const before = await readStoredDailyQuiz(dateKey);
-    const pipelineResult = await runAgenticDailyPipeline(dateKey, trigger);
+    const pipelineResult = await runAgenticDailyPipeline(dateKey, trigger, (progressRun) => {
+      activeAgentRuns.set(dateKey, progressRun);
+    });
     const quizToSave = pipelineResult.quiz || buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
     if (!quizToSave) return { quiz: null, generated: false, run: null };
 
@@ -691,13 +710,16 @@ async function ensureDailyQuizGenerated(dateKey, options = {}) {
     pipelineResult.run.updatedQuiz = Boolean(before);
     await saveAgentRun(pipelineResult.run);
 
-    return {
+    const result = {
       quiz: hydrateQuizAnswers(quizToSave),
       generated: true,
       run: summarizeRunForApi(pipelineResult.run)
     };
+    activeAgentRuns.delete(dateKey);
+    return result;
   })().finally(() => {
     dailyGenerationLocks.delete(dateKey);
+    activeAgentRuns.delete(dateKey);
   });
 
   dailyGenerationLocks.set(dateKey, task);
@@ -721,10 +743,11 @@ async function getAgenticDailyStatus(dateKey, limit = 12) {
       }
     : null;
   const todayRuns = runs.filter((run) => run.quizDate === dateKey);
+  const activeRun = activeAgentRuns.get(dateKey) || null;
   return {
     date: dateKey,
     latestQuiz,
-    activeRun: null,
+    activeRun,
     runs,
     totals: {
       runCount: runs.length,
@@ -1735,11 +1758,16 @@ app.get("/daily-quiz/history", authMiddleware, async (req, res) => {
 });
 
 app.get("/daily-quiz/agentic/status", authMiddleware, async (req, res) => {
-  const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 30);
-  const tzOffset = Number(req.query.tzOffset);
-  const dateKey = todayKey(tzOffset);
-  const status = await getAgenticDailyStatus(dateKey, limit);
-  res.json(status);
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 30);
+    const tzOffset = Number(req.query.tzOffset);
+    const dateKey = todayKey(tzOffset);
+    const status = await getAgenticDailyStatus(dateKey, limit);
+    res.json(status);
+  } catch (error) {
+    console.error("[daily-agent] status endpoint failed", error);
+    res.status(500).json({ error: "Unable to load agentic status" });
+  }
 });
 
 app.post(
@@ -1747,27 +1775,35 @@ app.post(
   authMiddleware,
   rateLimit({ windowMs: 60_000, max: 8 }),
   async (req, res) => {
-    const requestedDate = typeof req.body?.date === "string" ? req.body.date.trim() : "";
-    const tzOffset = Number(req.body?.tzOffset);
-    const dateKey =
-      /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayKey(tzOffset);
-    const force = req.body?.force !== false;
+    try {
+      const requestedDate = typeof req.body?.date === "string" ? req.body.date.trim() : "";
+      const tzOffset = Number(req.body?.tzOffset);
+      const dateKey =
+        /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayKey(tzOffset);
+      const force = req.body?.force !== false;
 
-    const generated = await ensureDailyQuizGenerated(dateKey, {
-      force,
-      trigger: "manual"
-    });
-    if (!generated?.quiz) {
-      return res.status(500).json({ error: "Unable to generate daily quiz" });
+      const generated = await ensureDailyQuizGenerated(dateKey, {
+        force,
+        trigger: "manual"
+      });
+      if (!generated?.quiz) {
+        return res.status(500).json({ error: "Unable to generate daily quiz" });
+      }
+      const status = await getAgenticDailyStatus(dateKey, 12);
+      res.json({
+        date: dateKey,
+        generated: generated.generated,
+        run: generated.run,
+        quiz: generated.quiz,
+        status
+      });
+    } catch (error) {
+      console.error("[daily-agent] run endpoint failed", error);
+      res.status(500).json({
+        error: "Unable to run daily agentic pipeline",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    const status = await getAgenticDailyStatus(dateKey, 12);
-    res.json({
-      date: dateKey,
-      generated: generated.generated,
-      run: generated.run,
-      quiz: generated.quiz,
-      status
-    });
   }
 );
 

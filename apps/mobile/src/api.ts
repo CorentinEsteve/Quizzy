@@ -36,11 +36,15 @@ async function ensureOk(
 ) {
   if (response.ok) return;
   const message = await response.json().catch(() => ({}));
+  const details =
+    typeof message?.details === "string" && message.details.trim()
+      ? ` (${message.details.trim()})`
+      : "";
   const isAuth = response.status === 401 || response.status === 403;
   if (options?.authRequired && isAuth) {
-    throw new AuthError(message.error || "Unauthorized");
+    throw new AuthError((message.error || "Unauthorized") + details);
   }
-  throw new Error(message.error || fallbackMessage);
+  throw new Error((message.error || fallbackMessage) + details);
 }
 
 export async function registerUser(
