@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,20 +14,25 @@ import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { InputField } from "../components/InputField";
 import { AgenticStatusResponse } from "../data/types";
+
+type ReviewQuestion = NonNullable<AgenticStatusResponse["latestQuiz"]>["questions"][number];
 
 type Props = {
   locale: Locale;
   status: AgenticStatusResponse | null;
   loading: boolean;
   running: boolean;
+  saving: boolean;
   onBack: () => void;
   onRefresh: () => void;
   onRunNow: () => void;
+  onSaveQuiz: (questions: ReviewQuestion[]) => void;
 };
 
 function formatUsd(value: number) {
-  if (!Number.isFinite(value)) return "$0.00";
+  if (!Number.isFinite(value)) return "$0.0000";
   return `$${value.toFixed(4)}`;
 }
 
@@ -38,20 +43,45 @@ function formatDateLabel(value: string | null) {
   return dt.toLocaleString();
 }
 
+function cloneQuestions(questions: ReviewQuestion[]) {
+  return questions.map((question) => ({
+    ...question,
+    prompt: { ...question.prompt },
+    options: {
+      en: [...question.options.en],
+      fr: [...question.options.fr]
+    }
+  }));
+}
+
+function modeLabel(locale: Locale, mode: string) {
+  if (mode === "llm_assisted") return t(locale, "agenticOpsModeLlm");
+  if (mode === "rules_only") return t(locale, "agenticOpsModeRules");
+  if (mode === "fallback_only") return t(locale, "agenticOpsModeFallback");
+  return mode;
+}
+
 export function AgenticOpsScreen({
   locale,
   status,
   loading,
   running,
+  saving,
   onBack,
   onRefresh,
-  onRunNow
+  onRunNow,
+  onSaveQuiz
 }: Props) {
   const insets = useSafeAreaInsets();
   const runs = status?.runs || [];
   const activeRun = status?.activeRun || null;
   const latestRun = activeRun || runs[0] || null;
   const latestRefresh = new Date().toLocaleTimeString();
+  const [draftQuestions, setDraftQuestions] = useState<ReviewQuestion[]>([]);
+
+  useEffect(() => {
+    setDraftQuestions(cloneQuestions(status?.latestQuiz?.questions || []));
+  }, [status?.latestQuiz?.runId, status?.latestQuiz?.generatedAt, status?.latestQuiz?.questions]);
 
   return (
     <View style={styles.page}>
@@ -85,11 +115,7 @@ export function AgenticOpsScreen({
           {running || activeRun ? (
             <View style={styles.liveRow}>
               <ActivityIndicator size="small" color={theme.colors.reward} />
-              <Text style={styles.liveText}>
-                {running || activeRun?.status === "running"
-                  ? t(locale, "agenticOpsRunning")
-                  : activeRun?.status || "running"}
-              </Text>
+              <Text style={styles.liveText}>{t(locale, "agenticOpsRunning")}</Text>
             </View>
           ) : null}
           <View style={styles.metricsRow}>
@@ -113,12 +139,26 @@ export function AgenticOpsScreen({
             icon={running ? "spinner" : "play"}
             iconPosition="right"
             onPress={onRunNow}
-            disabled={running}
+            disabled={running || saving}
             style={styles.runButton}
           />
-          <Text style={styles.refreshText}>
-            Last refresh: {latestRefresh}
-          </Text>
+          <Text style={styles.refreshText}>{t(locale, "agenticOpsRefreshAt", { time: latestRefresh })}</Text>
+        </GlassCard>
+
+        <GlassCard style={styles.card}>
+          <Text style={styles.sectionTitle}>{t(locale, "agenticOpsHowItWorksTitle")}</Text>
+          <Text style={styles.bodyText}>{t(locale, "agenticOpsHowItWorksBody")}</Text>
+          <View style={styles.kvRow}>
+            <Text style={styles.kvKey}>{t(locale, "agenticOpsOpenAiConfigured")}</Text>
+            <Text style={styles.kvValue}>
+              {status?.config.openAiConfigured ? t(locale, "agenticOpsYes") : t(locale, "agenticOpsNo")}
+            </Text>
+          </View>
+          <View style={styles.kvRow}>
+            <Text style={styles.kvKey}>{t(locale, "agenticOpsModelLabel")}</Text>
+            <Text style={styles.kvValue}>{status?.config.model ?? "-"}</Text>
+          </View>
+          <Text style={styles.helperText}>{t(locale, "agenticOpsAfterRunBody")}</Text>
         </GlassCard>
 
         <GlassCard style={styles.card}>
@@ -131,7 +171,7 @@ export function AgenticOpsScreen({
               </View>
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>{t(locale, "agenticOpsMode")}</Text>
-                <Text style={styles.kvValue}>{latestRun.mode}</Text>
+                <Text style={styles.kvValue}>{modeLabel(locale, latestRun.mode)}</Text>
               </View>
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>{t(locale, "agenticOpsStarted")}</Text>
@@ -151,10 +191,30 @@ export function AgenticOpsScreen({
                   {latestRun.createdQuiz
                     ? t(locale, "agenticOpsCreated")
                     : latestRun.updatedQuiz
-                    ? t(locale, "agenticOpsUpdated")
-                    : t(locale, "agenticOpsNoChange")}
+                      ? t(locale, "agenticOpsUpdated")
+                      : t(locale, "agenticOpsNoChange")}
                 </Text>
               </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsVerifiedQuestions")}</Text>
+                <Text style={styles.kvValue}>{latestRun.summary.verifiedQuestions ?? 0}</Text>
+              </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsFallbackQuestions")}</Text>
+                <Text style={styles.kvValue}>{latestRun.summary.fallbackQuestions ?? 0}</Text>
+              </View>
+              <View style={styles.kvRow}>
+                <Text style={styles.kvKey}>{t(locale, "agenticOpsLlmAttempted")}</Text>
+                <Text style={styles.kvValue}>
+                  {latestRun.summary.llmAttempted ? t(locale, "agenticOpsYes") : t(locale, "agenticOpsNo")}
+                </Text>
+              </View>
+              {latestRun.summary.llmFailureReason ? (
+                <View style={styles.noteBox}>
+                  <Text style={styles.noteTitle}>{t(locale, "agenticOpsWhyThisMode")}</Text>
+                  <Text style={styles.noteText}>{latestRun.summary.llmFailureReason}</Text>
+                </View>
+              ) : null}
             </>
           ) : (
             <Text style={styles.muted}>{t(locale, "agenticOpsNoRuns")}</Text>
@@ -171,7 +231,7 @@ export function AgenticOpsScreen({
                   <Text style={styles.stepTitle}>{step.agent}</Text>
                   <Text style={styles.stepMeta}>
                     {step.status} · in {step.inputCount} · out {step.outputCount} ·{" "}
-                    {step.durationMs ? `${step.durationMs} ms` : "in progress"}
+                    {step.durationMs ? `${step.durationMs} ms` : t(locale, "agenticOpsInProgress")}
                   </Text>
                   {step.notes ? <Text style={styles.stepMeta}>{step.notes}</Text> : null}
                 </View>
@@ -179,6 +239,110 @@ export function AgenticOpsScreen({
             ))
           ) : (
             <Text style={styles.muted}>{t(locale, "agenticOpsNoTimeline")}</Text>
+          )}
+        </GlassCard>
+
+        <GlassCard style={styles.card}>
+          <Text style={styles.sectionTitle}>{t(locale, "agenticOpsPublishedQuiz")}</Text>
+          <Text style={styles.helperText}>{t(locale, "agenticOpsPublishedQuizBody")}</Text>
+          {draftQuestions.length ? (
+            <>
+              {draftQuestions.map((question, index) => (
+                <View key={question.id} style={styles.questionCard}>
+                  <View style={styles.questionHeader}>
+                    <Text style={styles.questionTitle}>
+                      {t(locale, "agenticOpsQuestionN", { number: index + 1 })}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        setDraftQuestions((current) => current.filter((item) => item.id !== question.id));
+                      }}
+                      style={styles.removeButton}
+                    >
+                      <FontAwesome name="trash" size={14} color={theme.colors.danger} />
+                    </Pressable>
+                  </View>
+                  <InputField
+                    label={t(locale, "agenticOpsPrompt")}
+                    value={question.prompt.en}
+                    onChangeText={(value) => {
+                      setDraftQuestions((current) =>
+                        current.map((item) =>
+                          item.id === question.id
+                            ? { ...item, prompt: { ...item.prompt, en: value, fr: value } }
+                            : item
+                        )
+                      );
+                    }}
+                  />
+                  {question.options.en.map((option, optionIndex) => (
+                    <InputField
+                      key={`${question.id}-option-${optionIndex}`}
+                      label={t(locale, "agenticOpsOptionN", { number: optionIndex + 1 })}
+                      value={option}
+                      onChangeText={(value) => {
+                        setDraftQuestions((current) =>
+                          current.map((item) => {
+                            if (item.id !== question.id) return item;
+                            const nextEn = [...item.options.en];
+                            const nextFr = [...item.options.fr];
+                            nextEn[optionIndex] = value;
+                            nextFr[optionIndex] = value;
+                            return {
+                              ...item,
+                              options: {
+                                en: nextEn,
+                                fr: nextFr
+                              }
+                            };
+                          })
+                        );
+                      }}
+                    />
+                  ))}
+                  <View style={styles.answerRow}>
+                    {[0, 1, 2, 3].map((answerIndex) => (
+                      <Pressable
+                        key={`${question.id}-answer-${answerIndex}`}
+                        onPress={() => {
+                          setDraftQuestions((current) =>
+                            current.map((item) =>
+                              item.id === question.id ? { ...item, answer: answerIndex } : item
+                            )
+                          );
+                        }}
+                        style={[
+                          styles.answerChip,
+                          question.answer === answerIndex && styles.answerChipActive
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.answerChipText,
+                            question.answer === answerIndex && styles.answerChipTextActive
+                          ]}
+                        >
+                          {t(locale, "agenticOpsCorrectOption", { number: answerIndex + 1 })}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.sourceText}>
+                    {question.sourceName || "-"} {question.sourceUrl ? `· ${question.sourceUrl}` : ""}
+                  </Text>
+                </View>
+              ))}
+              <PrimaryButton
+                label={saving ? t(locale, "agenticOpsSaving") : t(locale, "agenticOpsSaveQuiz")}
+                icon="save"
+                iconPosition="right"
+                onPress={() => onSaveQuiz(draftQuestions)}
+                disabled={saving || running}
+                style={styles.runButton}
+              />
+            </>
+          ) : (
+            <Text style={styles.muted}>{t(locale, "agenticOpsNoQuestions")}</Text>
           )}
         </GlassCard>
 
@@ -193,7 +357,7 @@ export function AgenticOpsScreen({
                 <View style={styles.runCopy}>
                   <Text style={styles.runTitle}>{run.quizDate}</Text>
                   <Text style={styles.runMeta}>
-                    {run.mode} · {run.durationMs} ms · {formatUsd(run.estimatedCostUsd)}
+                    {modeLabel(locale, run.mode)} · {run.durationMs} ms · {formatUsd(run.estimatedCostUsd)}
                   </Text>
                 </View>
               </View>
@@ -307,6 +471,18 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontWeight: "700"
   },
+  bodyText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.ink
+  },
+  helperText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.muted
+  },
   muted: {
     fontFamily: theme.typography.fontFamily,
     fontSize: 13,
@@ -331,6 +507,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.ink,
     fontWeight: "600"
+  },
+  noteBox: {
+    backgroundColor: "rgba(255, 246, 221, 0.9)",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(243, 183, 78, 0.45)",
+    padding: theme.spacing.sm
+  },
+  noteTitle: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.ink
+  },
+  noteText: {
+    marginTop: 4,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    color: theme.colors.ink
   },
   stepRow: {
     flexDirection: "row",
@@ -358,6 +553,64 @@ const styles = StyleSheet.create({
   stepMeta: {
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
+    color: theme.colors.muted
+  },
+  questionCard: {
+    backgroundColor: "rgba(255,255,255,0.66)",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(17, 31, 84, 0.08)",
+    padding: theme.spacing.sm,
+    gap: theme.spacing.sm
+  },
+  questionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  questionTitle: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.ink
+  },
+  removeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(235, 87, 87, 0.08)"
+  },
+  answerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs
+  },
+  answerChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(17,31,84,0.14)",
+    backgroundColor: "rgba(255,255,255,0.9)"
+  },
+  answerChipActive: {
+    backgroundColor: "rgba(94,124,255,0.14)",
+    borderColor: "rgba(94,124,255,0.34)"
+  },
+  answerChipText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    color: theme.colors.ink
+  },
+  answerChipTextActive: {
+    color: theme.colors.primary,
+    fontWeight: "700"
+  },
+  sourceText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
     color: theme.colors.muted
   },
   runRow: {

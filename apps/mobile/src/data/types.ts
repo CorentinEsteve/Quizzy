@@ -245,6 +245,11 @@ export type AgenticRun = {
     verifiedQuestions?: number;
     fallbackQuestions?: number;
     topics?: string[];
+    llmConfigured?: boolean;
+    llmAttempted?: boolean;
+    llmUsed?: boolean;
+    llmReturnedQuestions?: number;
+    llmFailureReason?: string | null;
   };
   steps: AgenticRunStep[];
 };
@@ -261,9 +266,24 @@ export type AgenticStatusResponse = {
     mode: string;
     topics: string[];
     sources: string[];
+    questions: {
+      id: string;
+      prompt: LocalizedText;
+      options: LocalizedOptions;
+      answer: number | null;
+      sourceName: string | null;
+      sourceUrl: string | null;
+      sourcePublishedAt: string | null;
+      topic: string | null;
+      verificationMode: string | null;
+    }[];
   } | null;
   activeRun: AgenticRun | null;
   runs: AgenticRun[];
+  config: {
+    openAiConfigured: boolean;
+    model: string;
+  };
   totals: {
     runCount: number;
     todayRunCount: number;

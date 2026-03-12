@@ -77,6 +77,7 @@ import {
   runAgenticDaily,
   submitDailyAnswer,
   unregisterPushDevice,
+  updateAgenticDailyQuiz,
   updateEmail,
   updateProfile,
   updatePassword
@@ -285,6 +286,7 @@ export default function App() {
   const [agenticStatus, setAgenticStatus] = useState<AgenticStatusResponse | null>(null);
   const [agenticLoading, setAgenticLoading] = useState(false);
   const [agenticRunning, setAgenticRunning] = useState(false);
+  const [agenticSaving, setAgenticSaving] = useState(false);
   const lobbyBootstrapKeyRef = useRef<string | null>(null);
 
   const dailyStreaks = useMemo(() => {
@@ -1407,6 +1409,24 @@ export default function App() {
     }
   }
 
+  async function handleSaveAgenticQuiz(
+    questions: NonNullable<AgenticStatusResponse["latestQuiz"]>["questions"]
+  ) {
+    if (!token || agenticSaving) return;
+    setRoomError(null);
+    setAgenticSaving(true);
+    try {
+      const result = await updateAgenticDailyQuiz(token, { questions });
+      setAgenticStatus(result.status);
+      await refreshDailyQuiz();
+    } catch (err) {
+      if (handleAuthFailure(err)) return;
+      setRoomError(err instanceof Error ? err.message : t(locale, "roomError"));
+    } finally {
+      setAgenticSaving(false);
+    }
+  }
+
   async function handleDailyAnswer(questionId: string, answerIndex: number) {
     if (!token || !dailyQuiz || dailySubmitting) return;
     if (dailyAnswersMap[questionId] !== undefined) return;
@@ -1751,6 +1771,7 @@ export default function App() {
     setAgenticStatus(null);
     setAgenticLoading(false);
     setAgenticRunning(false);
+    setAgenticSaving(false);
     setLobbyBootstrapDone(false);
     setHasPlayedLobbyEntry(false);
     closedRoomCodesRef.current.clear();
@@ -2037,9 +2058,11 @@ export default function App() {
                 status={agenticStatus}
                 loading={agenticLoading}
                 running={agenticRunning}
+                saving={agenticSaving}
                 onBack={handleCloseAgenticOps}
                 onRefresh={() => refreshAgenticStatus(true)}
                 onRunNow={handleRunAgenticNow}
+                onSaveQuiz={handleSaveAgenticQuiz}
               />
             </View>
           </EdgeSwipeBack>

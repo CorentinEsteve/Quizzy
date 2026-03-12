@@ -213,6 +213,32 @@ export async function runAgenticDaily(token: string, payload?: { date?: string; 
   }>;
 }
 
+export async function updateAgenticDailyQuiz(
+  token: string,
+  payload: {
+    date?: string;
+    questions: NonNullable<AgenticStatusResponse["latestQuiz"]>["questions"];
+  }
+) {
+  const response = await fetch(`${API_BASE_URL}/daily-quiz/agentic/quiz`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      ...payload,
+      tzOffset: new Date().getTimezoneOffset()
+    })
+  });
+  await ensureOk(response, "Unable to update daily quiz", { authRequired: true });
+  return response.json() as Promise<{
+    ok: boolean;
+    date: string;
+    status: AgenticStatusResponse;
+  }>;
+}
+
 export async function createRoom(
   token: string,
   payload: {

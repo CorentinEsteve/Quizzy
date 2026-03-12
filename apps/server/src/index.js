@@ -93,6 +93,17 @@ function roundMoney(value) {
   return Number(amount.toFixed(6));
 }
 
+function isAgenticAdminUser(req) {
+  return String(req?.user?.email || "").trim().toLowerCase() === "nova@me.com";
+}
+
+function requireAgenticAdmin(req, res, next) {
+  if (!isAgenticAdminUser(req)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  return next();
+}
+
 const rateBuckets = new Map();
 function rateLimit({ windowMs, max }) {
   return (req, res, next) => {
@@ -368,6 +379,31 @@ async function readStoredDailyQuiz(dateKey) {
   return { quiz: hydrateQuizAnswers(data.quiz_json), createdAt: data.created_at || null };
 }
 
+function buildAgenticQuizReview(quiz) {
+  if (!quiz || !Array.isArray(quiz.questions)) return [];
+  return quiz.questions.map((question) => ({
+    id: question.id,
+    prompt: question.prompt,
+    options: question.options,
+    answer: typeof question.answer === "number" ? question.answer : null,
+    sourceName: question.agentMeta?.sourceName || null,
+    sourceUrl: question.agentMeta?.sourceUrl || null,
+    sourcePublishedAt: question.agentMeta?.sourcePublishedAt || null,
+    topic: question.agentMeta?.topic || null,
+    verificationMode: question.agentMeta?.verificationMode || null
+  }));
+}
+
+async function saveDailyQuizRecord(dateKey, quiz) {
+  const payload = {
+    date: dateKey,
+    quiz_json: quiz,
+    created_at: nowIso()
+  };
+  const { error } = await supabase.from("daily_quizzes").upsert(payload);
+  return error || null;
+}
+
 function createAgentStep(id, agent, inputCount = 0) {
   return {
     id,
@@ -428,7 +464,13 @@ function buildRunRecordBase(dateKey, trigger) {
     updatedQuiz: false,
     estimatedCostUsd: 0,
     error: null,
-    summary: {},
+    summary: {
+      llmConfigured: Boolean(DAILY_AGENT_OPENAI_KEY),
+      llmAttempted: false,
+      llmUsed: false,
+      llmReturnedQuestions: 0,
+      llmFailureReason: null
+    },
     steps: []
   };
 }
@@ -442,6 +484,8 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
   let draftQuestions = [];
   let verified = { accepted: [], rejected: [] };
   let llmUsed = false;
+  let llmFailureReason = null;
+  let llmReturnedQuestions = 0;
   const emitProgress = () => {
     if (typeof onProgress === "function") {
       onProgress(summarizeRunForApi(run));
@@ -472,6 +516,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     draftQuestions = ruleDraft;
 
     if (DAILY_AGENT_OPENAI_KEY && ruleDraft.length > 0) {
+      run.summary.llmAttempted = true;
       const rewritten = await rewriteDraftWithLlm({
         draftQuestions: ruleDraft,
         dateKey,
@@ -479,9 +524,12 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
         model: DAILY_AGENT_MODEL,
         endpoint: DAILY_AGENT_OPENAI_BASE_URL
       });
+      llmReturnedQuestions = rewritten.questions?.length || 0;
       if (rewritten.questions?.length > 0) {
         llmUsed = true;
         draftQuestions = buildDraftWithPossibleRewrite(ruleDraft, rewritten.questions);
+      } else {
+        llmFailureReason = "OpenAI returned no usable prompt rewrites";
       }
       const llmCost = estimateCostUsd(rewritten.usage, {
         inputPer1M: DAILY_AGENT_INPUT_COST_PER_1M,
@@ -492,13 +540,16 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
         outputCount: draftQuestions.length,
         model: llmUsed ? DAILY_AGENT_MODEL : null,
         estimatedCostUsd: llmCost,
-        notes: llmUsed ? "LLM rewrite applied on rule draft" : "Rule-based drafting",
+        notes: llmUsed
+          ? "OpenAI rewrite applied to draft prompts"
+          : `Rule-based drafting${llmFailureReason ? ` (${llmFailureReason})` : ""}`,
       });
     } else {
+      llmFailureReason = DAILY_AGENT_OPENAI_KEY ? "No questions available for rewrite" : "OPENAI_API_KEY not configured on server";
       run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
         status: "ok",
         outputCount: draftQuestions.length,
-        notes: "Rule-based drafting"
+        notes: `Rule-based drafting (${llmFailureReason})`
       });
     }
     emitProgress();
@@ -558,6 +609,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       run.steps.reduce((sum, step) => sum + Number(step.estimatedCostUsd || 0), 0)
     );
     run.summary = {
+      ...run.summary,
       feedCount: feedStats.feedCount,
       succeededFeeds: feedStats.succeededFeeds,
       failedFeeds: feedStats.failedFeeds,
@@ -565,7 +617,10 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
       fallbackQuestions: Math.max(10 - verified.accepted.length, 0),
-      topics: summarizeTopics(newsItems, 8)
+      topics: summarizeTopics(newsItems, 8),
+      llmUsed,
+      llmReturnedQuestions,
+      llmFailureReason
     };
     emitProgress();
     return { run, quiz: finalQuiz };
@@ -575,6 +630,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     run.finishedAt = nowIso();
     run.durationMs = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
     run.summary = {
+      ...run.summary,
       feedCount: feedStats.feedCount,
       succeededFeeds: feedStats.succeededFeeds,
       failedFeeds: feedStats.failedFeeds,
@@ -582,7 +638,10 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       draftedQuestions: ruleDraft.length,
       verifiedQuestions: verified.accepted.length,
       fallbackQuestions: 10,
-      topics: summarizeTopics(newsItems, 8)
+      topics: summarizeTopics(newsItems, 8),
+      llmUsed,
+      llmReturnedQuestions,
+      llmFailureReason
     };
     emitProgress();
     const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, run.runId);
@@ -695,11 +754,7 @@ async function ensureDailyQuizGenerated(dateKey, options = {}) {
     const quizToSave = pipelineResult.quiz || buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
     if (!quizToSave) return { quiz: null, generated: false, run: null };
 
-    const { error } = await supabase.from("daily_quizzes").upsert({
-      date: dateKey,
-      quiz_json: quizToSave,
-      created_at: nowIso()
-    });
+    const error = await saveDailyQuizRecord(dateKey, quizToSave);
     if (error) {
       console.warn("[daily-agent] unable to save quiz", error);
       const fallbackQuiz = buildSeededFallbackDailyQuiz(dateKey, pipelineResult.run.runId);
@@ -739,7 +794,8 @@ async function getAgenticDailyStatus(dateKey, limit = 12) {
         runId: storedQuiz.quiz?.meta?.runId || null,
         mode: storedQuiz.quiz?.meta?.generationMode || "unknown",
         topics: Array.isArray(storedQuiz.quiz?.meta?.topics) ? storedQuiz.quiz.meta.topics : [],
-        sources: Array.isArray(storedQuiz.quiz?.meta?.sources) ? storedQuiz.quiz.meta.sources : []
+        sources: Array.isArray(storedQuiz.quiz?.meta?.sources) ? storedQuiz.quiz.meta.sources : [],
+        questions: buildAgenticQuizReview(storedQuiz.quiz)
       }
     : null;
   const todayRuns = runs.filter((run) => run.quizDate === dateKey);
@@ -749,6 +805,10 @@ async function getAgenticDailyStatus(dateKey, limit = 12) {
     latestQuiz,
     activeRun,
     runs,
+    config: {
+      openAiConfigured: Boolean(DAILY_AGENT_OPENAI_KEY),
+      model: DAILY_AGENT_MODEL
+    },
     totals: {
       runCount: runs.length,
       todayRunCount: todayRuns.length,
@@ -1757,7 +1817,7 @@ app.get("/daily-quiz/history", authMiddleware, async (req, res) => {
   res.json({ history });
 });
 
-app.get("/daily-quiz/agentic/status", authMiddleware, async (req, res) => {
+app.get("/daily-quiz/agentic/status", authMiddleware, requireAgenticAdmin, async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 30);
     const tzOffset = Number(req.query.tzOffset);
@@ -1773,6 +1833,7 @@ app.get("/daily-quiz/agentic/status", authMiddleware, async (req, res) => {
 app.post(
   "/daily-quiz/agentic/run",
   authMiddleware,
+  requireAgenticAdmin,
   rateLimit({ windowMs: 60_000, max: 8 }),
   async (req, res) => {
     try {
@@ -1806,6 +1867,84 @@ app.post(
     }
   }
 );
+
+app.patch("/daily-quiz/agentic/quiz", authMiddleware, requireAgenticAdmin, async (req, res) => {
+  try {
+    const requestedDate = typeof req.body?.date === "string" ? req.body.date.trim() : "";
+    const dateKey =
+      /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayKey(Number(req.body?.tzOffset));
+    const questions = Array.isArray(req.body?.questions) ? req.body.questions : null;
+    if (!questions || questions.length === 0) {
+      return res.status(400).json({ error: "Questions are required" });
+    }
+
+    const existing = await readStoredDailyQuiz(dateKey);
+    if (!existing?.quiz) {
+      return res.status(404).json({ error: "Daily quiz not found" });
+    }
+
+    const validatedQuestions = questions.map((question, index) => {
+      const prompt = {
+        en: String(question?.prompt?.en || "").trim(),
+        fr: String(question?.prompt?.fr || question?.prompt?.en || "").trim()
+      };
+      const optionsEn = Array.isArray(question?.options?.en)
+        ? question.options.en.map((item) => String(item || "").trim())
+        : [];
+      const optionsFr = Array.isArray(question?.options?.fr)
+        ? question.options.fr.map((item) => String(item || "").trim())
+        : optionsEn;
+      const answer = Number(question?.answer);
+      if (!question?.id || !prompt.en || optionsEn.length !== 4 || !Number.isInteger(answer)) {
+        throw new Error(`Invalid question at position ${index + 1}`);
+      }
+      if (answer < 0 || answer >= 4) {
+        throw new Error(`Invalid answer index at position ${index + 1}`);
+      }
+      return {
+        ...question,
+        prompt,
+        options: {
+          en: optionsEn,
+          fr: optionsFr.length === 4 ? optionsFr : optionsEn
+        },
+        answer
+      };
+    });
+
+    const updatedQuiz = {
+      ...existing.quiz,
+      rounds: validatedQuestions.length,
+      subtitle: `${validatedQuestions.length} verified questions`,
+      questions: validatedQuestions,
+      meta: {
+        ...(existing.quiz.meta || {}),
+        reviewedAt: nowIso(),
+        reviewedBy: req.user.email || "unknown",
+        updatedByAdmin: true
+      }
+    };
+
+    const error = await saveDailyQuizRecord(dateKey, updatedQuiz);
+    if (error) {
+      throw error;
+    }
+
+    const status = await getAgenticDailyStatus(dateKey, 12);
+    res.json({
+      ok: true,
+      date: dateKey,
+      quiz: updatedQuiz,
+      status
+    });
+  } catch (error) {
+    console.error("[daily-agent] quiz review update failed", error);
+    res.status(500).json({
+      error: "Unable to update daily quiz",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
 
 app.post("/auth/register", rateLimit({ windowMs: 60_000, max: 15 }), async (req, res) => {
   const { email, password, displayName, country } = req.body;

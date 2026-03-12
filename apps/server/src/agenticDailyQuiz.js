@@ -120,6 +120,14 @@ function asLocalized(text) {
   return { en: safe, fr: safe };
 }
 
+function buildQuestionContext(item) {
+  const description = stripHtml(item?.description || "");
+  if (description) {
+    return description.slice(0, 180);
+  }
+  return String(item?.title || "").slice(0, 120);
+}
+
 export async function fetchNewsItems({
   fetchImpl,
   feeds = DEFAULT_FEEDS,
@@ -213,9 +221,12 @@ export function buildRuleDraftQuestions({ dateKey, newsItems, count = 10 }) {
     if (answer < 0 || optionSet.length < 4) return null;
 
     const dateLabel = toDisplayDate(item.publishedAt);
+    const context = buildQuestionContext(item);
     return {
       id: `news_${dateKey}_${String(index + 1).padStart(2, "0")}`,
-      prompt: asLocalized(`Which headline was reported by ${item.source} on ${dateLabel}?`),
+      prompt: asLocalized(
+        `Which headline matches this ${item.source} story from ${dateLabel}: ${context}`
+      ),
       options: {
         en: optionSet,
         fr: optionSet
@@ -317,15 +328,40 @@ export async function rewriteDraftWithLlm({
       },
       body: JSON.stringify({
         model: model || "gpt-4.1-mini",
+        text: {
+          format: {
+            type: "json_schema",
+            name: "daily_quiz_prompt_rewrites",
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                questions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      prompt: { type: "string" }
+                    },
+                    required: ["id", "prompt"]
+                  }
+                }
+              },
+              required: ["questions"]
+            }
+          }
+        },
         input: [
           {
             role: "system",
             content:
-              "You rewrite quiz questions for clarity. Preserve factual meaning and keep answer index unchanged. Return strict JSON only."
+              "You rewrite quiz prompts for clarity. Preserve factual meaning. Do not rewrite options or answers."
           },
           {
             role: "user",
-            content: `Date: ${dateKey}\nRewrite each question to be concise and engaging. Keep exactly 4 options. Keep answerIndex unchanged. Return JSON: {\"questions\":[{\"id\":string,\"prompt\":string,\"options\":string[4],\"answerIndex\":number}]}. Input: ${JSON.stringify(compactInput)}`
+            content: `Date: ${dateKey}\nRewrite each question prompt to be concise and engaging. Return only the schema output with {questions:[{id,prompt}]}. Input: ${JSON.stringify(compactInput)}`
           }
         ]
       })
@@ -342,19 +378,12 @@ export async function rewriteDraftWithLlm({
     const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
     const normalized = questions
       .map((item) => {
-        const options = Array.isArray(item?.options) ? item.options.map((entry) => String(entry || "").trim()) : [];
-        const answerIndex = Number(item?.answerIndex);
-        if (!item?.id || !item?.prompt || options.length !== 4 || !Number.isInteger(answerIndex)) {
+        if (!item?.id || !item?.prompt) {
           return null;
         }
         return {
           id: String(item.id),
-          prompt: asLocalized(String(item.prompt).trim()),
-          options: {
-            en: options,
-            fr: options
-          },
-          answer: answerIndex
+          prompt: asLocalized(String(item.prompt).trim())
         };
       })
       .filter(Boolean);
