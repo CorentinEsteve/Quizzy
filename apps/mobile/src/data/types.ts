@@ -253,6 +253,7 @@ export type AgenticRun = {
     llmUsed?: boolean;
     llmReturnedQuestions?: number;
     llmFailureReason?: string | null;
+    rejectedReasons?: Record<string, number>;
   };
   steps: AgenticRunStep[];
 };

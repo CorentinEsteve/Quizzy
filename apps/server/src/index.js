@@ -448,9 +448,37 @@ function buildDraftWithPossibleRewrite(ruleDraft, rewrittenCandidates) {
     (rewrittenCandidates || []).map((item) => [item.id, item])
   );
 
+  const tokenize = (text) =>
+    String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3);
+
+  const cleanPrompt = (value) =>
+    String(value || "")
+      .replace(/&[a-z0-9#]+;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const tokenOverlap = (a, b) => {
+    const setA = new Set(tokenize(a));
+    const setB = new Set(tokenize(b));
+    if (!setA.size || !setB.size) return 0;
+    let shared = 0;
+    for (const token of setA) {
+      if (setB.has(token)) shared += 1;
+    }
+    return shared / Math.max(setA.size, 1);
+  };
+
   const isUsableRewrite = (value) => {
-    const prompt = String(value || "").trim();
+    const prompt = cleanPrompt(value);
     if (!prompt || prompt.length < 16) return false;
+    if (prompt.length > 140) return false;
+    if (!/\?$/.test(prompt)) return false;
+    if (!/(which|pick|select|matches|fits|described)/i.test(prompt)) return false;
     if (/^(who|what|where|when|why|how)\b/i.test(prompt)) return false;
     return true;
   };
@@ -458,11 +486,13 @@ function buildDraftWithPossibleRewrite(ruleDraft, rewrittenCandidates) {
   return ruleDraft.map((question) => {
     const rewritten = byId.get(question.id);
     if (!rewritten?.prompt?.en || !isUsableRewrite(rewritten.prompt.en)) return question;
+    const cleaned = cleanPrompt(rewritten.prompt.en);
+    if (tokenOverlap(question.prompt?.en || "", cleaned) < 0.35) return question;
     return {
       ...question,
       prompt: {
-        en: rewritten.prompt.en,
-        fr: rewritten.prompt.fr || rewritten.prompt.en
+        en: cleaned,
+        fr: cleanPrompt(rewritten.prompt.fr || rewritten.prompt.en)
       }
     };
   });
@@ -487,7 +517,8 @@ function buildRunRecordBase(dateKey, trigger) {
       llmAttempted: false,
       llmUsed: false,
       llmReturnedQuestions: 0,
-      llmFailureReason: null
+      llmFailureReason: null,
+      rejectedReasons: {}
     },
     steps: []
   };
@@ -509,6 +540,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
   let llmUsed = false;
   let llmFailureReason = null;
   let llmReturnedQuestions = 0;
+  let rejectedReasons = {};
   const emitProgress = () => {
     if (typeof onProgress === "function") {
       onProgress(summarizeRunForApi(run));
@@ -591,6 +623,11 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       questions: draftQuestions,
       newsItems
     });
+    rejectedReasons = verified.rejected.reduce((acc, item) => {
+      const key = String(item?.reason || "unknown");
+      acc[key] = Number(acc[key] || 0) + 1;
+      return acc;
+    }, {});
     verified.accepted = verified.accepted.filter((question) => {
       const sourceUrl = String(question?.agentMeta?.sourceUrl || "").trim().toLowerCase();
       const topic = String(question?.agentMeta?.topic || "").trim().toLowerCase();
@@ -652,7 +689,8 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       topics: summarizeTopics(newsItems, 8),
       llmUsed,
       llmReturnedQuestions,
-      llmFailureReason
+      llmFailureReason,
+      rejectedReasons
     };
     emitProgress();
     return { run, quiz: finalQuiz };
@@ -676,7 +714,8 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       topics: summarizeTopics(newsItems, 8),
       llmUsed,
       llmReturnedQuestions,
-      llmFailureReason
+      llmFailureReason,
+      rejectedReasons
     };
     emitProgress();
     return { run, quiz: null };

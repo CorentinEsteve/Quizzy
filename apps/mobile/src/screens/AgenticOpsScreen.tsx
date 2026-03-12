@@ -268,6 +268,17 @@ export function AgenticOpsScreen({
                   <Text style={styles.noteText}>{latestRun.summary.llmFailureReason}</Text>
                 </View>
               ) : null}
+              {latestRun.summary.rejectedReasons &&
+              Object.keys(latestRun.summary.rejectedReasons).length > 0 ? (
+                <View style={styles.noteBox}>
+                  <Text style={styles.noteTitle}>{t(locale, "agenticOpsRejectedReasons")}</Text>
+                  <Text style={styles.noteText}>
+                    {Object.entries(latestRun.summary.rejectedReasons)
+                      .map(([reason, value]) => `${reason}: ${value}`)
+                      .join(" | ")}
+                  </Text>
+                </View>
+              ) : null}
             </>
           ) : (
             <Text style={styles.muted}>{t(locale, "agenticOpsNoRuns")}</Text>

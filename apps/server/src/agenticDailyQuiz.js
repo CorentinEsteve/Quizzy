@@ -50,7 +50,10 @@ function decodeEntities(value) {
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
     .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/\s+/g, " ")
@@ -151,6 +154,7 @@ function asLocalized(text) {
 
 function normalizeSentence(text) {
   return String(text || "")
+    .replace(/&[a-z0-9#]+;/gi, " ")
     .replace(/["“”]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -206,12 +210,61 @@ function buildQuestionClue(item) {
 function buildQuestionPrompt(item, index) {
   const clue = buildQuestionClue(item);
   const templates = [
-    (safeClue) => `Which recent story matches this clue: ${safeClue}`,
-    (safeClue) => `Which recent news story is this about: ${safeClue}`,
-    (safeClue) => `Pick the recent story behind this clue: ${safeClue}`,
-    (safeClue) => `Which recent event fits this clue: ${safeClue}`
+    (safeClue) => `Which headline matches this recent event: ${safeClue}?`,
+    (safeClue) => `Pick the headline that fits this recent event: ${safeClue}?`,
+    (safeClue) => `Which recent story is described here: ${safeClue}?`,
+    (safeClue) => `Select the headline that matches this clue: ${safeClue}?`
   ];
   return templates[index % templates.length](clue);
+}
+
+const TITLE_STOP_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "to",
+  "of",
+  "and",
+  "in",
+  "on",
+  "for",
+  "with",
+  "after",
+  "amid",
+  "over",
+  "as",
+  "at",
+  "is",
+  "are",
+  "be",
+  "by",
+  "from",
+  "new",
+  "says",
+  "say",
+  "could",
+  "will",
+  "into",
+  "about"
+]);
+
+function tokenizeTitle(text) {
+  return normalizeSentence(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !TITLE_STOP_WORDS.has(token));
+}
+
+function scoreDistractor(targetTokens, candidateTokens) {
+  if (!targetTokens.length || !candidateTokens.length) return 0;
+  const targetSet = new Set(targetTokens);
+  let shared = 0;
+  for (const token of candidateTokens) {
+    if (targetSet.has(token)) shared += 1;
+  }
+  return shared / Math.max(targetSet.size, 1);
 }
 
 function isRecentNewsItem(item, nowMs = Date.now(), maxAgeDays = RECENT_NEWS_MAX_AGE_DAYS) {
@@ -322,13 +375,22 @@ export function buildRuleDraftQuestions({
   if (eligible.length < 4) return [];
   const shuffled = seededShuffle(eligible, `${dateKey}:rule-draft`);
   const picked = shuffled.slice(0, Math.min(shuffled.length, count));
+  const tokensByLink = new Map(
+    eligible.map((item) => [item.link, tokenizeTitle(item.title)])
+  );
 
   return picked.map((item, index) => {
-    const distractors = shuffled
+    const targetTokens = tokensByLink.get(item.link) || [];
+    const rankedDistractors = shuffled
       .filter((candidate) => candidate.link !== item.link)
-      .slice(index + 1)
-      .concat(shuffled.filter((candidate) => candidate.link !== item.link).slice(0, index + 1))
-      .slice(0, 3);
+      .map((candidate) => ({
+        item: candidate,
+        score: scoreDistractor(targetTokens, tokensByLink.get(candidate.link) || [])
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
+
+    const distractors = rankedDistractors.slice(0, 3);
 
     const fullOptionItems = [
       item,
@@ -346,11 +408,16 @@ export function buildRuleDraftQuestions({
 
     const optionSet = seededShuffle(
       fullOptionItems.map((candidate) => ({
-        title: candidate.title,
+        title: normalizeSentence(candidate.title),
         display: compactHeadlineLabel(candidate.title, candidate.source)
       })),
       `${dateKey}:${item.link}`
-    ).slice(0, 4);
+    )
+      .map((option) => ({
+        ...option,
+        display: normalizeSentence(option.display)
+      }))
+      .slice(0, 4);
 
     const uniqueDisplays = new Set(optionSet.map((option) => option.display.toLowerCase()));
     if (optionSet.length < 4 || uniqueDisplays.size !== 4) return null;
@@ -607,6 +674,10 @@ export function verifyQuestions({ questions, newsItems }) {
     }
     if (!prompt || promptSet.has(prompt.trim().toLowerCase())) {
       rejected.push({ id: question?.id || "unknown", reason: "duplicate_or_empty_prompt" });
+      continue;
+    }
+    if (!/\?$/.test(prompt.trim())) {
+      rejected.push({ id: question?.id || "unknown", reason: "invalid_prompt_style" });
       continue;
     }
 
