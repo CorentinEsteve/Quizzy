@@ -71,6 +71,7 @@ type Props = {
   dailyQuiz: DailyQuizStatus | null;
   dailyResults: DailyQuizResults | null;
   dailyLoading: boolean;
+  canAccessAgenticOps: boolean;
   agenticStatus: AgenticStatusResponse | null;
   agenticLoading: boolean;
   onOpenDailyQuiz: () => void;
@@ -149,6 +150,7 @@ export function LobbyScreen({
   dailyQuiz,
   dailyResults,
   dailyLoading,
+  canAccessAgenticOps,
   agenticStatus,
   agenticLoading,
   onOpenDailyQuiz,
@@ -1463,36 +1465,38 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
-        <GlassCard style={[styles.introCard, styles.activityCardLight]}>
-          <View style={styles.sectionHeading}>
-            <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
-              <FontAwesome name="cogs" size={16} color={theme.colors.primary} />
+        {canAccessAgenticOps ? (
+          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
+            <View style={styles.sectionHeading}>
+              <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
+                <FontAwesome name="cogs" size={16} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>
+                {t(locale, "agenticOpsEntryTitle")}
+              </Text>
             </View>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>
-              {t(locale, "agenticOpsEntryTitle")}
-            </Text>
-          </View>
-          <Text style={styles.shareSubtitle}>{t(locale, "agenticOpsEntrySubtitle")}</Text>
-          <View style={styles.agenticOpsMetaRow}>
-            <Text style={styles.agenticOpsMetaText}>
-              {latestAgentRun
-                ? `${latestAgentRun.status} · ${latestAgentRun.mode} · $${Number(
-                    latestAgentRun.estimatedCostUsd || 0
-                  ).toFixed(4)}`
-                : t(locale, "agenticOpsNoRuns")}
-            </Text>
-            {agenticLoading ? (
-              <ActivityIndicator color={theme.colors.primary} size="small" />
-            ) : null}
-          </View>
-          <PrimaryButton
-            label={t(locale, "agenticOpsOpen")}
-            icon="line-chart"
-            iconPosition="right"
-            onPress={onOpenAgenticOps}
-            style={styles.agenticOpsButton}
-          />
-        </GlassCard>
+            <Text style={styles.shareSubtitle}>{t(locale, "agenticOpsEntrySubtitle")}</Text>
+            <View style={styles.agenticOpsMetaRow}>
+              <Text style={styles.agenticOpsMetaText}>
+                {latestAgentRun
+                  ? `${latestAgentRun.status} · ${latestAgentRun.mode} · $${Number(
+                      latestAgentRun.estimatedCostUsd || 0
+                    ).toFixed(4)}`
+                  : t(locale, "agenticOpsNoRuns")}
+              </Text>
+              {agenticLoading ? (
+                <ActivityIndicator color={theme.colors.primary} size="small" />
+              ) : null}
+            </View>
+            <PrimaryButton
+              label={t(locale, "agenticOpsOpen")}
+              icon="line-chart"
+              iconPosition="right"
+              onPress={onOpenAgenticOps}
+              style={styles.agenticOpsButton}
+            />
+          </GlassCard>
+        ) : null}
 
         {sessions.filter((s) => s.status === "complete").length > 0 ? (
           <GlassCard style={[styles.introCard, styles.activityCardLight]}>

@@ -49,7 +49,9 @@ export function AgenticOpsScreen({
 }: Props) {
   const insets = useSafeAreaInsets();
   const runs = status?.runs || [];
-  const latestRun = runs[0] || null;
+  const activeRun = status?.activeRun || null;
+  const latestRun = activeRun || runs[0] || null;
+  const latestRefresh = new Date().toLocaleTimeString();
 
   return (
     <View style={styles.page}>
@@ -80,6 +82,16 @@ export function AgenticOpsScreen({
         </View>
 
         <GlassCard style={styles.card} accent={theme.colors.reward}>
+          {running || activeRun ? (
+            <View style={styles.liveRow}>
+              <ActivityIndicator size="small" color={theme.colors.reward} />
+              <Text style={styles.liveText}>
+                {running || activeRun?.status === "running"
+                  ? t(locale, "agenticOpsRunning")
+                  : activeRun?.status || "running"}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.metricsRow}>
             <View style={styles.metricItem}>
               <Text style={styles.metricLabel}>{t(locale, "agenticOpsRunsToday")}</Text>
@@ -104,6 +116,9 @@ export function AgenticOpsScreen({
             disabled={running}
             style={styles.runButton}
           />
+          <Text style={styles.refreshText}>
+            Last refresh: {latestRefresh}
+          </Text>
         </GlassCard>
 
         <GlassCard style={styles.card}>
@@ -155,7 +170,8 @@ export function AgenticOpsScreen({
                 <View style={styles.stepCopy}>
                   <Text style={styles.stepTitle}>{step.agent}</Text>
                   <Text style={styles.stepMeta}>
-                    {step.status} · in {step.inputCount} · out {step.outputCount} · {step.durationMs} ms
+                    {step.status} · in {step.inputCount} · out {step.outputCount} ·{" "}
+                    {step.durationMs ? `${step.durationMs} ms` : "in progress"}
                   </Text>
                   {step.notes ? <Text style={styles.stepMeta}>{step.notes}</Text> : null}
                 </View>
@@ -234,6 +250,23 @@ const styles = StyleSheet.create({
   card: {
     gap: theme.spacing.sm
   },
+  liveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderColor: "rgba(243,183,78,0.46)",
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 10
+  },
+  liveText: {
+    fontFamily: theme.typography.fontFamily,
+    color: theme.colors.ink,
+    fontSize: 13,
+    fontWeight: "600"
+  },
   metricsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -261,6 +294,12 @@ const styles = StyleSheet.create({
   },
   runButton: {
     marginTop: theme.spacing.sm
+  },
+  refreshText: {
+    marginTop: 6,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    color: theme.colors.muted
   },
   sectionTitle: {
     fontFamily: theme.typography.fontFamily,

@@ -398,6 +398,7 @@ export default function App() {
   const panelSwipeEnabled = swipeEnabled && panelIndex >= 0;
   const showLobby = !loading && token && user && !room && hasSeenOnboarding;
   const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom && !dailyStage && !agenticOpsOpen;
+  const canAccessAgenticOps = String(user?.email || "").trim().toLowerCase() === "nova@me.com";
 
   const snapToIndex = useCallback(
     (index: number, animated = true, velocity = 0) => {
@@ -858,6 +859,14 @@ export default function App() {
     if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshAgenticStatus();
   }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
+
+  useEffect(() => {
+    if (!agenticRunning) return;
+    const interval = setInterval(() => {
+      refreshAgenticStatus();
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [agenticRunning]);
 
   useEffect(() => {
     if (!token || !user || !hasSeenOnboarding || !lobbyBootstrapDone) return;
@@ -1368,7 +1377,7 @@ export default function App() {
   }
 
   function handleOpenAgenticOps() {
-    if (!token) return;
+    if (!token || !canAccessAgenticOps) return;
     setRoomError(null);
     setDailyStage(null);
     setPanel("lobby");
@@ -1857,6 +1866,7 @@ export default function App() {
       dailyQuiz={dailyQuiz}
       dailyResults={dailyResults}
       dailyLoading={dailyLoading}
+      canAccessAgenticOps={canAccessAgenticOps}
       agenticStatus={agenticStatus}
       agenticLoading={agenticLoading}
       onOpenDailyQuiz={handleOpenDailyQuiz}
@@ -2002,21 +2012,36 @@ export default function App() {
         </View>
       )}
 
-      {!loading && token && user && !room && agenticOpsOpen && (
+      {!loading && token && user && !room && canAccessAgenticOps && agenticOpsOpen && (
         <View style={styles.stackContainer}>
           <View style={styles.stackUnderlay} pointerEvents="none">
             {lobbyScreen}
           </View>
           <EdgeSwipeBack enabled onBack={handleCloseAgenticOps}>
-            <AgenticOpsScreen
-              locale={locale}
-              status={agenticStatus}
-              loading={agenticLoading}
-              running={agenticRunning}
-              onBack={handleCloseAgenticOps}
-              onRefresh={() => refreshAgenticStatus(true)}
-              onRunNow={handleRunAgenticNow}
-            />
+            <View style={styles.gameBackground}>
+              <LinearGradient
+                colors={["#08112E", "#0D1B4A", "#142A60"]}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <LinearGradient
+                colors={["rgba(105, 139, 255, 0.32)", "rgba(105, 139, 255, 0)"]}
+                start={{ x: 0.0, y: 0.0 }}
+                end={{ x: 0.7, y: 0.7 }}
+                style={styles.gameSweep}
+              />
+              <View style={styles.gameOrb} pointerEvents="none" />
+              <View style={styles.gameOrbAccent} pointerEvents="none" />
+              <View style={styles.gameFog} pointerEvents="none" />
+              <AgenticOpsScreen
+                locale={locale}
+                status={agenticStatus}
+                loading={agenticLoading}
+                running={agenticRunning}
+                onBack={handleCloseAgenticOps}
+                onRefresh={() => refreshAgenticStatus(true)}
+                onRunNow={handleRunAgenticNow}
+              />
+            </View>
           </EdgeSwipeBack>
         </View>
       )}
