@@ -43,6 +43,16 @@ const DEFAULT_FEEDS = [
 
 const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1/responses";
 const RECENT_NEWS_MAX_AGE_DAYS = 365;
+const MIN_HEADLINE_LENGTH = 20;
+const MAX_HEADLINE_LENGTH = 130;
+const MIN_HEADLINE_WORDS = 4;
+const HEADLINE_BANNED_PATTERNS = [
+  /\band other\b/i,
+  /\bfascinating\b/i,
+  /\b(opinion|analysis|newsletter|podcast)\b/i,
+  /\blive updates?\b/i,
+  /^\s*watch[:\s]/i
+];
 
 function decodeEntities(value) {
   if (typeof value !== "string") return "";
@@ -91,15 +101,15 @@ function parseRssItems(xml, sourceName) {
   const itemMatches = xml.match(/<item[\s\S]*?<\/item>/gi) || [];
   return itemMatches
     .map((item) => {
-      const title = textBetween(item, "title");
+      const title = sanitizeHeadline(textBetween(item, "title"));
       const link = normalizeLink(textBetween(item, "link"));
-      const description = textBetween(item, "description");
+      const description = sanitizeHeadline(textBetween(item, "description"));
       const pubDateRaw = textBetween(item, "pubDate");
       const publishedAtMs = Date.parse(pubDateRaw || "");
       const publishedAt = Number.isFinite(publishedAtMs)
         ? new Date(publishedAtMs).toISOString()
         : null;
-      if (!title || !link) return null;
+      if (!title || !link || !hasMinimumHeadlineQuality(title)) return null;
       return {
         title,
         link,
@@ -156,8 +166,25 @@ function normalizeSentence(text) {
   return String(text || "")
     .replace(/&[a-z0-9#]+;/gi, " ")
     .replace(/["“”]/g, "")
+    .replace(/`/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function sanitizeHeadline(text) {
+  return normalizeSentence(text)
+    .replace(/\s*[-|]\s*Reuters$/i, "")
+    .replace(/\s*[-|]\s*BBC News$/i, "")
+    .trim();
+}
+
+function hasMinimumHeadlineQuality(text) {
+  const clean = sanitizeHeadline(text);
+  if (!clean) return false;
+  if (clean.length < MIN_HEADLINE_LENGTH || clean.length > MAX_HEADLINE_LENGTH) return false;
+  if (clean.split(/\s+/).length < MIN_HEADLINE_WORDS) return false;
+  if (HEADLINE_BANNED_PATTERNS.some((pattern) => pattern.test(clean))) return false;
+  return true;
 }
 
 function trimToWordBoundary(text, maxLength) {
@@ -170,7 +197,7 @@ function trimToWordBoundary(text, maxLength) {
 }
 
 function compactHeadlineLabel(title, fallbackSource) {
-  const safe = normalizeSentence(title);
+  const safe = sanitizeHeadline(title);
   if (!safe) return fallbackSource || "Headline";
 
   const candidates = [
@@ -188,34 +215,113 @@ function compactHeadlineLabel(title, fallbackSource) {
   return trimToWordBoundary(best || safe, 84);
 }
 
-function buildQuestionContext(item) {
-  const description = stripHtml(item?.description || "");
-  if (description) {
-    return description.slice(0, 180);
+const ANCHOR_STOP_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "who",
+  "what",
+  "when",
+  "where",
+  "why",
+  "how",
+  "could",
+  "would",
+  "should",
+  "might",
+  "will",
+  "can",
+  "be",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "about",
+  "after",
+  "amid",
+  "over",
+  "under",
+  "from",
+  "into"
+]);
+
+function extractTitleAnchor(title) {
+  const clean = sanitizeHeadline(title);
+  if (!clean) return "this story";
+
+  const properNounMatches = clean.match(
+    /\b(?:[A-Z][A-Za-z-]+|[A-Z]{2,})(?:\s+(?:[A-Z][A-Za-z-]+|[A-Z]{2,}|of|the|and)){0,3}\b/g
+  );
+  if (properNounMatches?.length) {
+    const filtered = properNounMatches
+      .map((part) => part.trim())
+      .find((part) => part.length >= 4 && !/^The\b/.test(part));
+    if (filtered) return trimToWordBoundary(filtered, 44);
   }
-  return String(item?.title || "").slice(0, 120);
+
+  const numberPhrase = clean.match(/\b\d[\d,]*(?:\.\d+)?(?:\s*(?:lb|%|m|bn|million|billion))?(?:\s+[A-Za-z][A-Za-z'-]{2,}){0,2}\b/i);
+  if (numberPhrase?.[0]) {
+    return trimToWordBoundary(numberPhrase[0], 44);
+  }
+
+  const tokens = clean
+    .replace(/[^A-Za-z0-9'\-\s]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const startIndex = tokens.findIndex(
+    (token) => token.length >= 4 && !ANCHOR_STOP_WORDS.has(token.toLowerCase())
+  );
+  if (startIndex >= 0) {
+    const phraseTokens = [];
+    for (let i = startIndex; i < tokens.length; i += 1) {
+      const lower = tokens[i].toLowerCase();
+      if (ANCHOR_STOP_WORDS.has(lower) && phraseTokens.length > 0) break;
+      if (tokens[i].length < 3) continue;
+      phraseTokens.push(tokens[i]);
+      if (phraseTokens.length >= 2) break;
+    }
+    const phrase = phraseTokens.join(" ").trim();
+    if (phrase) return trimToWordBoundary(phrase, 44);
+  }
+
+  return trimToWordBoundary(clean, 44);
 }
 
-function buildQuestionClue(item) {
-  const description = buildQuestionContext(item)
-    .replace(/^[-:,\s]+/, "")
-    .replace(/[.?!]\s.*$/, "")
-    .trim();
-  const title = normalizeSentence(item?.title || "");
-  const looksInterrogative = /^(in \d{4},\s*)?(who|what|where|when|why|how)\b/i.test(description);
-  const clueSource = description && !looksInterrogative ? description : title || description;
-  return trimToWordBoundary(clueSource || item?.source || "news story", 90);
+function buildPromptSnippet(title) {
+  const clean = sanitizeHeadline(title);
+  if (!clean) return "recent events";
+  const anchor = extractTitleAnchor(clean);
+  const escapedAnchor = anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const anchorRegex = new RegExp(`\\b${escapedAnchor}\\b`, "i");
+  const masked = clean.replace(anchorRegex, "____");
+  const normalizedMasked = normalizeSentence(masked);
+  if (normalizedMasked.includes("____")) {
+    return trimToWordBoundary(normalizedMasked, 86);
+  }
+  const fallbackAnchor = clean
+    .split(/\s+/)
+    .find((token) => token.length >= 4 && !ANCHOR_STOP_WORDS.has(token.toLowerCase()));
+  if (fallbackAnchor) {
+    return trimToWordBoundary(
+      normalizeSentence(clean.replace(new RegExp(`\\b${fallbackAnchor}\\b`, "i"), "____")),
+      86
+    );
+  }
+  return trimToWordBoundary(clean, 86);
 }
 
 function buildQuestionPrompt(item, index) {
-  const clue = buildQuestionClue(item);
+  const snippet = buildPromptSnippet(item?.title || "");
   const templates = [
-    (safeClue) => `Which headline matches this recent event: ${safeClue}?`,
-    (safeClue) => `Pick the headline that fits this recent event: ${safeClue}?`,
-    (safeClue) => `Which recent story is described here: ${safeClue}?`,
-    (safeClue) => `Select the headline that matches this clue: ${safeClue}?`
+    (safeSnippet) => `Which headline best matches this summary: ${safeSnippet}?`,
+    (safeSnippet) => `Select the headline that matches this recent summary: ${safeSnippet}?`,
+    (safeSnippet) => `Which recent headline fits this summary: ${safeSnippet}?`,
+    (safeSnippet) => `Pick the headline that matches: ${safeSnippet}?`
   ];
-  return templates[index % templates.length](clue);
+  return templates[index % templates.length](snippet);
 }
 
 const TITLE_STOP_WORDS = new Set([
@@ -385,9 +491,10 @@ export function buildRuleDraftQuestions({
       .filter((candidate) => candidate.link !== item.link)
       .map((candidate) => ({
         item: candidate,
-        score: scoreDistractor(targetTokens, tokensByLink.get(candidate.link) || [])
+        score: scoreDistractor(targetTokens, tokensByLink.get(candidate.link) || []),
+        sameSource: candidate.source === item.source ? 1 : 0
       }))
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.sameSource - a.sameSource || b.score - a.score)
       .map((entry) => entry.item);
 
     const distractors = rankedDistractors.slice(0, 3);
@@ -591,14 +698,14 @@ export async function rewriteDraftWithLlm({
           {
             role: "system",
             content:
-              "You rewrite prompts into short, punchy clue lines for a headline-matching quiz. Preserve factual meaning. Do not rewrite options or answers."
+              "You rewrite prompts into short, quiz-like lines for choosing the correct headline. Preserve factual meaning. Do not rewrite options or answers."
           },
           {
             role: "user",
             content:
               `Date: ${dateKey}\n` +
-              "Rewrite each prompt as a short clue for selecting the correct news headline. Keep each prompt under 90 characters when possible. " +
-              "Do not transform into a direct factual question (no standalone who/where/when format). " +
+              "Rewrite each prompt as 'Which headline ... ?' or 'Select the headline ... .' format. Keep each prompt under 100 characters when possible. " +
+              "Keep the same story anchor from the original prompt. " +
               "Return only JSON matching {questions:[{id,prompt}]}. " +
               `Input: ${JSON.stringify(compactInput)}`
           }
@@ -676,7 +783,7 @@ export function verifyQuestions({ questions, newsItems }) {
       rejected.push({ id: question?.id || "unknown", reason: "duplicate_or_empty_prompt" });
       continue;
     }
-    if (!/\?$/.test(prompt.trim())) {
+    if (!/\?$|\.$/.test(prompt.trim())) {
       rejected.push({ id: question?.id || "unknown", reason: "invalid_prompt_style" });
       continue;
     }
@@ -685,6 +792,10 @@ export function verifyQuestions({ questions, newsItems }) {
     const sourceItem = sourceUrl ? validSourceByLink.get(sourceUrl) : null;
     if (!sourceItem) {
       rejected.push({ id: question?.id || "unknown", reason: "missing_source" });
+      continue;
+    }
+    if (!hasMinimumHeadlineQuality(sourceItem.title)) {
+      rejected.push({ id: question?.id || "unknown", reason: "low_quality_source_title" });
       continue;
     }
     if (!isRecentNewsItem(sourceItem)) {

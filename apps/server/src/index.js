@@ -61,6 +61,7 @@ const DAILY_AGENT_OPENAI_BASE_URL =
   process.env.DAILY_AGENT_OPENAI_BASE_URL || "https://api.openai.com/v1/responses";
 const DAILY_AGENT_INPUT_COST_PER_1M = Number(process.env.OPENAI_INPUT_COST_PER_1M || 0.3);
 const DAILY_AGENT_OUTPUT_COST_PER_1M = Number(process.env.OPENAI_OUTPUT_COST_PER_1M || 1.2);
+const DAILY_AGENT_LLM_REWRITE_ENABLED = process.env.DAILY_AGENT_LLM_REWRITE !== "false";
 const DAILY_AGENT_RUN_HISTORY_LIMIT = 60;
 
 app.use(cors({ origin: corsOrigin }));
@@ -578,7 +579,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     });
     draftQuestions = ruleDraft;
 
-    if (DAILY_AGENT_OPENAI_KEY && ruleDraft.length > 0) {
+    if (DAILY_AGENT_OPENAI_KEY && DAILY_AGENT_LLM_REWRITE_ENABLED && ruleDraft.length > 0) {
       run.summary.llmAttempted = true;
       const rewritten = await rewriteDraftWithLlm({
         draftQuestions: ruleDraft,
@@ -608,7 +609,11 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
           : `Rule-based drafting${llmFailureReason ? ` (${llmFailureReason})` : ""}`,
       });
     } else {
-      llmFailureReason = DAILY_AGENT_OPENAI_KEY ? "No questions available for rewrite" : "OPENAI_API_KEY not configured on server";
+      llmFailureReason = !DAILY_AGENT_LLM_REWRITE_ENABLED
+        ? "LLM prompt rewrite disabled by DAILY_AGENT_LLM_REWRITE=false"
+        : DAILY_AGENT_OPENAI_KEY
+          ? "No questions available for rewrite"
+          : "OPENAI_API_KEY not configured on server";
       run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
         status: "ok",
         outputCount: draftQuestions.length,
