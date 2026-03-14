@@ -46,6 +46,9 @@ const RECENT_NEWS_MAX_AGE_DAYS = 365;
 const MIN_HEADLINE_LENGTH = 20;
 const MAX_HEADLINE_LENGTH = 130;
 const MIN_HEADLINE_WORDS = 4;
+const MAX_ARTICLE_CHARS = 2000;
+const MAX_OPTION_LENGTH = 40;
+const MAX_PROMPT_LENGTH = 110;
 const HEADLINE_BANNED_PATTERNS = [
   /\band other\b/i,
   /\bfascinating\b/i,
@@ -72,6 +75,11 @@ function decodeEntities(value) {
 
 function stripHtml(value) {
   return decodeEntities(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function stripTags(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function textBetween(item, tagName) {
@@ -185,6 +193,16 @@ function hasMinimumHeadlineQuality(text) {
   if (clean.split(/\s+/).length < MIN_HEADLINE_WORDS) return false;
   if (HEADLINE_BANNED_PATTERNS.some((pattern) => pattern.test(clean))) return false;
   return true;
+}
+
+function clampText(value, maxLength) {
+  const clean = normalizeSentence(value);
+  if (clean.length <= maxLength) return clean;
+  return trimToWordBoundary(clean, maxLength);
+}
+
+function sanitizeOptionText(value) {
+  return clampText(stripHtml(value), MAX_OPTION_LENGTH);
 }
 
 function trimToWordBoundary(text, maxLength) {
@@ -456,6 +474,43 @@ export async function fetchNewsItems({
   };
 }
 
+async function fetchArticleText(url, fetchImpl, timeoutMs = 8000) {
+  if (!url) return "";
+  const resolvedFetch = fetchImpl || globalThis.fetch;
+  if (typeof resolvedFetch !== "function") return "";
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const response = await resolvedFetch(url, { method: "GET", signal: ctrl.signal });
+    if (!response.ok) return "";
+    const html = await response.text();
+    const withoutScripts = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ");
+    const paragraphs = withoutScripts.match(/<p[^>]*>[\s\S]*?<\/p>/gi) || [];
+    const text = paragraphs.map((p) => stripTags(p)).filter(Boolean).join(" ");
+    if (text) return clampText(text, MAX_ARTICLE_CHARS);
+    const metaDesc =
+      /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i.exec(
+        withoutScripts
+      )?.[1] || "";
+    return clampText(stripTags(metaDesc), MAX_ARTICLE_CHARS);
+  } catch (_err) {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function enrichNewsItemsWithContent(items, { fetchImpl } = {}) {
+  const results = [];
+  for (const item of items || []) {
+    const content = await fetchArticleText(item?.link, fetchImpl);
+    results.push({ ...item, content });
+  }
+  return results;
+}
+
 export function buildRuleDraftQuestions({
   dateKey,
   newsItems,
@@ -550,6 +605,133 @@ export function buildRuleDraftQuestions({
       }
     };
   }).filter(Boolean);
+}
+
+function validateFactQuestion(question, sourceItem) {
+  if (!question || !sourceItem) return "invalid_source";
+  const prompt = String(question?.prompt || "").trim();
+  if (!prompt || prompt.length > MAX_PROMPT_LENGTH) return "invalid_prompt";
+  if (!/\?$/.test(prompt)) return "invalid_prompt";
+  if (!Array.isArray(question?.options) || question.options.length !== 4) return "invalid_options";
+  const options = question.options.map((opt) => sanitizeOptionText(opt));
+  if (options.some((opt) => !opt || opt.length < 2)) return "invalid_options";
+  if (new Set(options.map((opt) => opt.toLowerCase())).size !== 4) return "duplicate_options";
+  const answerIndex = Number(question?.answerIndex);
+  if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex >= 4) return "invalid_answer_index";
+  const answerText = options[answerIndex];
+  const sourceText = `${sourceItem.title || ""} ${sourceItem.content || ""}`.toLowerCase();
+  if (!sourceText.includes(answerText.toLowerCase())) return "answer_not_in_source";
+  return null;
+}
+
+export async function generateFactQuestionsWithLlm({
+  items,
+  dateKey,
+  apiKey,
+  model,
+  fetchImpl,
+  endpoint = OPENAI_DEFAULT_BASE_URL,
+  timeoutMs = 20000
+}) {
+  if (!apiKey || !Array.isArray(items) || items.length === 0) {
+    return { questions: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, error: "LLM disabled" };
+  }
+  const resolvedFetch = fetchImpl || globalThis.fetch;
+  if (typeof resolvedFetch !== "function") {
+    return { questions: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, error: "No fetch implementation available" };
+  }
+
+  const payloadItems = items.map((item, index) => ({
+    id: `src_${String(index + 1).padStart(2, "0")}`,
+    title: item.title,
+    publishedAt: item.publishedAt,
+    source: item.source,
+    content: clampText(item.content || "", 900)
+  }));
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const response = await resolvedFetch(endpoint, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model || "gpt-4.1-mini",
+        text: {
+          format: {
+            type: "json_schema",
+            name: "daily_quiz_fact_questions",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                questions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      sourceId: { type: "string" },
+                      prompt: { type: "string" },
+                      options: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 4 },
+                      answerIndex: { type: "integer" }
+                    },
+                    required: ["sourceId", "prompt", "options", "answerIndex"]
+                  }
+                }
+              },
+              required: ["questions"]
+            }
+          }
+        },
+        input: [
+          {
+            role: "system",
+            content:
+              "You generate short multiple-choice quiz questions from recent news. Use only the provided content. Keep prompts under 110 characters. Options must be short (max 40 chars), factual, and distinct."
+          },
+          {
+            role: "user",
+            content:
+              `Date: ${dateKey}\n` +
+              "For each source, produce at most one question. Focus on a clear, concrete fact. " +
+              "Do NOT use the full headline text as a prompt. " +
+              "Return JSON only. Sources:\n" +
+              JSON.stringify(payloadItems)
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      return {
+        questions: [],
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        error: `OpenAI request failed (${response.status}${errorText ? `: ${trimToWordBoundary(errorText, 180)}` : ""})`
+      };
+    }
+
+    const data = await response.json();
+    const usage = getUsageTokens(data.usage);
+    const parsed = extractStructuredPayload(data);
+    const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+    const normalized = questions.map((question) => ({
+      sourceId: String(question.sourceId),
+      prompt: clampText(question.prompt, MAX_PROMPT_LENGTH),
+      options: Array.isArray(question.options) ? question.options.map((opt) => sanitizeOptionText(opt)) : [],
+      answerIndex: Number(question.answerIndex)
+    }));
+
+    return { questions: normalized, usage, error: null };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function getUsageTokens(rawUsage) {
@@ -793,6 +975,14 @@ export function verifyQuestions({ questions, newsItems }) {
     if (!sourceItem) {
       rejected.push({ id: question?.id || "unknown", reason: "missing_source" });
       continue;
+    }
+    if (question?.agentMeta?.verificationMode === "fact_extract") {
+      const answerText = String(options[answer] || "").trim();
+      const sourceText = `${sourceItem.title || ""} ${sourceItem.content || ""}`.toLowerCase();
+      if (!answerText || !sourceText.includes(answerText.toLowerCase())) {
+        rejected.push({ id: question?.id || "unknown", reason: "answer_not_in_source" });
+        continue;
+      }
     }
     if (!hasMinimumHeadlineQuality(sourceItem.title)) {
       rejected.push({ id: question?.id || "unknown", reason: "low_quality_source_title" });

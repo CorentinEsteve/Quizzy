@@ -16,9 +16,10 @@ import {
   buildDailyQuiz,
   buildQuestionFingerprint,
   buildRuleDraftQuestions,
+  enrichNewsItemsWithContent,
+  generateFactQuestionsWithLlm,
   estimateCostUsd,
   fetchNewsItems,
-  rewriteDraftWithLlm,
   summarizeRunForApi,
   summarizeTopics,
   verifyQuestions
@@ -61,7 +62,6 @@ const DAILY_AGENT_OPENAI_BASE_URL =
   process.env.DAILY_AGENT_OPENAI_BASE_URL || "https://api.openai.com/v1/responses";
 const DAILY_AGENT_INPUT_COST_PER_1M = Number(process.env.OPENAI_INPUT_COST_PER_1M || 0.3);
 const DAILY_AGENT_OUTPUT_COST_PER_1M = Number(process.env.OPENAI_OUTPUT_COST_PER_1M || 1.2);
-const DAILY_AGENT_LLM_REWRITE_ENABLED = process.env.DAILY_AGENT_LLM_REWRITE !== "false";
 const DAILY_AGENT_RUN_HISTORY_LIMIT = 60;
 
 app.use(cors({ origin: corsOrigin }));
@@ -531,6 +531,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
   let feedStats = { feedCount: 0, succeededFeeds: 0, failedFeeds: 0 };
   let ruleDraft = [];
   let draftQuestions = [];
+  let factQuestions = [];
   let verified = { accepted: [], rejected: [] };
   let recentHistory = {
     sourceUrls: new Set(),
@@ -573,60 +574,77 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
     ruleDraft = buildRuleDraftQuestions({
       dateKey,
       newsItems,
-      count: 22,
+      count: 24,
       excludedSourceUrls: Array.from(recentHistory.sourceUrls),
       excludedTopics: Array.from(recentHistory.topics)
     });
-    draftQuestions = ruleDraft;
 
-    if (DAILY_AGENT_OPENAI_KEY && DAILY_AGENT_LLM_REWRITE_ENABLED && ruleDraft.length > 0) {
-      run.summary.llmAttempted = true;
-      const rewritten = await rewriteDraftWithLlm({
-        draftQuestions: ruleDraft,
-        dateKey,
-        apiKey: DAILY_AGENT_OPENAI_KEY,
-        model: DAILY_AGENT_MODEL,
-        endpoint: DAILY_AGENT_OPENAI_BASE_URL
-      });
-      llmReturnedQuestions = rewritten.questions?.length || 0;
-      if (rewritten.questions?.length > 0) {
-        llmUsed = true;
-        draftQuestions = buildDraftWithPossibleRewrite(ruleDraft, rewritten.questions);
-      } else {
-        llmFailureReason = rewritten.error || "OpenAI returned no usable prompt rewrites";
-      }
-      const llmCost = estimateCostUsd(rewritten.usage, {
-        inputPer1M: DAILY_AGENT_INPUT_COST_PER_1M,
-        outputPer1M: DAILY_AGENT_OUTPUT_COST_PER_1M
-      });
+    if (!DAILY_AGENT_OPENAI_KEY) {
+      llmFailureReason = "OPENAI_API_KEY not configured on server";
       run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
-        status: "ok",
-        outputCount: draftQuestions.length,
-        model: llmUsed ? DAILY_AGENT_MODEL : null,
-        estimatedCostUsd: llmCost,
-        notes: llmUsed
-          ? "OpenAI rewrite applied to draft prompts"
-          : `Rule-based drafting${llmFailureReason ? ` (${llmFailureReason})` : ""}`,
+        status: "failed",
+        outputCount: 0,
+        notes: "LLM fact generation requires OPENAI_API_KEY"
       });
-    } else {
-      llmFailureReason = !DAILY_AGENT_LLM_REWRITE_ENABLED
-        ? "LLM prompt rewrite disabled by DAILY_AGENT_LLM_REWRITE=false"
-        : DAILY_AGENT_OPENAI_KEY
-          ? "No questions available for rewrite"
-          : "OPENAI_API_KEY not configured on server";
-      run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
-        status: "ok",
-        outputCount: draftQuestions.length,
-        notes: `Rule-based drafting (${llmFailureReason})`
-      });
+      throw new Error("LLM fact generation requires OPENAI_API_KEY");
     }
+
+    run.summary.llmAttempted = true;
+    const enriched = await enrichNewsItemsWithContent(ruleDraft, {});
+    const llmBatch = await generateFactQuestionsWithLlm({
+      items: enriched,
+      dateKey,
+      apiKey: DAILY_AGENT_OPENAI_KEY,
+      model: DAILY_AGENT_MODEL,
+      endpoint: DAILY_AGENT_OPENAI_BASE_URL
+    });
+    llmReturnedQuestions = llmBatch.questions?.length || 0;
+    if (llmReturnedQuestions > 0) {
+      llmUsed = true;
+      factQuestions = llmBatch.questions
+        .map((question, idx) => {
+          const source = enriched.find((item, itemIndex) => `src_${String(itemIndex + 1).padStart(2, "0")}` === question.sourceId);
+          if (!source) return null;
+          return {
+            id: `news_${dateKey}_${String(idx + 1).padStart(2, "0")}`,
+            prompt: { en: question.prompt, fr: question.prompt },
+            options: { en: question.options, fr: question.options },
+            answer: question.answerIndex,
+            agentMeta: {
+              topic: source.title,
+              sourceName: source.source,
+              sourceUrl: source.link,
+              sourcePublishedAt: source.publishedAt,
+              sourceContent: source.content || "",
+              verificationMode: "fact_extract"
+            }
+          };
+        })
+        .filter(Boolean);
+      draftQuestions = factQuestions;
+    } else {
+      llmFailureReason = llmBatch.error || "OpenAI returned no usable fact questions";
+      draftQuestions = [];
+    }
+
+    const llmCost = estimateCostUsd(llmBatch.usage, {
+      inputPer1M: DAILY_AGENT_INPUT_COST_PER_1M,
+      outputPer1M: DAILY_AGENT_OUTPUT_COST_PER_1M
+    });
+    run.steps[run.steps.length - 1] = completeAgentStep(draftStep, {
+      status: llmUsed ? "ok" : "failed",
+      outputCount: draftQuestions.length,
+      model: llmUsed ? DAILY_AGENT_MODEL : null,
+      estimatedCostUsd: llmCost,
+      notes: llmUsed ? "OpenAI fact generation applied" : `Fact generation failed (${llmFailureReason})`
+    });
     emitProgress();
 
     const verifyStep = createAgentStep("verify", "Verifier Agent", draftQuestions.length);
     run.steps.push(verifyStep);
     verified = verifyQuestions({
       questions: draftQuestions,
-      newsItems
+      newsItems: enriched
     });
     rejectedReasons = verified.rejected.reduce((acc, item) => {
       const key = String(item?.reason || "unknown");
@@ -686,7 +704,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       failedFeeds: feedStats.failedFeeds,
       headlinesFetched: newsItems.length,
       eligibleNewsItems: ruleDraft.length,
-      draftedQuestions: ruleDraft.length,
+      draftedQuestions: draftQuestions.length,
       verifiedQuestions: verified.accepted.length,
       rejectedQuestions: verified.rejected.length,
       fallbackQuestions: 0,
@@ -711,7 +729,7 @@ async function runAgenticDailyPipeline(dateKey, trigger = "auto", onProgress) {
       failedFeeds: feedStats.failedFeeds,
       headlinesFetched: newsItems.length,
       eligibleNewsItems: ruleDraft.length,
-      draftedQuestions: ruleDraft.length,
+      draftedQuestions: draftQuestions.length,
       verifiedQuestions: verified.accepted.length,
       rejectedQuestions: verified.rejected.length,
       fallbackQuestions: 0,
