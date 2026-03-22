@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Image,
@@ -19,6 +18,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
+import { SplashScreen } from "./SplashScreen";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { InputField } from "../components/InputField";
@@ -172,6 +172,8 @@ export function LobbyScreen({
   const starDrift = useRef(new Animated.Value(0)).current;
   const introInterfaceOpacity = useRef(new Animated.Value(playEntryAnimation ? 0 : 1)).current;
   const introHasMeasuredContentRef = useRef(false);
+  const onEntryAnimationEndRef = useRef(onEntryAnimationEnd);
+  useEffect(() => { onEntryAnimationEndRef.current = onEntryAnimationEnd; }, [onEntryAnimationEnd]);
   const inviteFirstSeenRef = useRef<Map<string, number>>(new Map());
   const [introActive, setIntroActive] = useState(playEntryAnimation);
   const [inviteNowMs, setInviteNowMs] = useState(() => Date.now());
@@ -639,14 +641,13 @@ export function LobbyScreen({
     reveal.start(({ finished }) => {
       if (!finished) return;
       setIntroActive(false);
-      onEntryAnimationEnd?.();
+      onEntryAnimationEndRef.current?.();
     });
     return () => reveal.stop();
   }, [
     entryRevealReady,
     introCanRevealInterface,
     introInterfaceOpacity,
-    onEntryAnimationEnd,
     playEntryAnimation
   ]);
 
@@ -730,14 +731,9 @@ export function LobbyScreen({
     outputRange: [6, 0]
   });
   const introTaglineOpacity = introInterfaceOpacity.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [1, 0.2, 0]
+    inputRange: [0, 0.55, 1],
+    outputRange: [1, 1, 0]
   });
-  const introTaglineLift = introInterfaceOpacity.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -6]
-  });
-
   const openCreateDialog = () => {
     Haptics.selectionAsync();
     setDialogStep("pick");
@@ -1604,32 +1600,14 @@ export function LobbyScreen({
           <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
         </Pressable>
       </Animated.View>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.entryTaglineWrap,
-          {
-            opacity: introTaglineOpacity,
-            transform: [{ translateY: introTaglineLift }]
-          }
-        ]}
-      >
-        <Text style={styles.entryTaglineText}>{"let's quiz"}</Text>
-      </Animated.View>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.entryLoaderOverlay,
-          {
-            bottom: Math.max(insets.bottom + theme.spacing.xl, height * 0.24),
-            opacity: introTaglineOpacity
-          }
-        ]}
-      >
-        <View style={styles.entryLoaderWrap}>
-          <ActivityIndicator size="small" color="rgba(214, 228, 255, 0.72)" />
-        </View>
-      </Animated.View>
+      {introActive && (
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { opacity: introTaglineOpacity }]}
+        >
+          <SplashScreen locale={locale} />
+        </Animated.View>
+      )}
       <Modal
         transparent
         visible={isDialogOpen}
