@@ -171,6 +171,12 @@ export function LobbyScreen({
   const starTwinkleAlt = useRef(new Animated.Value(0)).current;
   const starDrift = useRef(new Animated.Value(0)).current;
   const introInterfaceOpacity = useRef(new Animated.Value(playEntryAnimation ? 0 : 1)).current;
+  const sectionAnims = useRef(
+    Array.from({ length: 6 }, () => ({
+      opacity: new Animated.Value(playEntryAnimation ? 0 : 1),
+      translate: new Animated.Value(playEntryAnimation ? 20 : 0),
+    }))
+  ).current;
   const introHasMeasuredContentRef = useRef(false);
   const onEntryAnimationEndRef = useRef(onEntryAnimationEnd);
   useEffect(() => { onEntryAnimationEndRef.current = onEntryAnimationEnd; }, [onEntryAnimationEnd]);
@@ -597,6 +603,10 @@ export function LobbyScreen({
   useEffect(() => {
     if (!playEntryAnimation) {
       introInterfaceOpacity.setValue(1);
+      sectionAnims.forEach(anim => {
+        anim.opacity.setValue(1);
+        anim.translate.setValue(0);
+      });
       introHasMeasuredContentRef.current = false;
       setIntroCanRevealInterface(true);
       setIntroActive(false);
@@ -607,7 +617,11 @@ export function LobbyScreen({
     setIntroCanRevealInterface(false);
     introHasMeasuredContentRef.current = false;
     introInterfaceOpacity.setValue(0);
-  }, [introInterfaceOpacity, playEntryAnimation]);
+    sectionAnims.forEach(anim => {
+      anim.opacity.setValue(0);
+      anim.translate.setValue(20);
+    });
+  }, [introInterfaceOpacity, playEntryAnimation, sectionAnims]);
 
   useEffect(() => {
     if (!playEntryAnimation) return;
@@ -629,14 +643,35 @@ export function LobbyScreen({
 
   useEffect(() => {
     if (!playEntryAnimation || !introCanRevealInterface || !entryRevealReady) return;
+    // Fade out the splash tagline in sync with the first section appearing
+    const taglineFade = Animated.timing(introInterfaceOpacity, {
+      toValue: 1,
+      duration: 380,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true
+    });
+    const sectionReveal = Animated.stagger(
+      85,
+      sectionAnims.map(anim =>
+        Animated.parallel([
+          Animated.timing(anim.opacity, {
+            toValue: 1,
+            duration: 500,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true
+          }),
+          Animated.timing(anim.translate, {
+            toValue: 0,
+            duration: 500,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true
+          })
+        ])
+      )
+    );
     const reveal = Animated.sequence([
-      Animated.delay(220),
-      Animated.timing(introInterfaceOpacity, {
-        toValue: 1,
-        duration: 760,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true
-      })
+      Animated.delay(200),
+      Animated.parallel([taglineFade, sectionReveal])
     ]);
     reveal.start(({ finished }) => {
       if (!finished) return;
@@ -648,7 +683,8 @@ export function LobbyScreen({
     entryRevealReady,
     introCanRevealInterface,
     introInterfaceOpacity,
-    playEntryAnimation
+    playEntryAnimation,
+    sectionAnims
   ]);
 
   const nextOpponents = nextSession?.players.filter((player) => player.id !== userId) ?? [];
@@ -726,14 +762,14 @@ export function LobbyScreen({
     inputRange: [0, 1],
     outputRange: [0.28, 0.82]
   });
-  const introInterfaceLift = introInterfaceOpacity.interpolate({
-    inputRange: [0, 1],
-    outputRange: [6, 0]
-  });
   const introTaglineOpacity = introInterfaceOpacity.interpolate({
     inputRange: [0, 0.55, 1],
     outputRange: [1, 1, 0]
   });
+  const s = sectionAnims.map(anim => ({
+    opacity: anim.opacity,
+    transform: [{ translateY: anim.translate }]
+  }));
   const openCreateDialog = () => {
     Haptics.selectionAsync();
     setDialogStep("pick");
@@ -828,13 +864,7 @@ export function LobbyScreen({
         })}
       </Animated.View>
       <Animated.View
-        style={[
-          styles.interfaceLayer,
-          {
-            opacity: introInterfaceOpacity,
-            transform: [{ translateY: introInterfaceLift }]
-          }
-        ]}
+        style={styles.interfaceLayer}
         pointerEvents={introActive ? "none" : "auto"}
       >
         <LinearGradient
@@ -850,6 +880,7 @@ export function LobbyScreen({
           showsVerticalScrollIndicator={false}
           onContentSizeChange={handleIntroContentReady}
         >
+        <Animated.View style={s[0]}>
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>
@@ -873,7 +904,9 @@ export function LobbyScreen({
             </Pressable>
           </View>
         </View>
+        </Animated.View>
 
+        <Animated.View style={s[1]}>
         <GlassCard style={styles.heroCard}>
           <LinearGradient
             colors={[
@@ -945,7 +978,9 @@ export function LobbyScreen({
             />
           </View>
         </GlassCard>
+        </Animated.View>
 
+        <Animated.View style={s[2]}>
         {showInvitedCard
           ? invitedCards.map((inviteCard) => (
               <Pressable
@@ -1109,7 +1144,9 @@ export function LobbyScreen({
             </View>
           </GlassCard>
         </Pressable>
+        </Animated.View>
 
+        <Animated.View style={s[3]}>
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
             <LinearGradient
@@ -1348,7 +1385,9 @@ export function LobbyScreen({
               })}
           </GlassCard>
         ) : null}
+        </Animated.View>
 
+        <Animated.View style={s[4]}>
         <GlassCard style={[styles.shareCard, styles.activityCardLight]}>
           <LinearGradient
             colors={["rgba(106, 143, 255, 0.16)", "rgba(243, 194, 88, 0.12)", "rgba(255, 252, 244, 0.96)"]}
@@ -1545,9 +1584,11 @@ export function LobbyScreen({
               })}
           </GlassCard>
         ) : null}
+        </Animated.View>
 
         </ScrollView>
 
+      <Animated.View style={[StyleSheet.absoluteFill, s[5]]} pointerEvents="box-none">
       <Animated.View style={[styles.fabWrap, { bottom: theme.spacing.sm + insets.bottom }]}>
         <Animated.View
           pointerEvents="none"
@@ -1599,6 +1640,7 @@ export function LobbyScreen({
           <FontAwesome name="plus" size={16} color={theme.colors.surface} />
           <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
         </Pressable>
+      </Animated.View>
       </Animated.View>
       {introActive && (
         <Animated.View
