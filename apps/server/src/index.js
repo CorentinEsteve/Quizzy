@@ -6,12 +6,14 @@ import { randomBytes } from "crypto";
 import { Server as SocketServer } from "socket.io";
 import bcrypt from "bcryptjs";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import cron from "node-cron";
 import { supabase } from "./db.js";
 import { authMiddleware, signToken, verifyToken } from "./auth.js";
 import { quizzes } from "./quizzes.js";
 import { computeAnswerStats, computeDailyCounts, computeScore, sanitizeQuiz } from "./quizLogic.js";
 import { Resend } from "resend";
 import { sendNativePush } from "./push.js";
+import { generateDailyQuiz } from "./agenticDailyQuiz.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -2696,6 +2698,43 @@ io.on("connection", (socket) => {
     user = null;
   });
 });
+
+// ─── Admin: generate daily quiz ───────────────────────────────────────────────
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+
+app.post("/admin/generate-daily-quiz", async (req, res) => {
+  const { secret, date } = req.body ?? {};
+  if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const dateKey = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : new Date().toISOString().slice(0, 10);
+  try {
+    const result = await generateDailyQuiz(dateKey);
+    return res.json({ ok: true, questions: result.questions, logPath: result.logPath });
+  } catch (err) {
+    console.error("[admin] generate-daily-quiz failed:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Cron: generate daily quiz at 02:00 UTC ───────────────────────────────────
+if (process.env.ANTHROPIC_API_KEY) {
+  cron.schedule("0 2 * * *", async () => {
+    const dateKey = new Date().toISOString().slice(0, 10);
+    console.log(`[cron] Generating daily quiz for ${dateKey}`);
+    try {
+      const result = await generateDailyQuiz(dateKey);
+      console.log(`[cron] Done: ${result.questions} questions. Log: ${result.logPath}`);
+    } catch (err) {
+      console.error(`[cron] Daily quiz generation failed: ${err.message}`);
+    }
+  }, { timezone: "UTC" });
+  console.log("[cron] Daily quiz generation scheduled at 02:00 UTC");
+} else {
+  console.warn("[cron] ANTHROPIC_API_KEY not set — daily quiz cron disabled");
+}
 
 httpServer.listen(port, () => {
   console.log(`Qwizzy API running on port ${port}`);

@@ -1,0 +1,240 @@
+{
+  "date": "2026-03-22",
+  "generated_at": "2026-03-22T17:26:44.466Z",
+  "articles_fetched": 80,
+  "sources_used": [
+    "BBC World",
+    "BBC Technology",
+    "BBC Science",
+    "BBC Business",
+    "BBC Health",
+    "BBC Culture",
+    "The Guardian",
+    "The Guardian Science",
+    "Al Jazeera",
+    "BBC Sport"
+  ],
+  "candidates_generated": 20,
+  "final_questions": [
+    {
+      "index": 1,
+      "id": "c1",
+      "prompt_en": "In 2025, Iranian ballistic missiles struck near which type of strategic Israeli facility?",
+      "prompt_fr": "En 2025, des missiles balistiques iraniens ont frappé près de quel type d'installation stratégique israélienne ?",
+      "options_en": [
+        "Nuclear site",
+        "Military airbase",
+        "Oil refinery",
+        "Desalination plant"
+      ],
+      "correct_answer": "Nuclear site",
+      "answer_index": 0,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "Iranian missiles injure 160 in towns near Israeli nuclear site",
+          "link": "https://www.bbc.com/news/articles/c9qdvnv13qdo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "id": "c4",
+      "prompt_en": "Which country became the first in the world to ban social media for users under 16?",
+      "prompt_fr": "Quel pays est devenu le premier au monde à interdire les réseaux sociaux aux moins de 16 ans ?",
+      "options_en": [
+        "United Kingdom",
+        "Australia",
+        "France",
+        "South Korea"
+      ],
+      "correct_answer": "Australia",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "Did Australia's under-16s social media ban work?",
+          "link": "https://www.bbc.com/news/videos/cq8g9y5x1llo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "id": "c3",
+      "prompt_en": "Cuba experienced a national blackout in 2025. What was cited as a major underlying cause?",
+      "prompt_fr": "Cuba a connu une panne nationale d'électricité en 2025. Quelle cause principale a été avancée ?",
+      "options_en": [
+        "A US-imposed fuel blockade",
+        "A hurricane destroying power lines",
+        "A cyberattack on the grid",
+        "A workers' strike at power plants"
+      ],
+      "correct_answer": "A US-imposed fuel blockade",
+      "answer_index": 0,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "National blackout hits Cuba for second time in a week",
+          "link": "https://www.bbc.com/news/articles/cvg0l44yxrvo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "id": "c6",
+      "prompt_en": "NASA's Artemis programme aims to send astronauts around the Moon for the first time in how many years?",
+      "prompt_fr": "Le programme Artemis de la NASA vise à envoyer des astronautes autour de la Lune pour la première fois depuis combien d'années ?",
+      "options_en": [
+        "About 30 years",
+        "About 40 years",
+        "About 50 years",
+        "About 60 years"
+      ],
+      "correct_answer": "About 50 years",
+      "answer_index": 2,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "Nasa's Artemis Moon rocket rolls back to pad for possible April launch",
+          "link": "https://www.bbc.com/news/articles/ckgrw045pg7o?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "id": "c7",
+      "prompt_en": "Which museum overtook the British Museum as the UK's most-visited tourist attraction?",
+      "prompt_fr": "Quel musée a dépassé le British Museum en tant qu'attraction touristique la plus visitée du Royaume-Uni ?",
+      "options_en": [
+        "Tate Modern",
+        "Natural History Museum",
+        "Victoria and Albert Museum",
+        "Science Museum"
+      ],
+      "correct_answer": "Natural History Museum",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "Natural History Museum overtakes British Museum as UK's top tourist attraction",
+          "link": "https://www.bbc.com/news/articles/c70n09pz4y1o?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "id": "c9",
+      "prompt_en": "UK scientists have grown lab-made replacements for which body part, paving the way for human trials?",
+      "prompt_fr": "Des scientifiques britanniques ont cultivé en laboratoire des substituts de quel organe, ouvrant la voie à des essais cliniques ?",
+      "options_en": [
+        "Windpipe (trachea)",
+        "Food pipe (oesophagus)",
+        "Heart valve",
+        "Kidney"
+      ],
+      "correct_answer": "Food pipe (oesophagus)",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Health",
+          "title": "Lab-grown food pipe offers new hope for young patients",
+          "link": "https://www.bbc.com/news/articles/c4gdvv8j2j1o?at_medium=RSS&at_campaign=rss",
+          "category": "Health"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "id": "c11",
+      "prompt_en": "Which K-pop group held a massive comeback concert in the centre of Seoul after more than three years away?",
+      "prompt_fr": "Quel groupe de K-pop a donné un concert de retour massif dans le centre de Séoul après plus de trois ans d'absence ?",
+      "options_en": [
+        "BLACKPINK",
+        "BTS",
+        "Stray Kids",
+        "EXO"
+      ],
+      "correct_answer": "BTS",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Culture",
+          "title": "Pop megastars BTS electrify historic centre of Seoul with comeback concert",
+          "link": "https://www.bbc.com/news/articles/cj371jr203ko?at_medium=RSS&at_campaign=rss",
+          "category": "Culture"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "id": "c13",
+      "prompt_en": "In France's 2025 mayoral elections, the political left's hold on which major city was under threat?",
+      "prompt_fr": "Lors des élections municipales françaises de 2025, l'emprise de la gauche sur quelle grande ville était menacée ?",
+      "options_en": [
+        "Lyon",
+        "Marseille",
+        "Paris",
+        "Bordeaux"
+      ],
+      "correct_answer": "Paris",
+      "answer_index": 2,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "Socialists battle to hold Paris as France holds mayoral elections",
+          "link": "https://www.bbc.com/news/articles/c87wgw27201o?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "id": "c19",
+      "prompt_en": "Darts star Luke Littler applied to trademark his own face. What was his main motivation?",
+      "prompt_fr": "Le joueur de fléchettes Luke Littler a demandé à déposer son propre visage comme marque. Quelle était sa motivation principale ?",
+      "options_en": [
+        "To launch his own fashion brand",
+        "To combat AI-generated deepfakes",
+        "To sell NFTs of his image",
+        "To prevent rival darts players using his likeness"
+      ],
+      "correct_answer": "To combat AI-generated deepfakes",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Technology",
+          "title": "Luke Littler applies to trademark his face to combat AI fakes",
+          "link": "https://www.bbc.com/news/articles/c5y7374x9n4o?at_medium=RSS&at_campaign=rss",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "id": "c8",
+      "prompt_en": "What major new walking route was opened by King Charles in England?",
+      "prompt_fr": "Quel nouveau grand sentier de randonnée a été inauguré par le roi Charles en Angleterre ?",
+      "options_en": [
+        "A canal towpath across England",
+        "The world's longest coastal path around England",
+        "A national forest trail",
+        "A heritage railway walking route"
+      ],
+      "correct_answer": "The world's longest coastal path around England",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "King opens world's longest coastal path around England",
+          "link": "https://www.bbc.com/news/articles/cy0dxexdd8xo?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    }
+  ]
+}
