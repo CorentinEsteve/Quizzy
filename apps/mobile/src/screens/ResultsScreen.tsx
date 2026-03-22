@@ -953,12 +953,11 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   answerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4
   },
   answerLabel: {
-    width: 110,
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
@@ -966,12 +965,12 @@ const styles = StyleSheet.create({
   },
   correctPill: {
     backgroundColor: "rgba(43, 158, 102, 0.14)",
-    borderRadius: 999,
+    borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(43, 158, 102, 0.3)",
-    flexShrink: 1
+    alignSelf: "stretch"
   },
   correctPillText: {
     color: theme.colors.success,

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -177,20 +177,35 @@ export function DailyQuizScreen({
                 const isCorrectOption = showFeedback && feedback?.correctIndex === index;
                 const isIncorrectSelected =
                   showFeedback && isFeedbackSelected && feedback?.isCorrect === false;
-                const shouldEmphasize = isCorrectOption || isIncorrectSelected;
+                const letter = String.fromCharCode(65 + index);
                 return (
-                  <PrimaryButton
+                  <Pressable
                     key={`${question.id}-${index}`}
-                    label={`${String.fromCharCode(65 + index)}. ${option}`}
                     onPress={() => handleSelectAnswer(index)}
-                    variant="ghost"
-                    style={[
-                      styles.optionButton,
-                      shouldEmphasize && styles.optionFeedback,
+                    style={({ pressed }) => [
+                      styles.optionRow,
                       isCorrectOption && styles.optionCorrect,
-                      isIncorrectSelected && styles.optionIncorrect
+                      isIncorrectSelected && styles.optionIncorrect,
+                      pressed && !feedbackActive && styles.optionPressed
                     ]}
-                  />
+                  >
+                    <View style={[
+                      styles.optionBadge,
+                      isCorrectOption && styles.optionBadgeCorrect,
+                      isIncorrectSelected && styles.optionBadgeIncorrect
+                    ]}>
+                      <Text style={[
+                        styles.optionBadgeText,
+                        isCorrectOption && styles.optionBadgeTextCorrect,
+                        isIncorrectSelected && styles.optionBadgeTextIncorrect
+                      ]}>{letter}</Text>
+                    </View>
+                    <Text style={[
+                      styles.optionText,
+                      isCorrectOption && styles.optionTextCorrect,
+                      isIncorrectSelected && styles.optionTextIncorrect
+                    ]}>{option}</Text>
+                  </Pressable>
                 );
               })}
             </View>
@@ -332,39 +347,84 @@ const styles = StyleSheet.create({
     flexShrink: 1
   },
   card: {
-    gap: theme.spacing.md,
+    gap: 18,
     backgroundColor: "rgba(255, 252, 244, 0.9)",
     borderColor: "rgba(223, 154, 31, 0.26)"
   },
   prompt: {
     color: "#1F1306",
     fontFamily: theme.typography.fontFamily,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
-    lineHeight: 34
+    lineHeight: 30
   },
   options: {
-    gap: theme.spacing.sm
+    gap: 10
   },
-  optionButton: {
-    width: "100%",
-    minHeight: 52
-  },
-  optionFeedback: {
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(11, 14, 20, 0.06)",
     borderWidth: 1,
-    shadowColor: "rgba(108, 76, 24, 0.22)",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 2
+    borderColor: "rgba(11, 14, 20, 0.09)"
+  },
+  optionPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.985 }]
   },
   optionCorrect: {
-    backgroundColor: "rgba(70, 169, 114, 0.16)",
-    borderColor: "rgba(43, 158, 102, 0.42)"
+    backgroundColor: "rgba(70, 169, 114, 0.14)",
+    borderColor: "rgba(43, 158, 102, 0.45)"
   },
   optionIncorrect: {
-    backgroundColor: "rgba(235, 87, 87, 0.14)",
-    borderColor: "rgba(235, 87, 87, 0.42)"
+    backgroundColor: "rgba(235, 87, 87, 0.12)",
+    borderColor: "rgba(235, 87, 87, 0.45)"
+  },
+  optionBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    backgroundColor: "rgba(11, 14, 20, 0.09)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0
+  },
+  optionBadgeCorrect: {
+    backgroundColor: "rgba(43, 158, 102, 0.2)"
+  },
+  optionBadgeIncorrect: {
+    backgroundColor: "rgba(235, 87, 87, 0.2)"
+  },
+  optionBadgeText: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  optionBadgeTextCorrect: {
+    color: "rgb(22, 115, 72)"
+  },
+  optionBadgeTextIncorrect: {
+    color: "rgb(185, 50, 50)"
+  },
+  optionText: {
+    flex: 1,
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 21,
+    paddingRight: 8
+  },
+  optionTextCorrect: {
+    color: "rgb(22, 115, 72)"
+  },
+  optionTextIncorrect: {
+    color: "rgb(185, 50, 50)"
   },
   statusCard: {
     marginTop: theme.spacing.xs,

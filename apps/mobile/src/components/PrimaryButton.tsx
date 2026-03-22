@@ -12,6 +12,7 @@ type Props = {
   icon?: React.ComponentProps<typeof FontAwesome>["name"];
   iconPosition?: "left" | "right";
   disabled?: boolean;
+  multiline?: boolean;
 };
 
 export function PrimaryButton({
@@ -22,7 +23,8 @@ export function PrimaryButton({
   style,
   icon,
   iconPosition = "left",
-  disabled = false
+  disabled = false,
+  multiline = false
 }: Props) {
   const isDanger = tone === "danger";
   const isGhost = variant === "ghost";
@@ -60,8 +62,8 @@ export function PrimaryButton({
         </View>
         <View style={styles.textSlot}>
           <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
+            numberOfLines={multiline ? undefined : 1}
+            ellipsizeMode={multiline ? undefined : "tail"}
             style={[
               styles.text,
               isGhost && styles.textGhost,
