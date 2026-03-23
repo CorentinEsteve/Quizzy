@@ -22,7 +22,7 @@ type Props = {
 const TABS: { key: TabKey; icon: string; labelKey?: "tabHome" | "tabSocial" | "tabHistory" | "tabLeaderboard" }[] = [
   { key: "lobby", icon: "home", labelKey: "tabHome" },
   { key: "social", icon: "users", labelKey: "tabSocial" },
-  { key: "create", icon: "plus" },
+  { key: "create", icon: "bolt" },
   { key: "historique", icon: "gamepad", labelKey: "tabHistory" },
   { key: "leaderboard", icon: "trophy", labelKey: "tabLeaderboard" },
 ];
@@ -145,7 +145,7 @@ function CreateTabItem({ onPress }: { onPress: () => void }) {
       <Animated.View
         style={[styles.createButton, { transform: [{ scale: scaleAnim }] }]}
       >
-        <FontAwesome name="plus" size={22} color="#FFFFFF" />
+        <FontAwesome name="bolt" size={22} color="#FFFFFF" />
       </Animated.View>
     </Pressable>
   );

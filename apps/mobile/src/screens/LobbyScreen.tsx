@@ -33,6 +33,19 @@ import {
   StatsResponse
 } from "../data/types";
 
+const CATEGORY_EMOJI: Record<string, string> = {
+  all: "🎲",
+  general: "🧠",
+  logic: "🔢",
+  science: "🔭",
+  geography: "🌍",
+  history: "🏛️",
+  sports: "⚽",
+  pop: "🎬",
+  nature: "🌿",
+  daily: "📰"
+};
+
 type Props = {
   quizzes: QuizSummary[];
   onCreateRoom: (categoryId: string, questionCount: number, mode: "sync" | "async") => void;
@@ -201,14 +214,15 @@ export function LobbyScreen({
   const pickStepIndex = Math.max(0, pickStepOrder.indexOf(pickStep));
   const pickProgress = pickStepIndex + 1;
   const categories = useMemo(() => {
-    const map = new Map<string, { id: string; label: string; accent: string; questionCount: number }>();
+    const map = new Map<string, { id: string; label: string; accent: string; questionCount: number; emoji: string }>();
     quizzes.forEach((quiz) => {
       if (!map.has(quiz.categoryId)) {
         map.set(quiz.categoryId, {
           id: quiz.categoryId,
           label: localizedCategoryLabel(locale, quiz.categoryId, quiz.categoryLabel),
           accent: quiz.accent,
-          questionCount: quiz.questionCount ?? quiz.rounds ?? 0
+          questionCount: quiz.questionCount ?? quiz.rounds ?? 0,
+          emoji: CATEGORY_EMOJI[quiz.categoryId] ?? "📚"
         });
       } else {
         const existing = map.get(quiz.categoryId);
@@ -226,7 +240,8 @@ export function LobbyScreen({
         id: ALL_CATEGORY_ID,
         label: t(locale, "allCategories"),
         accent: theme.colors.primary,
-        questionCount: totalQuestions
+        questionCount: totalQuestions,
+        emoji: CATEGORY_EMOJI["all"]
       },
       ...Array.from(map.values())
     ];
@@ -1293,24 +1308,44 @@ export function LobbyScreen({
                 </View>
                 {pickStep === "category" ? (
                   <View style={styles.dialogSection}>
-                    <View style={styles.dialogSectionHeader}>
-                      <View style={[styles.dialogSectionIcon, styles.dialogSectionIconCategory]}>
-                        <FontAwesome name="th-large" size={12} color="#2F46C9" />
-                      </View>
-                      <View style={styles.dialogSectionText}>
-                        <Text style={styles.dialogSectionTitle}>{t(locale, "chooseCategory")}</Text>
-                        <Text style={styles.dialogSectionBody}>
-                          {t(locale, "chooseCategoryBody")}
-                        </Text>
-                      </View>
-                    </View>
                     <ScrollView
                       showsVerticalScrollIndicator={false}
                       style={[styles.dialogScroll, { maxHeight: dialogListMaxHeight }]}
                       contentContainerStyle={styles.dialogScrollContent}
                     >
-                      <View style={styles.categoryGrid}>
-                        {categories.map((category) => {
+                      {/* Featured "all categories" card */}
+                      {categories.slice(0, 1).map((category) => {
+                        const isSelected = selectedCategoryId === category.id;
+                        return (
+                          <Pressable
+                            key={category.id}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setSelectedCategoryId(category.id);
+                            }}
+                            style={[
+                              styles.categoryFeaturedCard,
+                              isSelected && styles.categoryFeaturedCardSelected
+                            ]}
+                          >
+                            <Text style={styles.categoryFeaturedEmoji}>{category.emoji}</Text>
+                            <View style={styles.categoryFeaturedText}>
+                              <Text style={[styles.categoryFeaturedLabel, isSelected && styles.categoryFeaturedLabelSelected]}>
+                                {category.label}
+                              </Text>
+                              <Text style={styles.categoryFeaturedSubtitle}>
+                                {t(locale, "allCategoriesSubtitle")}
+                              </Text>
+                            </View>
+                            {isSelected && (
+                              <FontAwesome name="check" size={14} color={theme.colors.primary} style={styles.categoryFeaturedCheck} />
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                      {/* 2-column grid for other categories */}
+                      <View style={styles.categoryGridTwo}>
+                        {categories.slice(1).map((category) => {
                           const isSelected = selectedCategoryId === category.id;
                           return (
                             <Pressable
@@ -1319,35 +1354,15 @@ export function LobbyScreen({
                                 Haptics.selectionAsync();
                                 setSelectedCategoryId(category.id);
                               }}
+                              style={[
+                                styles.categoryGridCard,
+                                isSelected && styles.categoryGridCardSelected
+                              ]}
                             >
-                              <View
-                                style={[
-                                  styles.categoryChip,
-                                  isSelected && styles.categoryChipSelected
-                                ]}
-                              >
-                                <View
-                                  style={[
-                                    styles.categoryDot,
-                                    { backgroundColor: category.accent }
-                                  ]}
-                                />
-                                <Text
-                                  style={[
-                                    styles.categoryLabel,
-                                    isSelected && styles.categoryLabelSelected
-                                  ]}
-                                >
-                                  {category.label}
-                                </Text>
-                                <View style={styles.categoryChevron}>
-                                  <FontAwesome
-                                    name="angle-right"
-                                    size={14}
-                                    color={theme.colors.muted}
-                                  />
-                                </View>
-                              </View>
+                              <Text style={styles.categoryGridEmoji}>{category.emoji}</Text>
+                              <Text style={[styles.categoryGridLabel, isSelected && styles.categoryGridLabelSelected]}>
+                                {category.label}
+                              </Text>
                             </Pressable>
                           );
                         })}
@@ -1364,14 +1379,6 @@ export function LobbyScreen({
                           setPickStep("count");
                         }}
                         style={!selectedCategoryId ? styles.buttonDisabled : undefined}
-                      />
-                      <PrimaryButton
-                        label={t(locale, "back")}
-                        variant="ghost"
-                        icon="arrow-left"
-                      onPress={() => {
-                          setIsDialogOpen(false);
-                        }}
                       />
                     </View>
                   </View>
@@ -2804,6 +2811,78 @@ const styles = StyleSheet.create({
   },
   categoryGrid: {
     gap: theme.spacing.sm
+  },
+  categoryFeaturedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    width: "100%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 14,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1.5,
+    borderColor: "rgba(89, 103, 181, 0.24)",
+    backgroundColor: "#fff",
+    marginBottom: theme.spacing.sm
+  },
+  categoryFeaturedCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(230, 236, 255, 0.9)"
+  },
+  categoryFeaturedEmoji: {
+    fontSize: 26
+  },
+  categoryFeaturedText: {
+    flex: 1,
+    gap: 2
+  },
+  categoryFeaturedLabel: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.body,
+    fontWeight: "700"
+  },
+  categoryFeaturedLabelSelected: {
+    color: theme.colors.primary
+  },
+  categoryFeaturedSubtitle: {
+    color: theme.colors.muted,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small
+  },
+  categoryFeaturedCheck: {
+    marginLeft: "auto" as any
+  },
+  categoryGridTwo: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm
+  },
+  categoryGridCard: {
+    width: "47%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(89, 103, 181, 0.18)",
+    backgroundColor: "#fff",
+    gap: theme.spacing.sm
+  },
+  categoryGridCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(230, 236, 255, 0.9)"
+  },
+  categoryGridEmoji: {
+    fontSize: 30
+  },
+  categoryGridLabel: {
+    color: theme.colors.ink,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+  categoryGridLabelSelected: {
+    color: theme.colors.primary
   },
   categoryChip: {
     flexDirection: "row",
