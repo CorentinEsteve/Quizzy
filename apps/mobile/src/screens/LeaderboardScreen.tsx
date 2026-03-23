@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StarfieldBackground } from "../components/StarfieldBackground";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { GlassCard } from "../components/GlassCard";
@@ -54,10 +55,7 @@ export function LeaderboardScreen({
 
   return (
     <View style={styles.page}>
-      <LinearGradient colors={["#08112E", "#0D1B4A", "#142A60"]} style={StyleSheet.absoluteFill} />
-      <View style={styles.backgroundOrbTop} pointerEvents="none" />
-      <View style={styles.backgroundOrbBottom} pointerEvents="none" />
-      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
+      <StarfieldBackground />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -382,33 +380,6 @@ export function LeaderboardScreen({
 const styles = StyleSheet.create({
   page: {
     flex: 1
-  },
-  backgroundOrbTop: {
-    position: "absolute",
-    top: -220,
-    right: -140,
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: "rgba(82, 125, 255, 0.2)"
-  },
-  backgroundOrbBottom: {
-    position: "absolute",
-    bottom: -220,
-    left: -160,
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: "rgba(86, 70, 184, 0.16)"
-  },
-  backgroundOrbWarm: {
-    position: "absolute",
-    top: 180,
-    right: -120,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: "rgba(243, 194, 88, 0.14)"
   },
   container: {
     padding: theme.spacing.lg,

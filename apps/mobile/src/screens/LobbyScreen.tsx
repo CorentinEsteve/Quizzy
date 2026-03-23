@@ -18,6 +18,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
+import { ShootingStar } from "../components/StarfieldBackground";
 import { SplashScreen } from "./SplashScreen";
 import { GlassCard } from "../components/GlassCard";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -811,36 +812,14 @@ export function LobbyScreen({
   return (
     <View style={styles.page}>
       <LinearGradient
-        colors={["#08112E", "#0D1B4A", "#142960"]}
+        colors={["#050C20", "#08112E", "#0C1840", "#091228"]}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.85, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <LinearGradient
-        colors={["rgba(105, 139, 255, 0.4)", "rgba(105, 139, 255, 0)"]}
-        start={{ x: 0.1, y: 0.1 }}
-        end={{ x: 0.7, y: 0.7 }}
-        style={styles.backgroundSweep}
-      />
-      <LinearGradient
-        colors={["rgba(86, 70, 184, 0.18)", "rgba(86, 70, 184, 0)"]}
-        start={{ x: 0.95, y: 0.05 }}
-        end={{ x: 0.25, y: 0.65 }}
-        style={styles.backgroundWarmSweep}
-      />
-      <LinearGradient
-        colors={["rgba(243, 194, 88, 0.18)", "rgba(243, 194, 88, 0)"]}
-        start={{ x: 0.7, y: 0.85 }}
-        end={{ x: 0.15, y: 0.25 }}
-        style={styles.backgroundGoldSweep}
-      />
-      <View style={styles.backgroundOrb} pointerEvents="none" />
-      <View style={styles.backgroundOrbAccent} pointerEvents="none" />
-      <View style={styles.backgroundOrbWarm} pointerEvents="none" />
-      <View style={styles.backgroundNebula} pointerEvents="none" />
-      <View style={styles.backgroundNebulaTwo} pointerEvents="none" />
-      <View style={styles.backgroundRibbon} pointerEvents="none" />
-      <View style={styles.backgroundRing} pointerEvents="none" />
-      <View style={styles.backgroundGlow} pointerEvents="none" />
-      <View style={styles.backgroundGlass} pointerEvents="none" />
+      <ShootingStar startX={355} startY={45}  initialDelay={2200}  />
+      <ShootingStar startX={285} startY={18}  initialDelay={9400}  />
+      <ShootingStar startX={325} startY={95}  initialDelay={16500} />
       <Animated.View
         pointerEvents="none"
         style={[
@@ -1009,7 +988,16 @@ export function LobbyScreen({
 
         <Animated.View style={s[2]}>
         <View style={styles.sectionBlock}>
-        <Text style={styles.sectionLabel}>{t(locale, "sectionOngoing")}</Text>
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>
+            {t(locale, "sectionOngoing")}{activeSessions.length > 0 ? ` · ${activeSessions.length}` : ""}
+          </Text>
+          {activeSessions.length > 3 && onOpenHistorique ? (
+            <Pressable onPress={onOpenHistorique} hitSlop={8}>
+              <Text style={styles.seeAllButton}>{locale === "fr" ? "Voir tout" : "See all"}</Text>
+            </Pressable>
+          ) : null}
+        </View>
         {showInvitedCard
           ? invitedCards.map((inviteCard) => (
               <Pressable
@@ -1131,256 +1119,106 @@ export function LobbyScreen({
           </Pressable>
         ))}
 
-        {nextSession ? (
-          <GlassCard style={[styles.introCard, styles.nextActionCard]}>
-            <LinearGradient
-              colors={["rgba(255, 255, 255, 0.96)", "rgba(233, 241, 255, 0.95)", "rgba(255, 240, 209, 0.9)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.nextActionBackdrop}
-            />
-            <View style={styles.nextActionHeader}>
-              <View style={styles.nextActionHeaderLeft}>
-                <View style={styles.nextActionMiniAvatar}>
-                  <Text style={styles.nextActionMiniAvatarText}>
-                    {initials(nextOpponentName)}
-                  </Text>
-                </View>
-                <Text style={styles.nextActionLabel}>{t(locale, "nextAction")}</Text>
-              </View>
-              <View style={styles.nextActionHeaderBadge}>
-                <Text style={styles.nextActionHeaderBadgeText}>{nextStatus}</Text>
-              </View>
-            </View>
-            <View style={styles.nextActionHero}>
-              <View style={styles.nextActionCopy}>
-                <Text style={styles.nextActionTitle}>
-                  {t(locale, "continueMatchVs", { name: nextOpponentName })}
-                </Text>
-                {nextMeta ? (
-                  <View style={styles.nextActionMetaRow}>
-                    <Text style={styles.nextActionMeta}>{nextMeta.category}</Text>
-                    <Text style={styles.nextActionMetaDot}>•</Text>
-                    <View style={styles.nextActionProgressMetaGroup}>
-                      <Text style={styles.nextActionMeta}>{nextMeta.progress}</Text>
-                      <View style={styles.nextActionProgress}>
-                        <View
-                          style={[
-                            styles.nextActionProgressFill,
-                            { width: `${Math.min((nextMyProgress / Math.max(nextTotalQuestions, 1)) * 100, 100)}%` }
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.nextActionButtons}>
-              <PrimaryButton
-                label={t(locale, "continueMatch")}
-                icon="arrow-right"
-                iconPosition="right"
-                onPress={() => onResumeRoom(nextSession.code)}
-                style={styles.nextActionPrimary}
-              />
-            </View>
-          </GlassCard>
-        ) : null}
-
-        {remainingSessions.length > 0 ? (
-          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
-            {remainingSessions
-              .slice(0, 3)
-              .map((session, index, array) => {
-                const otherPlayers = session.players.filter((player) => player.id !== userId);
-                const opponentsLabel =
-                  otherPlayers.length === 0
-                    ? "-"
-                    : formatOpponentNames(otherPlayers.map((player) => player.displayName));
-                const categoryLabel = localizedCategoryLabel(
-                  locale,
-                  session.quiz.categoryId ?? ALL_CATEGORY_ID,
-                  session.quiz.categoryLabel ?? t(locale, "allCategories")
-                );
-                const totalQuestions = session.quiz.questions?.length ?? 0;
-                const myProgress = session.progress?.[String(userId)] ?? 0;
-                const otherProgressValues = otherPlayers.map(
-                  (player) => session.progress?.[String(player.id)] ?? 0
-                );
-                const isWaitingForOpponent =
-                  (session.mode === "sync" &&
-                    myProgress < totalQuestions &&
-                    otherProgressValues.some((progress) => myProgress > progress)) ||
-                  (session.mode === "async" &&
-                    myProgress >= totalQuestions &&
-                    otherProgressValues.some((progress) => progress < totalQuestions));
-                const canContinue =
-                  session.mode === "sync"
-                    ? !isWaitingForOpponent && myProgress < totalQuestions
-                    : myProgress < totalQuestions;
-                const isLast = index === array.length - 1;
-                return (
-                  <Pressable
-                    key={session.code}
-                    disabled={!canContinue}
-                    onPress={() => {
-                      if (!canContinue) return;
-                      onResumeRoom(session.code);
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.sessionCard,
-                        styles.sessionCardLight,
-                        !canContinue && styles.sessionCardDisabled,
-                        isLast && styles.sessionCardLast
-                      ]}
-                    >
-                    <View style={styles.sessionHeader}>
-                      <View style={styles.sessionHeaderCopy}>
-                        <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{opponentsLabel}</Text>
-                        <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
-                          {categoryLabel}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.statusChip,
-                          styles.statusChipLight,
-                          isWaitingForOpponent ? styles.statusChipWait : styles.statusChipOngoing
-                        ]}
-                      >
-                        <FontAwesome
-                          name={isWaitingForOpponent ? "clock-o" : "bolt"}
-                          size={10}
-                          color="#1F327F"
-                        />
-                        <Text style={[styles.statusChipText, styles.statusChipTextLight]}>
-                          {isWaitingForOpponent ? t(locale, "waitingOpponent") : t(locale, "yourTurn")}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.sessionProgressRow}>
-                      <View style={[styles.sessionProgress, styles.sessionProgressLight]}>
-                        <View
-                          style={[
-                            styles.sessionProgressFill,
-                            styles.sessionProgressFillLight,
-                            { width: `${Math.min((myProgress / Math.max(totalQuestions, 1)) * 100, 100)}%` }
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.sessionProgressText, styles.sessionProgressTextLight]}>{myProgress}/{totalQuestions}</Text>
-                    </View>
-                    <View style={styles.sessionFooter}>
-                      <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>
-                        {myProgress} {t(locale, "questionsLabel")} / {totalQuestions}
+        {activeSessions.length > 0 ? (
+          <View style={styles.duelCardsStack}>
+            {activeSessions.slice(0, 3).map((session) => {
+              const otherPlayers = session.players.filter((player) => player.id !== userId);
+              const opponentsLabel =
+                otherPlayers.length === 0
+                  ? "-"
+                  : formatOpponentNames(otherPlayers.map((player) => player.displayName));
+              const categoryLabel = localizedCategoryLabel(
+                locale,
+                session.quiz.categoryId ?? ALL_CATEGORY_ID,
+                session.quiz.categoryLabel ?? t(locale, "allCategories")
+              );
+              const totalQuestions = session.quiz.questions?.length ?? 0;
+              const myProgress = session.progress?.[String(userId)] ?? 0;
+              const otherProgressValues = otherPlayers.map(
+                (player) => session.progress?.[String(player.id)] ?? 0
+              );
+              const opponentProgress = otherProgressValues[0] ?? 0;
+              const isWaitingForOpponent =
+                (session.mode === "sync" &&
+                  myProgress < totalQuestions &&
+                  otherProgressValues.some((p) => myProgress > p)) ||
+                (session.mode === "async" &&
+                  myProgress >= totalQuestions &&
+                  otherProgressValues.some((p) => p < totalQuestions));
+              const canContinue =
+                session.mode === "sync"
+                  ? !isWaitingForOpponent && myProgress < totalQuestions
+                  : myProgress < totalQuestions;
+              const bestOpponentProgress = otherProgressValues.length > 0
+                ? Math.max(...otherProgressValues)
+                : 0;
+              const myPct = Math.min((myProgress / Math.max(totalQuestions, 1)) * 100, 100);
+              const bestOpponentPct = Math.min((bestOpponentProgress / Math.max(totalQuestions, 1)) * 100, 100);
+              const isMultiplayer = otherPlayers.length > 1;
+              const rightLabel = isMultiplayer
+                ? (locale === "fr" ? `${otherPlayers.length} joueurs` : `${otherPlayers.length} players`)
+                : opponentsLabel;
+              return (
+                <Pressable
+                  key={session.code}
+                  disabled={!canContinue}
+                  onPress={() => {
+                    if (!canContinue) return;
+                    onResumeRoom(session.code);
+                  }}
+                  style={({ pressed }) => [
+                    styles.duelCard,
+                    !canContinue && styles.duelCardDisabled,
+                    pressed && canContinue && styles.duelCardPressed
+                  ]}
+                >
+                  <View style={styles.duelCardInner}>
+                    {/* Top row: opponent name + status badge */}
+                    <View style={styles.duelCardTopRow}>
+                      <Text style={styles.duelCardName} numberOfLines={1}>
+                        {opponentsLabel}
                       </Text>
-                      {canContinue ? (
-                        <Animated.View
-                          style={[
-                            styles.ctaPill,
-                            styles.ctaPrimary,
-                            styles.ctaOngoingContinue,
-                            {
-                              transform: [
-                                {
-                                  scale: continuePulse.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [1, 1.03]
-                                  })
-                                }
-                              ],
-                              opacity: continuePulse.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [1, 0.92]
-                              })
-                            }
-                          ]}
-                        >
-                          <Text style={styles.ctaText}>{t(locale, "continueMatch")}</Text>
-                          <FontAwesome name="arrow-right" size={12} color="#F4F8FF" />
-                        </Animated.View>
-                      ) : null}
+                      <View style={[
+                        styles.duelCardStatusBadge,
+                        isWaitingForOpponent ? styles.duelCardStatusBadgeWait : styles.duelCardStatusBadgeActive
+                      ]}>
+                        {!isWaitingForOpponent ? (
+                          <FontAwesome name="bolt" size={9} color="#fff" />
+                        ) : null}
+                        <Text style={[
+                          styles.duelCardStatusText,
+                          isWaitingForOpponent && styles.duelCardStatusTextWait
+                        ]}>
+                          {isWaitingForOpponent ? t(locale, "waitingTurn") : t(locale, "continueMatch")}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Category */}
+                    <Text style={styles.duelCardCategory} numberOfLines={1}>{categoryLabel}</Text>
+
+                    {/* Progress bar */}
+                    <View style={styles.duelCardProgressSection}>
+                      <View style={styles.duelCardTrack}>
+                        {bestOpponentPct > 0 ? (
+                          <View style={[styles.duelCardTrackGhost, { width: `${bestOpponentPct}%` }]} />
+                        ) : null}
+                        <View style={[styles.duelCardTrackMine, { width: `${myPct}%` }]} />
+                      </View>
+                      <View style={styles.duelCardProgressLabels}>
+                        <Text style={styles.duelCardProgressLabelMe}>
+                          {locale === "fr" ? "Toi" : "You"} · <Text style={styles.duelCardProgressNum}>{myProgress}</Text>/{totalQuestions}
+                        </Text>
+                        <Text style={styles.duelCardProgressLabelOpp} numberOfLines={1}>
+                          {rightLabel} · <Text style={styles.duelCardProgressNum}>{bestOpponentProgress}</Text>/{totalQuestions}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </Pressable>
-                );
-              })}
-          </GlassCard>
-        ) : null}
-
-        {showDailyCard ? (
-          <GlassCard
-            accent={theme.colors.reward}
-            style={[styles.introCard, styles.dailyQuizCard, styles.activityCardLight, dailyCompleted && styles.dailyQuizCardCompact]}
-          >
-            <LinearGradient
-              colors={["rgba(242, 188, 74, 0.22)", "rgba(255, 248, 228, 0.92)", "rgba(255, 252, 243, 0.98)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.dailyQuizBackdrop}
-            />
-            <View style={styles.dailyQuizHeader}>
-              <View style={styles.dailyQuizHeaderLeft}>
-                <View style={styles.dailyQuizBadge}>
-                  <FontAwesome name="calendar" size={12} color={theme.colors.reward} />
-                </View>
-                <Text style={styles.dailyQuizLabel}>{t(locale, "dailyQuizTitle")}</Text>
-              </View>
-              {!dailyCompleted ? (
-                <Text style={styles.dailyQuizNew}>{t(locale, "dailyQuizNew")}</Text>
-              ) : null}
-            </View>
-
-            {dailyCompleted ? (
-              <View style={styles.dailyQuizCompactRow}>
-                <View style={styles.dailyQuizCompactCopy}>
-                  <Text style={styles.dailyQuizTitleCompact}>
-                    {t(locale, "dailyQuizCompleted")}
-                  </Text>
-                  <Text style={styles.dailyQuizMetaCompact}>
-                    {dailyPercentile !== null
-                      ? t(locale, "dailyQuizPercentile", { percent: dailyPercentile })
-                      : t(locale, "dailyQuizParticipants", { count: dailyResults?.participants ?? 0 })}
-                  </Text>
-                </View>
-                <View style={styles.dailyQuizCompactAction}>
-                  <Pressable
-                    onPress={onOpenDailyResults}
-                    style={({ pressed }) => [
-                      styles.dailyQuizMiniButton,
-                      pressed && styles.dailyQuizMiniButtonPressed,
-                      (dailyLoading || !dailyResults) && styles.dailyQuizMiniButtonDisabled
-                    ]}
-                    disabled={dailyLoading || !dailyResults}
-                  >
-                    <Text style={styles.dailyQuizMiniButtonText}>
-                      {t(locale, "dailyQuizResultsShort")}
-                    </Text>
-                    <FontAwesome name="chevron-right" size={12} color={theme.colors.reward} />
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <>
-                <View style={styles.dailyQuizHero}>
-                  <Text style={styles.dailyQuizTitle}>{t(locale, "dailyQuizSubtitle")}</Text>
-                </View>
-                <View style={styles.dailyQuizButtons}>
-                  <PrimaryButton
-                    label={dailyActionLabel}
-                    icon="arrow-right"
-                    iconPosition="right"
-                    onPress={handleDailyPress}
-                    style={styles.dailyQuizPrimary}
-                    disabled={dailyLoading || !dailyQuiz}
-                  />
-                </View>
-              </>
-            )}
-          </GlassCard>
+              );
+            })}
+          </View>
         ) : null}
         </View>
         </Animated.View>
@@ -1816,101 +1654,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(214, 228, 255, 0.18)",
     opacity: 0.85
-  },
-  backgroundOrb: {
-    position: "absolute",
-    top: -220,
-    right: -160,
-    width: 420,
-    height: 420,
-    borderRadius: 210,
-    backgroundColor: "rgba(82, 125, 255, 0.28)"
-  },
-  backgroundOrbAccent: {
-    position: "absolute",
-    bottom: -220,
-    left: -160,
-    width: 360,
-    height: 360,
-    borderRadius: 180,
-    backgroundColor: "rgba(86, 70, 184, 0.2)"
-  },
-  backgroundOrbWarm: {
-    position: "absolute",
-    top: 120,
-    right: -120,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "rgba(243, 194, 88, 0.24)"
-  },
-  backgroundNebula: {
-    position: "absolute",
-    top: "28%",
-    left: -110,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "rgba(125, 153, 255, 0.12)"
-  },
-  backgroundNebulaTwo: {
-    position: "absolute",
-    top: "52%",
-    right: -110,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: "rgba(117, 85, 206, 0.13)"
-  },
-  backgroundRibbon: {
-    position: "absolute",
-    top: 220,
-    left: -90,
-    width: 280,
-    height: 160,
-    borderRadius: 44,
-    transform: [{ rotate: "-16deg" }],
-    backgroundColor: "rgba(243, 194, 88, 0.1)"
-  },
-  backgroundRing: {
-    position: "absolute",
-    top: 74,
-    right: -56,
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    borderWidth: 18,
-    borderColor: "rgba(243, 194, 88, 0.14)"
-  },
-  backgroundGlow: {
-    position: "absolute",
-    top: "38%",
-    alignSelf: "center",
-    width: 440,
-    height: 440,
-    borderRadius: 220,
-    backgroundColor: "rgba(41, 75, 176, 0.24)"
-  },
-  backgroundSweep: {
-    ...StyleSheet.absoluteFillObject
-  },
-  backgroundWarmSweep: {
-    ...StyleSheet.absoluteFillObject
-  },
-  backgroundGoldSweep: {
-    ...StyleSheet.absoluteFillObject
-  },
-  backgroundGlass: {
-    position: "absolute",
-    top: 120,
-    right: -40,
-    width: 220,
-    height: 220,
-    borderRadius: 60,
-    backgroundColor: "rgba(236, 244, 255, 0.09)",
-    transform: [{ rotate: "12deg" }],
-    borderWidth: 1,
-    borderColor: "rgba(170, 203, 255, 0.25)"
   },
   starLayer: {
     ...StyleSheet.absoluteFillObject
@@ -3769,5 +3512,126 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 140,
     zIndex: 1
+  },
+  duelCardsStack: {
+    gap: 10
+  },
+  duelCard: {
+    backgroundColor: "rgba(252, 254, 255, 0.98)",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(72, 88, 178, 0.14)",
+    overflow: "hidden",
+    shadowColor: "rgba(42, 50, 115, 0.2)",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
+  },
+  duelCardDisabled: {
+    opacity: 0.45
+  },
+  duelCardPressed: {
+    opacity: 0.82
+  },
+  duelCardInner: {
+    paddingVertical: 14,
+    paddingHorizontal: theme.spacing.md,
+    gap: 4
+  },
+  duelCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  duelCardName: {
+    color: "#111C48",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 17,
+    fontWeight: "700",
+    flex: 1,
+    lineHeight: 22
+  },
+  duelCardStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999
+  },
+  duelCardStatusBadgeActive: {
+    backgroundColor: theme.colors.primary
+  },
+  duelCardStatusBadgeWait: {
+    backgroundColor: "rgba(57, 72, 175, 0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(57, 72, 175, 0.18)"
+  },
+  duelCardStatusText: {
+    color: "#fff",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "600"
+  },
+  duelCardStatusTextWait: {
+    color: "rgba(57, 72, 175, 0.55)"
+  },
+  duelCardCategory: {
+    color: "rgba(70, 84, 130, 0.5)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "400"
+  },
+  duelCardProgressSection: {
+    marginTop: 10,
+    gap: 6
+  },
+  duelCardTrack: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(57, 72, 175, 0.08)",
+    overflow: "hidden",
+    position: "relative"
+  },
+  duelCardTrackGhost: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "rgba(57, 72, 175, 0.2)"
+  },
+  duelCardTrackMine: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: theme.colors.primary
+  },
+  duelCardProgressLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  duelCardProgressLabelMe: {
+    color: "rgba(70, 84, 130, 0.6)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "400"
+  },
+  duelCardProgressLabelOpp: {
+    color: "rgba(70, 84, 130, 0.45)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 12,
+    fontWeight: "400",
+    maxWidth: "50%",
+    textAlign: "right"
+  },
+  duelCardProgressNum: {
+    fontWeight: "700",
+    color: "#111C48"
   }
 });

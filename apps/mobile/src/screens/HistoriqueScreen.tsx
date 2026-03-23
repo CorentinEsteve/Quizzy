@@ -6,12 +6,12 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome } from "@expo/vector-icons";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { localizedCategoryLabel } from "../data/categories";
+import { StarfieldBackground } from "../components/StarfieldBackground";
 
 const TAB_BAR_HEIGHT = 60;
 const ALL_CATEGORY_ID = "all";
@@ -49,10 +49,7 @@ export function HistoriqueScreen({ sessions, userId, locale, onOpenRecap, onResu
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={["#08112E", "#0D1B4A", "#142A60"]}
-        style={StyleSheet.absoluteFill}
-      />
+      <StarfieldBackground />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -61,11 +58,8 @@ export function HistoriqueScreen({ sessions, userId, locale, onOpenRecap, onResu
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <View style={styles.headerIcon}>
-            <FontAwesome name="history" size={18} color={theme.colors.primary} />
-          </View>
           <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>{t(locale, "tabHistory").toUpperCase()}</Text>
+            <Text style={styles.eyebrow}>{t(locale, "tabHistory")}</Text>
             <Text style={styles.title}>{locale === "fr" ? "Mes parties" : "My games"}</Text>
           </View>
         </View>
@@ -259,22 +253,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.sm,
   },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(94,124,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerText: {
     flex: 1,
   },
   eyebrow: {
-    color: "rgba(214,228,255,0.7)",
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
     letterSpacing: 1.2,
   },
   title: {

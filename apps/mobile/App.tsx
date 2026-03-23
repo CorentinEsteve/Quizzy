@@ -1834,6 +1834,7 @@ export default function App() {
           activeTab={panel as "lobby" | "social" | "historique" | "leaderboard"}
           onPress={(tab) => {
             if (tab === "create") {
+              setPanel("lobby");
               setTriggerCreateRoom(true);
             } else {
               setPanel(tab);

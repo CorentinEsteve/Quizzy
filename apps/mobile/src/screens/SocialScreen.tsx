@@ -7,11 +7,11 @@ import {
   StyleSheet,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome } from "@expo/vector-icons";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
+import { StarfieldBackground } from "../components/StarfieldBackground";
 
 const TAB_BAR_HEIGHT = 60;
 
@@ -103,10 +103,7 @@ export function SocialScreen({ sessions, userId, locale, onOpenRecap, onChalleng
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={["#08112E", "#0D1B4A", "#142A60"]}
-        style={StyleSheet.absoluteFill}
-      />
+      <StarfieldBackground />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -115,11 +112,8 @@ export function SocialScreen({ sessions, userId, locale, onOpenRecap, onChalleng
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <View style={styles.headerIcon}>
-            <FontAwesome name="users" size={18} color={theme.colors.primary} />
-          </View>
           <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>{t(locale, "tabSocial").toUpperCase()}</Text>
+            <Text style={styles.eyebrow}>{t(locale, "tabSocial")}</Text>
             <Text style={styles.title}>{locale === "fr" ? "Tes adversaires" : "Rivals & Challenges"}</Text>
           </View>
         </View>
@@ -303,22 +297,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.sm,
   },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(94,124,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerText: {
     flex: 1,
   },
   eyebrow: {
-    color: "rgba(214,228,255,0.7)",
+    color: "rgba(214, 228, 255, 0.86)",
     fontFamily: theme.typography.fontFamily,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: theme.typography.small,
+    textTransform: "uppercase",
     letterSpacing: 1.2,
   },
   title: {

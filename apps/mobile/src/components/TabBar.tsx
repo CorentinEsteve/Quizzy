@@ -1,16 +1,15 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
+  Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome } from "@expo/vector-icons";
 import { theme } from "../theme";
 import { Locale, t } from "../i18n";
-
-const TAB_HEIGHT = 60;
 
 type TabKey = "lobby" | "social" | "create" | "historique" | "leaderboard";
 
@@ -24,51 +23,168 @@ const TABS: { key: TabKey; icon: string; labelKey?: "tabHome" | "tabSocial" | "t
   { key: "lobby", icon: "home", labelKey: "tabHome" },
   { key: "social", icon: "users", labelKey: "tabSocial" },
   { key: "create", icon: "plus" },
-  { key: "historique", icon: "clock-o", labelKey: "tabHistory" },
+  { key: "historique", icon: "gamepad", labelKey: "tabHistory" },
   { key: "leaderboard", icon: "trophy", labelKey: "tabLeaderboard" },
 ];
+
+function TabItem({
+  tabKey,
+  icon,
+  labelKey,
+  isActive,
+  onPress,
+  locale,
+}: {
+  tabKey: TabKey;
+  icon: string;
+  labelKey?: "tabHome" | "tabSocial" | "tabHistory" | "tabLeaderboard";
+  isActive: boolean;
+  onPress: () => void;
+  locale: Locale;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const bgAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(bgAnim, {
+      toValue: isActive ? 1 : 0,
+      useNativeDriver: false,
+      tension: 120,
+      friction: 10,
+    }).start();
+  }, [isActive]);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.85,
+      useNativeDriver: true,
+      tension: 200,
+      friction: 8,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 150,
+      friction: 8,
+    }).start();
+  };
+
+  const bgColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(94,124,255,0)", "rgba(94,124,255,0.32)"],
+  });
+  const borderColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(140,165,255,0)", "rgba(140,165,255,0.35)"],
+  });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      hitSlop={6}
+      style={styles.tabWrapper}
+    >
+      <Animated.View
+        style={[
+          styles.tabInner,
+          { transform: [{ scale: scaleAnim }] },
+        ]}
+      >
+        <Animated.View
+          style={[styles.activeIndicator, { backgroundColor: bgColor, borderColor }]}
+        />
+        <FontAwesome
+          name={icon as any}
+          size={isActive ? 21 : 19}
+          color={isActive ? "#FFFFFF" : "rgba(255,255,255,0.40)"}
+        />
+        {labelKey && (
+          <Text style={[styles.label, isActive && styles.labelActive]}>
+            {t(locale, labelKey)}
+          </Text>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function CreateTabItem({ onPress }: { onPress: () => void }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.9,
+      useNativeDriver: true,
+      tension: 200,
+      friction: 8,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 150,
+      friction: 8,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      hitSlop={4}
+      style={styles.tabWrapper}
+    >
+      <Animated.View
+        style={[styles.createButton, { transform: [{ scale: scaleAnim }] }]}
+      >
+        <FontAwesome name="plus" size={22} color="#FFFFFF" />
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export function TabBar({ activeTab, onPress, locale }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      {TABS.map((tab) => {
-        const isActive = tab.key === activeTab;
-        if (tab.key === "create") {
+    <View
+      style={[
+        styles.container,
+        { bottom: Math.max(insets.bottom - 14, 4) },
+      ]}
+      pointerEvents="box-none"
+    >
+      <View style={styles.pill}>
+        {TABS.map((tab) => {
+          if (tab.key === "create") {
+            return (
+              <CreateTabItem
+                key={tab.key}
+                onPress={() => onPress("create")}
+              />
+            );
+          }
           return (
-            <Pressable
+            <TabItem
               key={tab.key}
-              onPress={() => onPress("create")}
-              style={styles.tab}
-              hitSlop={8}
-            >
-              <View style={styles.createButton}>
-                <FontAwesome name="plus" size={22} color="#FFFFFF" />
-              </View>
-            </Pressable>
-          );
-        }
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => onPress(tab.key)}
-            style={styles.tab}
-            hitSlop={4}
-          >
-            <FontAwesome
-              name={tab.icon as any}
-              size={20}
-              color={isActive ? theme.colors.primary : theme.colors.muted}
+              tabKey={tab.key}
+              icon={tab.icon}
+              labelKey={tab.labelKey}
+              isActive={tab.key === activeTab}
+              onPress={() => onPress(tab.key)}
+              locale={locale}
             />
-            {tab.labelKey && (
-              <Text style={[styles.label, isActive && styles.labelActive]}>
-                {t(locale, tab.labelKey)}
-              </Text>
-            )}
-          </Pressable>
-        );
-      })}
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -76,49 +192,72 @@ export function TabBar({ activeTab, onPress, locale }: Props) {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    left: 16,
+    right: 16,
+  },
+  pill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0D1640",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    // Dark enough to stay readable over white cards, light enough to show glass depth
+    backgroundColor: "rgba(10, 15, 50, 0.74)",
+    borderRadius: 32,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    gap: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
     shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 12,
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 18,
   },
-  tab: {
+  tabWrapper: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    height: TAB_HEIGHT,
+    height: 58,
     gap: 4,
+  },
+  tabInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 68,
+    height: 54,
+    gap: 4,
+  },
+  activeIndicator: {
+    position: "absolute",
+    width: 68,
+    height: 54,
+    borderRadius: 28,
+    borderWidth: 1,
   },
   label: {
     fontSize: 10,
     fontFamily: theme.typography.fontFamily,
-    color: theme.colors.muted,
-    letterSpacing: 0.2,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 0.1,
   },
   labelActive: {
-    color: theme.colors.primary,
+    color: "#FFFFFF",
     fontWeight: "600",
   },
   createButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: theme.colors.cta,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.40)",
     shadowColor: theme.colors.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    marginBottom: 4,
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 20,
+    // Overflow above and below the pill
+    marginVertical: -16,
   },
 });
