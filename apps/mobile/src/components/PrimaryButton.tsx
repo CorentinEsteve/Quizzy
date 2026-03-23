@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { theme } from "../theme";
 
@@ -8,7 +8,7 @@ type Props = {
   onPress?: () => void;
   variant?: "primary" | "ghost";
   tone?: "default" | "danger";
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   icon?: React.ComponentProps<typeof FontAwesome>["name"];
   iconPosition?: "left" | "right";
   disabled?: boolean;

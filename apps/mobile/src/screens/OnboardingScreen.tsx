@@ -26,7 +26,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
         key: "01",
         title: t(locale, "onboardingStep1"),
         body: t(locale, "onboardingStep1Body"),
-        icon: "plus",
+        icon: "plus" as const,
         accent: theme.colors.primary,
         backdrop: ["rgba(94, 124, 255, 0.18)", "rgba(255, 255, 255, 0.9)"] as const
       },
@@ -34,7 +34,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
         key: "02",
         title: t(locale, "onboardingStep2"),
         body: t(locale, "onboardingStep2Body"),
-        icon: "clock-o",
+        icon: "clock-o" as const,
         accent: theme.colors.secondary,
         backdrop: ["rgba(46, 196, 182, 0.16)", "rgba(255, 255, 255, 0.9)"] as const
       },
@@ -42,7 +42,7 @@ export function OnboardingScreen({ locale, onDone }: Props) {
         key: "03",
         title: t(locale, "onboardingStep3"),
         body: t(locale, "onboardingStep3Body"),
-        icon: "trophy",
+        icon: "trophy" as const,
         accent: theme.colors.accent,
         backdrop: ["rgba(216, 164, 58, 0.2)", "rgba(255, 255, 255, 0.9)"] as const
       }

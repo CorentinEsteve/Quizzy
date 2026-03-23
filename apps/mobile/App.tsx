@@ -16,7 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { io, Socket } from "socket.io-client";
 import * as Notifications from "expo-notifications";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Localization from "expo-localization";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -1325,7 +1325,7 @@ export default function App() {
     try {
       const existing = myRooms.find((item) => item.code === code);
       const amParticipant =
-        Boolean(user) &&
+        user != null &&
         (
           existing?.myRole === "guest" ||
           existing?.myRole === "host" ||
@@ -1507,7 +1507,6 @@ export default function App() {
   function handleCompleteOnboarding() {
     setHasSeenOnboarding(true);
     setPanel("lobby");
-    panelTranslateX.current.setValue(0);
     AsyncStorage.setItem("dq_onboarding", "seen").catch(() => null);
   }
 

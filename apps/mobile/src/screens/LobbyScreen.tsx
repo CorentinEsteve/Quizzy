@@ -4,6 +4,7 @@ import {
   Easing,
   InteractionManager,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -133,15 +134,15 @@ function formatOpponentNames(names: string[], maxChars = 32) {
   return result;
 }
 
-const BACKGROUND_STARS = [
-  { left: "8%", top: 84, size: 2.2, baseOpacity: 0.58, tone: "cool" as const },
-  { left: "22%", top: 138, size: 1.8, baseOpacity: 0.45, tone: "gold" as const },
-  { left: "34%", top: 96, size: 2.4, baseOpacity: 0.64, tone: "cool" as const },
-  { left: "48%", top: 164, size: 1.6, baseOpacity: 0.4, tone: "cool" as const },
-  { left: "62%", top: 112, size: 2.6, baseOpacity: 0.56, tone: "gold" as const },
-  { left: "76%", top: 182, size: 1.7, baseOpacity: 0.42, tone: "cool" as const },
-  { left: "86%", top: 72, size: 2.2, baseOpacity: 0.52, tone: "cool" as const },
-  { left: "92%", top: 148, size: 1.9, baseOpacity: 0.44, tone: "gold" as const }
+const BACKGROUND_STARS: { left: `${number}%`; top: number; size: number; baseOpacity: number; tone: "cool" | "gold" }[] = [
+  { left: "8%", top: 84, size: 2.2, baseOpacity: 0.58, tone: "cool" },
+  { left: "22%", top: 138, size: 1.8, baseOpacity: 0.45, tone: "gold" },
+  { left: "34%", top: 96, size: 2.4, baseOpacity: 0.64, tone: "cool" },
+  { left: "48%", top: 164, size: 1.6, baseOpacity: 0.4, tone: "cool" },
+  { left: "62%", top: 112, size: 2.6, baseOpacity: 0.56, tone: "gold" },
+  { left: "76%", top: 182, size: 1.7, baseOpacity: 0.42, tone: "cool" },
+  { left: "86%", top: 72, size: 2.2, baseOpacity: 0.52, tone: "cool" },
+  { left: "92%", top: 148, size: 1.9, baseOpacity: 0.44, tone: "gold" }
 ];
 
 export function LobbyScreen({
@@ -183,6 +184,35 @@ export function LobbyScreen({
   const [pickStep, setPickStep] = useState<"category" | "count" | "mode">("category");
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
+  const dialogTranslateY = useRef(new Animated.Value(0)).current;
+  const sheetPanResponder = useRef(
+    PanResponder.create({
+      // Claim responder immediately on touch start — children have priority over
+      // parent Pressable, so this wins before Pressable can grab the gesture.
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 2,
+      // Don't yield the responder once we have it.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) dialogTranslateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(dialogTranslateY, { toValue: 800, duration: 220, useNativeDriver: true }),
+            Animated.timing(dialogOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+          ]).start(() => setIsDialogOpen(false));
+        } else {
+          Animated.spring(dialogTranslateY, {
+            toValue: 0,
+            tension: 100,
+            friction: 8,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
   const continuePulse = useRef(new Animated.Value(0)).current;
   const invitePulse = useRef(new Animated.Value(0)).current;
   const mascotFloat = useRef(new Animated.Value(0)).current;
@@ -205,7 +235,7 @@ export function LobbyScreen({
   const [inviteNowMs, setInviteNowMs] = useState(() => Date.now());
   const [introCanRevealInterface, setIntroCanRevealInterface] = useState(!playEntryAnimation);
   const dialogMaxHeight = Math.min(
-    height - insets.top - insets.bottom - theme.spacing.xl * 2,
+    height - insets.top - 40,
     height * 0.88
   );
   const dialogListMaxHeight = Math.max(240, dialogMaxHeight - 240);
@@ -450,18 +480,10 @@ export function LobbyScreen({
     }
     setSelectedQuestionCount(null);
     setSelectedMode("async");
+    dialogTranslateY.setValue(0);
     dialogOpacity.setValue(0);
-    dialogScale.setValue(0.96);
-    Animated.parallel([
-      Animated.timing(dialogOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.spring(dialogScale, {
-        toValue: 1,
-        speed: 16,
-        bounciness: 6,
-        useNativeDriver: true
-      })
-    ]).start();
-  }, [isDialogOpen, dialogOpacity, dialogScale]);
+    Animated.timing(dialogOpacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+  }, [isDialogOpen, dialogOpacity, dialogTranslateY]);
 
   useEffect(() => {
     if (!selectedCategoryId) return;
@@ -1251,9 +1273,10 @@ export function LobbyScreen({
       <Modal
         transparent
         visible={isDialogOpen}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setIsDialogOpen(false)}
       >
+        <Animated.View style={{ flex: 1, opacity: dialogOpacity }} pointerEvents="box-none">
         <Pressable
           style={styles.overlay}
           onPress={() => {
@@ -1267,23 +1290,17 @@ export function LobbyScreen({
                 styles.dialog,
                 styles.dialogGlow,
                 {
-                  opacity: dialogOpacity,
-                  transform: [{ scale: dialogScale }],
-                  maxHeight: dialogMaxHeight
+                  transform: [{ translateY: dialogTranslateY }],
+                  maxHeight: dialogMaxHeight,
+                  paddingBottom: insets.bottom + theme.spacing.md
                 }
               ]}
             >
+              <View {...sheetPanResponder.panHandlers} style={styles.dragHandleArea}>
+                <View style={styles.dragHandle} />
+              </View>
             {dialogStep === "pick" ? (
             <>
-                <Pressable
-                  style={styles.dialogClose}
-                  hitSlop={8}
-                  onPress={() => {
-                    setIsDialogOpen(false);
-                  }}
-                >
-                  <FontAwesome name="times" size={12} color={theme.colors.muted} />
-                </Pressable>
                 <View style={styles.dialogHeaderCentered}>
                   <Text style={styles.dialogTitle}>{t(locale, "newMatch")}</Text>
                   <View style={styles.dialogProgressRow}>
@@ -1338,7 +1355,9 @@ export function LobbyScreen({
                               </Text>
                             </View>
                             {isSelected && (
-                              <FontAwesome name="check" size={14} color={theme.colors.primary} style={styles.categoryFeaturedCheck} />
+                              <View style={styles.categoryFeaturedCheck}>
+                                <FontAwesome name="check" size={14} color={theme.colors.primary} />
+                              </View>
                             )}
                           </Pressable>
                         );
@@ -1575,13 +1594,6 @@ export function LobbyScreen({
             </>
             ) : (
             <>
-                <Pressable
-                  style={styles.dialogClose}
-                  hitSlop={8}
-                  onPress={() => setIsDialogOpen(false)}
-                >
-                  <FontAwesome name="times" size={12} color={theme.colors.muted} />
-                </Pressable>
                 <View style={styles.dialogHeader}>
                   <Text style={styles.dialogTitle}>{t(locale, "joinAction")}</Text>
                 </View>
@@ -1614,6 +1626,7 @@ export function LobbyScreen({
             </Animated.View>
           </Pressable>
         </Pressable>
+        </Animated.View>
       </Modal>
 
       </Animated.View>
@@ -2851,7 +2864,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small
   },
   categoryFeaturedCheck: {
-    marginLeft: "auto" as any
+    marginLeft: "auto" as const
   },
   categoryGridTwo: {
     flexDirection: "row",
@@ -3366,7 +3379,7 @@ const styles = StyleSheet.create({
   fabLabel: {
     color: theme.colors.surface,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.medium,
+    fontSize: theme.typography.body,
     fontWeight: "600",
     letterSpacing: 0.2
   },
@@ -3402,22 +3415,32 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(16, 22, 48, 0.38)",
-    justifyContent: "center",
-    paddingVertical: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg
+    justifyContent: "flex-end",
   },
   dialogTouch: {
     alignSelf: "stretch"
   },
   dialog: {
     backgroundColor: "rgba(250, 251, 255, 0.96)",
-    borderRadius: theme.radius.lg,
-    paddingVertical: theme.spacing.lg,
+    borderTopLeftRadius: theme.radius.lg,
+    borderTopRightRadius: theme.radius.lg,
+    paddingTop: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.md,
     borderWidth: 1,
+    borderBottomWidth: 0,
     borderColor: "rgba(89, 103, 181, 0.3)",
     width: "100%"
+  },
+  dragHandleArea: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(100, 115, 180, 0.3)",
   },
   dialogClose: {
     position: "absolute",

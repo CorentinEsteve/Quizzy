@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "ESNext",
     "jsx": "react-native",
     "strict": true,
-    "moduleResolution": "node",
     "allowJs": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@expo/vector-icons": ["./node_modules/expo/node_modules/@expo/vector-icons"],
+      "@expo/vector-icons/*": ["./node_modules/expo/node_modules/@expo/vector-icons/*"]
+    }
   },
   "include": [
     "**/*.ts",

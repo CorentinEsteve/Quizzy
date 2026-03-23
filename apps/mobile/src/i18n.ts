@@ -411,8 +411,7 @@ const dictionaries: Dictionaries = {
     socialAdversaries: "Recent opponents",
     socialAdversariesEmpty: "Play a duel to see your opponents here.",
     socialChallenge: "Replay",
-    socialNoActivity: "No recent activity. Play a duel to get started.",
-    joinAction: "Join"
+    socialNoActivity: "No recent activity. Play a duel to get started."
   },
   fr: {
     appName: "Qwizzy",
@@ -754,7 +753,7 @@ const dictionaries: Dictionaries = {
     categoryPop: "Culture pop",
     categoryNature: "Nature et animaux",
     categoryDaily: "Quiz du jour",
-    chooseMatchLength: "Duree",
+    chooseMatchLength: "Durée",
     chooseMatchLengthBody: "Choisis ton rythme.",
     matchQuick: "Rapide",
     matchQuickBody: "Un duel court et focus.",
@@ -820,8 +819,7 @@ const dictionaries: Dictionaries = {
     socialAdversaries: "Adversaires récents",
     socialAdversariesEmpty: "Joue un duel pour voir tes adversaires ici.",
     socialChallenge: "Rejouer",
-    socialNoActivity: "Aucune activité récente. Lance un duel pour commencer.",
-    joinAction: "Rejoindre"
+    socialNoActivity: "Aucune activité récente. Lance un duel pour commencer."
   }
 };
 

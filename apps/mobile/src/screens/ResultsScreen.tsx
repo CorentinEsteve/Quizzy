@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { Animated, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -365,7 +365,7 @@ export function ResultsScreen({
                         key={`sparkle-${index}`}
                         style={[
                           styles.sparkle,
-                          styles[`sparkle${index}` as keyof typeof styles],
+                          styles[`sparkle${index}` as keyof typeof styles] as ViewStyle,
                           {
                             backgroundColor: theme.colors.accent,
                             opacity: sparkleOpacity,

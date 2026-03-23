@@ -1,0 +1,240 @@
+{
+  "date": "2026-03-23",
+  "generated_at": "2026-03-23T22:35:41.041Z",
+  "articles_fetched": 78,
+  "sources_used": [
+    "BBC World",
+    "BBC Technology",
+    "BBC Science",
+    "BBC Business",
+    "BBC Health",
+    "BBC Culture",
+    "The Guardian",
+    "The Guardian Science",
+    "Al Jazeera",
+    "BBC Sport"
+  ],
+  "candidates_generated": 20,
+  "final_questions": [
+    {
+      "index": 1,
+      "id": "c1",
+      "prompt_en": "Which country became the first EU member state to introduce fuel rationing?",
+      "prompt_fr": "Quel pays est devenu le premier État membre de l'UE à introduire un rationnement du carburant ?",
+      "options_en": [
+        "Croatia",
+        "Slovenia",
+        "Hungary",
+        "Austria"
+      ],
+      "correct_answer": "Slovenia",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "Slovenia becomes first EU country to introduce fuel rationing",
+          "link": "https://www.bbc.com/news/articles/c77m4zx6zvmo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "id": "c2",
+      "prompt_en": "Which Italian leader suffered a setback after losing a referendum on constitutional reform?",
+      "prompt_fr": "Quelle dirigeante italienne a subi un revers après avoir perdu un référendum sur une réforme constitutionnelle ?",
+      "options_en": [
+        "Mario Draghi",
+        "Giorgia Meloni",
+        "Matteo Salvini",
+        "Giuseppe Conte"
+      ],
+      "correct_answer": "Giorgia Meloni",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "Referendum defeat leaves Italy's Meloni looking more vulnerable",
+          "link": "https://www.bbc.com/news/articles/crl1ne8dj1eo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "id": "c3",
+      "prompt_en": "NASA's Artemis Moon rocket is being prepared for a mission to send astronauts around the Moon. How long has it been since the last time astronauts travelled around the Moon?",
+      "prompt_fr": "La fusée Artemis de la NASA est préparée pour envoyer des astronautes autour de la Lune. Depuis combien de temps des astronautes n'avaient-ils pas voyagé autour de la Lune ?",
+      "options_en": [
+        "More than 30 years",
+        "More than 40 years",
+        "More than 50 years",
+        "More than 60 years"
+      ],
+      "correct_answer": "More than 50 years",
+      "answer_index": 2,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "Nasa's Artemis Moon rocket rolls back to pad for possible April launch",
+          "link": "https://www.bbc.com/news/articles/ckgrw045pg7o?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "id": "c9",
+      "prompt_en": "Which darts star applied to trademark his own face in order to combat AI-generated fakes?",
+      "prompt_fr": "Quel joueur de fléchettes a demandé à déposer son propre visage comme marque pour lutter contre les deepfakes générés par l'IA ?",
+      "options_en": [
+        "Michael van Gerwen",
+        "Luke Littler",
+        "Gerwyn Price",
+        "Luke Humphries"
+      ],
+      "correct_answer": "Luke Littler",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Technology",
+          "title": "Luke Littler applies to trademark his face to combat AI fakes",
+          "link": "https://www.bbc.com/news/articles/c5y7374x9n4o?at_medium=RSS&at_campaign=rss",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "id": "c13",
+      "prompt_en": "What major achievement did UK scientists announce regarding lab-grown organs?",
+      "prompt_fr": "Quelle avancée majeure les scientifiques britanniques ont-ils annoncée concernant les organes cultivés en laboratoire ?",
+      "options_en": [
+        "They grew a functioning heart and transplanted it into a pig",
+        "They grew functioning food pipes and transplanted them into mini pigs",
+        "They created a lab-grown kidney for human trials",
+        "They successfully grew a full human lung in a lab"
+      ],
+      "correct_answer": "They grew functioning food pipes and transplanted them into mini pigs",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Health",
+          "title": "Lab-grown food pipe offers new hope for young patients",
+          "link": "https://www.bbc.com/news/articles/c4gdvv8j2j1o?at_medium=RSS&at_campaign=rss",
+          "category": "Health"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "id": "c15",
+      "prompt_en": "King Charles opened the world's longest coastal path, allowing walkers access to the entire coast of which country?",
+      "prompt_fr": "Le roi Charles a inauguré le plus long sentier côtier du monde, permettant aux randonneurs d'accéder à l'ensemble du littoral de quel pays ?",
+      "options_en": [
+        "Scotland",
+        "Wales",
+        "England",
+        "Ireland"
+      ],
+      "correct_answer": "England",
+      "answer_index": 2,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "King opens world's longest coastal path around England",
+          "link": "https://www.bbc.com/news/articles/cy0dxexdd8xo?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "id": "c18",
+      "prompt_en": "Which long-running American sketch comedy show launched a UK version?",
+      "prompt_fr": "Quelle émission américaine de sketches de longue date a lancé une version britannique ?",
+      "options_en": [
+        "The Tonight Show",
+        "Saturday Night Live",
+        "Last Week Tonight",
+        "The Daily Show"
+      ],
+      "correct_answer": "Saturday Night Live",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Culture",
+          "title": "What did critics think of Saturday Night Live UK's debut?",
+          "link": "https://www.bbc.com/news/articles/c8ejl730wl2o?at_medium=RSS&at_campaign=rss",
+          "category": "Culture"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "id": "c19",
+      "prompt_en": "What caused a major incident at New York's LaGuardia airport involving an Air Canada flight?",
+      "prompt_fr": "Qu'est-ce qui a provoqué un incident majeur à l'aéroport LaGuardia de New York impliquant un vol d'Air Canada ?",
+      "options_en": [
+        "A bird strike forced an emergency landing",
+        "The plane collided with a fire truck on the runway",
+        "An engine caught fire during takeoff",
+        "The plane overshot the runway into the water"
+      ],
+      "correct_answer": "The plane collided with a fire truck on the runway",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC World",
+          "title": "'Like the plane got cut in half': LaGuardia crash that killed two pilots now under investigation",
+          "link": "https://www.bbc.com/news/articles/c78rdze8zvjo?at_medium=RSS&at_campaign=rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "id": "c11",
+      "prompt_en": "What did the UN's weather agency warn about the Earth's climate in its latest report?",
+      "prompt_fr": "De quoi l'agence météorologique de l'ONU a-t-elle mis en garde concernant le climat terrestre dans son dernier rapport ?",
+      "options_en": [
+        "Global temperatures have stabilised",
+        "The climate is further out of balance than at any time in recorded history",
+        "Sea levels have begun to decline",
+        "El Niño has been permanently eliminated"
+      ],
+      "correct_answer": "The climate is further out of balance than at any time in recorded history",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Science",
+          "title": "UN issues new climate warning as El Niño looms",
+          "link": "https://www.bbc.com/news/articles/c203rdxkezwo?at_medium=RSS&at_campaign=rss",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "id": "c12",
+      "prompt_en": "Which country is turning to India to help address its shortage of skilled workers?",
+      "prompt_fr": "Quel pays se tourne vers l'Inde pour pallier sa pénurie de travailleurs qualifiés ?",
+      "options_en": [
+        "France",
+        "Germany",
+        "Japan",
+        "Canada"
+      ],
+      "correct_answer": "Germany",
+      "answer_index": 1,
+      "source_articles": [
+        {
+          "source": "BBC Business",
+          "title": "Germany has a shortage of workers - so it's turning to India for help",
+          "link": "https://www.bbc.com/news/articles/c3wlww83yv4o?at_medium=RSS&at_campaign=rss",
+          "category": "Business"
+        }
+      ]
+    }
+  ]
+}

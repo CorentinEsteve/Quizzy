@@ -2281,7 +2281,7 @@ app.get("/rooms/mine", authMiddleware, async (req, res) => {
         return acc;
       }, {});
       const scores =
-        room.status === "complete"
+        room.status === "complete" && quiz
           ? players.reduce((acc, player) => {
               acc[player.id] = computeScore(quiz, answers, player.id);
               return acc;
@@ -2294,7 +2294,7 @@ app.get("/rooms/mine", authMiddleware, async (req, res) => {
         createdAt: room.created_at,
         updatedAt: room.updated_at,
         invitedAt: membershipByRoomId.get(room.id)?.invitedAt || null,
-        quiz: sanitizeQuiz(quiz),
+        quiz: quiz ? sanitizeQuiz(quiz) : null,
         progress,
         players,
         scores,
