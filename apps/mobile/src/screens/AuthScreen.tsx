@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,6 +21,7 @@ import { theme } from "../theme";
 import { Locale, t } from "../i18n";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { StarfieldBackground } from "../components/StarfieldBackground";
 
 export type AuthMode = "login" | "register";
 
@@ -66,30 +72,56 @@ export function AuthScreen({
   onChangeLocale
 }: Props) {
   const insets = useSafeAreaInsets();
+
+  // Form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [country, setCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
   const [registerStep, setRegisterStep] = useState(0);
   const [authMethod, setAuthMethod] = useState<"apple" | "email">("apple");
-  const [showReset, setShowReset] = useState(false);
+  const [resetSubMode, setResetSubMode] = useState<"request" | "confirm">("request");
   const [resetEmail, setResetEmail] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [showReset, setShowReset] = useState(false);
+
+  // Apple state
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [appleAvailabilityResolved, setAppleAvailabilityResolved] = useState(false);
   const [appleProfileName, setAppleProfileName] = useState("");
   const [appleProfileCountry, setAppleProfileCountry] = useState<"US" | "FR" | "GB" | "CA">("US");
+
+  // Error tracking ref for cleanup
   const errorRef = useRef<string | null>(null);
 
+  // Animation values
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  const stepAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Input refs for keyboard chaining
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const displayNameRef = useRef<TextInput>(null);
+  const registerEmailRef = useRef<TextInput>(null);
+  const registerPasswordRef = useRef<TextInput>(null);
+  const resetEmailRef = useRef<TextInput>(null);
+  const resetTokenRef = useRef<TextInput>(null);
+  const resetNewPasswordRef = useRef<TextInput>(null);
+  const resetConfirmPasswordRef = useRef<TextInput>(null);
+  const appleProfileNameRef = useRef<TextInput>(null);
+
+  // --- Effects ---
+
   useEffect(() => {
-    if (mode === "register") {
-      setRegisterStep(0);
-    }
+    if (mode === "register") setRegisterStep(0);
     setAuthMethod("apple");
+    setShowReset(false);
+    runCardEntry();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   useEffect(() => {
@@ -97,10 +129,22 @@ export function AuthScreen({
   }, [error]);
 
   useEffect(() => {
-    if (errorRef.current) {
-      onClearError?.();
-    }
+    if (errorRef.current) onClearError?.();
   }, [mode, showReset, onClearError]);
+
+  // Shake on new error
+  useEffect(() => {
+    if (error) {
+      shakeAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 7, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -7, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 5, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -5, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+      ]).start();
+    }
+  }, [error, shakeAnim]);
 
   useEffect(() => {
     if (Platform.OS !== "ios") {
@@ -115,9 +159,7 @@ export function AuthScreen({
   }, []);
 
   useEffect(() => {
-    if (appleAvailabilityResolved && !appleAvailable) {
-      setAuthMethod("email");
-    }
+    if (appleAvailabilityResolved && !appleAvailable) setAuthMethod("email");
   }, [appleAvailabilityResolved, appleAvailable]);
 
   useEffect(() => {
@@ -126,65 +168,322 @@ export function AuthScreen({
     setAppleProfileCountry(appleProfileSetup.country ?? "US");
   }, [appleProfileSetup]);
 
+  // Entry animation on mount
+  useEffect(() => {
+    runCardEntry();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- Helpers ---
+
+  function runCardEntry() {
+    cardAnim.setValue(0);
+    Animated.timing(cardAnim, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true
+    }).start();
+  }
+
+  function advanceToStep2() {
+    Animated.timing(stepAnim, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.in(Easing.ease),
+      useNativeDriver: true
+    }).start(() => {
+      setRegisterStep(1);
+      stepAnim.setValue(0);
+      Animated.timing(stepAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true
+      }).start();
+    });
+  }
+
+  function goBackToStep1() {
+    Animated.timing(stepAnim, {
+      toValue: 0,
+      duration: 160,
+      easing: Easing.in(Easing.ease),
+      useNativeDriver: true
+    }).start(() => {
+      setRegisterStep(0);
+      stepAnim.setValue(0);
+      Animated.timing(stepAnim, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true
+      }).start();
+    });
+  }
+
+  // --- Validation ---
+
   const isEmailValid = useMemo(() => email.trim().includes("@") && email.trim().includes("."), [email]);
   const isPasswordValid = useMemo(() => password.length >= 8, [password]);
   const isDisplayNameValid = useMemo(() => displayName.trim().length >= 2, [displayName]);
   const isRegisterStepOneValid = isDisplayNameValid && isEmailValid && isPasswordValid;
   const isLoginValid = email.trim().length > 0 && password.length > 0;
-  const isRegisterStepTwoValid = true;
   const isAppleProfileNameValid = appleProfileName.trim().length >= 2;
 
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingBottom: theme.spacing.lg + insets.bottom
-        }
-      ]}
-    >
-      <LinearGradient
-        colors={["#F7F8FF", "#FFFFFF", "#F9F2E6"]}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.backgroundOrb} pointerEvents="none" />
-      <View style={styles.backgroundOrbAccent} pointerEvents="none" />
-      <View style={styles.backgroundGlow} pointerEvents="none" />
-      <KeyboardAvoidingView
-        style={styles.keyboardWrapper}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
-      >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: theme.spacing.lg + insets.top }]}
-        >
-          <View style={styles.card}>
-            <Text style={styles.eyebrow}>{t(locale, "appName")}</Text>
-            <Text style={styles.title}>
-              {appleProfileSetup
-                ? t(locale, "authAppleSetupTitle")
-                : mode === "login"
-                ? t(locale, "authWelcome")
-                : t(locale, "authCreate")}
-            </Text>
-            <Text style={styles.subtitle}>
-              {appleProfileSetup
-                ? t(locale, "authAppleSetupBody")
-                : mode === "login"
-                ? t(locale, "authSignIn")
-                : t(locale, "authPickName")}
-            </Text>
+  // --- Error display ---
 
+  function resolveError(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    if (raw.toLowerCase().includes("too many")) return t(locale, "tooManyRequests");
+    return raw;
+  }
+
+  const isDeactivated = !!error && error.toLowerCase().includes("deactivated");
+  const displayedError = isDeactivated ? null : resolveError(error);
+
+  // --- Header text ---
+
+  function getTitle(): string {
+    if (appleProfileSetup) return t(locale, "authAppleSetupTitle");
+    if (mode === "login") {
+      if (showReset) return t(locale, "resetPassword");
+      return t(locale, "authWelcome");
+    }
+    return registerStep === 1 ? t(locale, "authStepPreferences") : t(locale, "authCreate");
+  }
+
+  function getSubtitle(): string {
+    if (appleProfileSetup) return t(locale, "authAppleSetupBody");
+    if (mode === "login") {
+      if (showReset) return t(locale, "resetPasswordBody");
+      return t(locale, "authSignIn");
+    }
+    return registerStep === 1 ? t(locale, "authStepPreferencesBody") : t(locale, "authPickName");
+  }
+
+  // --- Animated styles ---
+
+  const cardStyle = {
+    opacity: cardAnim,
+    transform: [
+      {
+        translateY: cardAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [36, 0]
+        })
+      }
+    ]
+  };
+
+  const stepStyle = {
+    opacity: stepAnim,
+    transform: [
+      {
+        translateX: stepAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [20, 0]
+        })
+      }
+    ]
+  };
+
+  // --- Flag components ---
+
+  const FlagUK = () => (
+    <View style={styles.flagUk}>
+      <View style={styles.flagUkWhiteHorizontal} />
+      <View style={styles.flagUkWhiteVertical} />
+      <View style={styles.flagUkRedHorizontal} />
+      <View style={styles.flagUkRedVertical} />
+    </View>
+  );
+
+  const FlagFR = () => (
+    <View style={styles.flagFr}>
+      <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
+      <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
+      <View style={[styles.flagFrStripe, styles.flagFrRed]} />
+    </View>
+  );
+
+  const FlagUS = () => (
+    <View style={styles.flagUs}>
+      <View style={styles.flagUsStars} />
+      <View style={styles.flagUsStripe} />
+      <View style={[styles.flagUsStripe, styles.flagUsStripeAlt]} />
+      <View style={[styles.flagUsStripe, styles.flagUsStripe3]} />
+    </View>
+  );
+
+  const FlagCA = () => (
+    <View style={styles.flagCa}>
+      <View style={[styles.flagCaStripe, styles.flagCaRed]} />
+      <View style={[styles.flagCaStripe, styles.flagCaWhite]} />
+      <View style={[styles.flagCaStripe, styles.flagCaRed]} />
+    </View>
+  );
+
+  // --- Language / country selectors ---
+
+  function LanguageSelector({ value, onChange }: { value: Locale; onChange: (l: Locale) => void }) {
+    return (
+      <View style={styles.selectorRow}>
+        <Text style={styles.selectorLabel}>{t(locale, "language")}</Text>
+        <View style={styles.languageButtons}>
+          {(["en", "fr"] as Locale[]).map((l) => {
+            const active = value === l;
+            return (
+              <Pressable
+                key={l}
+                style={[styles.chip, active ? styles.chipActive : styles.chipIdle]}
+                onPress={() => onChange(l)}
+              >
+                {l === "en" ? <FlagUK /> : <FlagFR />}
+                <Text style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextIdle]}>
+                  {t(locale, l === "en" ? "english" : "french")}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function CountrySelector({
+    value,
+    onChange
+  }: {
+    value: "US" | "FR" | "GB" | "CA";
+    onChange: (c: "US" | "FR" | "GB" | "CA") => void;
+  }) {
+    const options: Array<{ code: "US" | "FR" | "GB" | "CA"; labelKey: "countryUs" | "countryFr" | "countryGb" | "countryCa" }> = [
+      { code: "US", labelKey: "countryUs" },
+      { code: "FR", labelKey: "countryFr" },
+      { code: "GB", labelKey: "countryGb" },
+      { code: "CA", labelKey: "countryCa" }
+    ];
+    const flagMap: Record<string, React.ReactElement> = {
+      US: <FlagUS />,
+      FR: <FlagFR />,
+      GB: <FlagUK />,
+      CA: <FlagCA />
+    };
+    return (
+      <View style={styles.selectorRow}>
+        <Text style={styles.selectorLabel}>{t(locale, "country")}</Text>
+        <View style={styles.countryGrid}>
+          {options.map(({ code, labelKey }) => {
+            const active = value === code;
+            return (
+              <Pressable
+                key={code}
+                style={[styles.chip, active ? styles.chipActive : styles.chipIdle]}
+                onPress={() => onChange(code)}
+              >
+                {flagMap[code]}
+                <Text style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextIdle]}>
+                  {t(locale, labelKey)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  // --- Progress dots ---
+
+  function ProgressDots({ current, total }: { current: number; total: number }) {
+    return (
+      <View style={styles.progressDots}>
+        {Array.from({ length: total }).map((_, i) => (
+          <View
+            key={i}
+            style={[styles.progressDot, i === current ? styles.progressDotActive : styles.progressDotIdle]}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable style={styles.outerPressable} onPress={() => Keyboard.dismiss()} accessible={false}>
+      {/* Dark starfield background — matches Lobby & Splash */}
+      <StarfieldBackground />
+
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollView}
+        automaticallyAdjustKeyboardInsets
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + insets.bottom }
+        ]}
+      >
+          <Animated.View style={[styles.card, cardStyle]}>
+            {/* Inner glow overlay */}
+            <LinearGradient
+              colors={["rgba(94, 124, 255, 0.07)", "transparent"]}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+
+            {/* Card header: back button (top-left) + logo (centered) */}
+            <View style={styles.cardHeader}>
+              {!appleProfileSetup &&
+              authMethod === "email" &&
+              !showReset &&
+              appleAvailable &&
+              (mode === "login" || registerStep === 0) ? (
+                <Pressable
+                  style={({ pressed }) => [styles.backIconButton, pressed && styles.backIconButtonPressed]}
+                  onPress={() => setAuthMethod("apple")}
+                  hitSlop={8}
+                >
+                  <FontAwesome name="chevron-left" size={11} color="rgba(171, 198, 255, 0.55)" />
+                  <FontAwesome name="apple" size={13} color="rgba(171, 198, 255, 0.45)" />
+                </Pressable>
+              ) : (
+                <View style={styles.cardHeaderSpacer} />
+              )}
+              <View style={styles.logoCard}>
+                <Image
+                  source={require("../../assets/logo-big.png")}
+                  style={styles.logoImage}
+                  resizeMode="cover"
+                />
+              </View>
+              <View style={styles.cardHeaderSpacer} />
+            </View>
+
+            {/* Header */}
+            <Text style={styles.title}>{getTitle()}</Text>
+            <Text style={styles.subtitle}>{getSubtitle()}</Text>
+
+            {/* Progress dots for register steps */}
+            {!appleProfileSetup && mode === "register" && authMethod === "email" ? (
+              <ProgressDots current={registerStep} total={2} />
+            ) : null}
+
+            {/* ── Apple Profile Setup ── */}
             {appleProfileSetup ? (
               <>
                 <InputField
+                  ref={appleProfileNameRef}
                   label={t(locale, "displayName")}
                   value={appleProfileName}
                   onChangeText={setAppleProfileName}
                   placeholder="Nova"
                   autoCapitalize="words"
+                  textContentType="name"
+                  returnKeyType="done"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  dark
                 />
                 <Text
                   style={
@@ -198,164 +497,16 @@ export function AuthScreen({
                     : t(locale, "authNameError")}
                 </Text>
 
-                <View style={styles.languageRow}>
-                  <Text style={styles.languageLabel}>{t(locale, "language")}</Text>
-                  <View style={styles.languageButtons}>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        locale === "en" ? styles.languageOptionActive : styles.languageOptionIdle
-                      ]}
-                      onPress={() => onChangeLocale("en")}
-                    >
-                      <View style={styles.flagUk}>
-                        <View style={styles.flagUkWhiteHorizontal} />
-                        <View style={styles.flagUkWhiteVertical} />
-                        <View style={styles.flagUkRedHorizontal} />
-                        <View style={styles.flagUkRedVertical} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          locale === "en" ? styles.languageTextActive : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "english")}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        locale === "fr" ? styles.languageOptionActive : styles.languageOptionIdle
-                      ]}
-                      onPress={() => onChangeLocale("fr")}
-                    >
-                      <View style={styles.flagFr}>
-                        <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
-                        <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
-                        <View style={[styles.flagFrStripe, styles.flagFrRed]} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          locale === "fr" ? styles.languageTextActive : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "french")}
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
+                <LanguageSelector value={locale} onChange={onChangeLocale} />
+                <CountrySelector value={appleProfileCountry} onChange={setAppleProfileCountry} />
 
-                <View style={styles.languageRow}>
-                  <Text style={styles.languageLabel}>{t(locale, "country")}</Text>
-                  <View style={styles.countryGrid}>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        appleProfileCountry === "US"
-                          ? styles.languageOptionActive
-                          : styles.languageOptionIdle
-                      ]}
-                      onPress={() => setAppleProfileCountry("US")}
-                    >
-                      <View style={styles.flagUs}>
-                        <View style={styles.flagUsStars} />
-                        <View style={styles.flagUsStripe} />
-                        <View style={[styles.flagUsStripe, styles.flagUsStripeAlt]} />
-                        <View style={[styles.flagUsStripe, styles.flagUsStripe3]} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          appleProfileCountry === "US"
-                            ? styles.languageTextActive
-                            : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "countryUs")}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        appleProfileCountry === "FR"
-                          ? styles.languageOptionActive
-                          : styles.languageOptionIdle
-                      ]}
-                      onPress={() => setAppleProfileCountry("FR")}
-                    >
-                      <View style={styles.flagFr}>
-                        <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
-                        <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
-                        <View style={[styles.flagFrStripe, styles.flagFrRed]} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          appleProfileCountry === "FR"
-                            ? styles.languageTextActive
-                            : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "countryFr")}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        appleProfileCountry === "GB"
-                          ? styles.languageOptionActive
-                          : styles.languageOptionIdle
-                      ]}
-                      onPress={() => setAppleProfileCountry("GB")}
-                    >
-                      <View style={styles.flagUk}>
-                        <View style={styles.flagUkWhiteHorizontal} />
-                        <View style={styles.flagUkWhiteVertical} />
-                        <View style={styles.flagUkRedHorizontal} />
-                        <View style={styles.flagUkRedVertical} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          appleProfileCountry === "GB"
-                            ? styles.languageTextActive
-                            : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "countryGb")}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.languageOption,
-                        appleProfileCountry === "CA"
-                          ? styles.languageOptionActive
-                          : styles.languageOptionIdle
-                      ]}
-                      onPress={() => setAppleProfileCountry("CA")}
-                    >
-                      <View style={styles.flagCa}>
-                        <View style={[styles.flagCaStripe, styles.flagCaRed]} />
-                        <View style={[styles.flagCaStripe, styles.flagCaWhite]} />
-                        <View style={[styles.flagCaStripe, styles.flagCaRed]} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.languageText,
-                          appleProfileCountry === "CA"
-                            ? styles.languageTextActive
-                            : styles.languageTextIdle
-                        ]}
-                      >
-                        {t(locale, "countryCa")}
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
+                {error ? (
+                  <Animated.View style={[styles.errorRow, { transform: [{ translateX: shakeAnim }] }]}>
+                    <FontAwesome name="exclamation-circle" size={14} color={theme.colors.danger} />
+                    <Text style={styles.error}>{resolveError(error)}</Text>
+                  </Animated.View>
+                ) : null}
 
-                {error ? <Text style={styles.error}>{error}</Text> : null}
                 <PrimaryButton
                   label={loading ? t(locale, "pleaseWait") : t(locale, "authAppleSetupDone")}
                   icon="arrow-right"
@@ -369,16 +520,27 @@ export function AuthScreen({
                   }
                   disabled={!isAppleProfileNameValid || loading}
                 />
+                {loading ? <ActivityIndicator size="small" color={theme.colors.primary} style={styles.spinner} /> : null}
               </>
             ) : null}
 
+            {/* ── Back: register step 2 ── */}
             {!appleProfileSetup && mode === "register" && registerStep === 1 ? (
-              <Pressable style={styles.backInline} onPress={() => setRegisterStep(0)}>
-                <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
+              <Pressable style={styles.backInline} onPress={goBackToStep1}>
+                <FontAwesome name="arrow-left" size={13} color="rgba(171, 198, 255, 0.55)" />
                 <Text style={styles.backInlineText}>{t(locale, "back")}</Text>
               </Pressable>
             ) : null}
 
+            {/* ── Back: reset confirm sub-mode ── */}
+            {!appleProfileSetup && mode === "login" && showReset && resetSubMode === "confirm" ? (
+              <Pressable style={styles.backInline} onPress={() => setResetSubMode("request")}>
+                <FontAwesome name="arrow-left" size={13} color="rgba(171, 198, 255, 0.55)" />
+                <Text style={styles.backInlineText}>{t(locale, "back")}</Text>
+              </Pressable>
+            ) : null}
+
+            {/* ── Apple button ── */}
             {appleAvailable &&
             !showReset &&
             !appleProfileSetup &&
@@ -402,29 +564,27 @@ export function AuthScreen({
                 <PrimaryButton
                   label={t(locale, "authUseEmail")}
                   variant="ghost"
+                  dark
                   onPress={() => setAuthMethod("email")}
                 />
               </>
             ) : null}
 
-            {!appleProfileSetup &&
-            authMethod === "email" &&
-            !showReset &&
-            (mode === "login" || registerStep === 0) ? (
-              <Pressable style={styles.backInline} onPress={() => setAuthMethod("apple")}>
-                <FontAwesome name="arrow-left" size={14} color={theme.colors.muted} />
-                <Text style={styles.backInlineText}>{t(locale, "authBackToMethods")}</Text>
-              </Pressable>
-            ) : null}
-
+            {/* ── Register step 0: account details ── */}
             {!appleProfileSetup && mode === "register" && registerStep === 0 && authMethod === "email" ? (
-              <>
+              <Animated.View style={[styles.stepContent, stepStyle]}>
                 <InputField
+                  ref={displayNameRef}
                   label={t(locale, "displayName")}
                   value={displayName}
                   onChangeText={setDisplayName}
                   placeholder="Nova"
                   autoCapitalize="words"
+                  textContentType="name"
+                  returnKeyType="next"
+                  onSubmitEditing={() => registerEmailRef.current?.focus()}
+                  blurOnSubmit={false}
+                  dark
                 />
                 <Text style={isDisplayNameValid || displayName.length === 0 ? styles.helperText : styles.helperError}>
                   {isDisplayNameValid || displayName.length === 0
@@ -432,68 +592,109 @@ export function AuthScreen({
                     : t(locale, "authNameError")}
                 </Text>
                 <InputField
+                  ref={registerEmailRef}
                   label={t(locale, "email")}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="you@studio.com"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  onSubmitEditing={() => registerPasswordRef.current?.focus()}
+                  blurOnSubmit={false}
+                  dark
                 />
                 <Text style={isEmailValid || email.length === 0 ? styles.helperText : styles.helperError}>
-                  {isEmailValid || email.length === 0
-                    ? t(locale, "authEmailHint")
-                    : t(locale, "authEmailError")}
+                  {isEmailValid || email.length === 0 ? t(locale, "authEmailHint") : t(locale, "authEmailError")}
                 </Text>
                 <InputField
+                  ref={registerPasswordRef}
                   label={t(locale, "password")}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="********"
+                  placeholder="Min. 8 characters"
                   secureTextEntry
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (isRegisterStepOneValid) advanceToStep2();
+                    else Keyboard.dismiss();
+                  }}
+                  dark
                 />
                 <Text style={isPasswordValid || password.length === 0 ? styles.helperText : styles.helperError}>
                   {isPasswordValid || password.length === 0
                     ? t(locale, "authPasswordHint")
                     : t(locale, "authPasswordError")}
                 </Text>
-              </>
+              </Animated.View>
             ) : null}
 
+            {/* ── Login: email form ── */}
             {!appleProfileSetup && mode === "login" && !showReset && authMethod === "email" ? (
               <>
                 <InputField
+                  ref={emailRef}
                   label={t(locale, "email")}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="you@studio.com"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
+                  dark
                 />
                 <InputField
+                  ref={passwordRef}
                   label={t(locale, "password")}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="********"
+                  placeholder="Your password"
                   secureTextEntry
+                  textContentType="password"
+                  autoComplete="current-password"
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (isLoginValid) onSubmit({ email, password, displayName, locale, country });
+                    else Keyboard.dismiss();
+                  }}
+                  dark
                 />
                 <Pressable
                   style={styles.forgotLink}
                   onPress={() => {
                     setResetEmail(email);
+                    setResetSubMode("request");
                     setShowReset(true);
                     setAuthMethod("email");
                   }}
                 >
-                  <FontAwesome name="unlock-alt" size={12} color={theme.colors.muted} />
+                  <FontAwesome name="unlock-alt" size={12} color="rgba(171, 198, 255, 0.50)" />
                   <Text style={styles.forgotLinkText}>{t(locale, "forgotPassword")}</Text>
                 </Pressable>
               </>
             ) : null}
 
-            {!appleProfileSetup && mode === "login" && showReset ? (
+            {/* ── Password reset: request ── */}
+            {!appleProfileSetup && mode === "login" && showReset && resetSubMode === "request" ? (
               <>
-                <Text style={styles.subtitle}>{t(locale, "resetPasswordBody")}</Text>
                 <InputField
+                  ref={resetEmailRef}
                   label={t(locale, "email")}
                   value={resetEmail}
                   onChangeText={setResetEmail}
                   placeholder="you@studio.com"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  returnKeyType="done"
+                  onSubmitEditing={() => onForgotPassword(resetEmail)}
+                  dark
                 />
                 <View style={styles.resetActions}>
                   <PrimaryButton
@@ -505,238 +706,156 @@ export function AuthScreen({
                   <PrimaryButton
                     label={t(locale, "cancel")}
                     variant="ghost"
+                    dark
                     onPress={() => setShowReset(false)}
                     style={styles.resetGhostButton}
                   />
                 </View>
-                <Pressable
-                  style={styles.inlineLink}
-                  onPress={() => setShowResetConfirm((prev) => !prev)}
-                >
+                <Pressable style={styles.inlineLink} onPress={() => setResetSubMode("confirm")}>
                   <Text style={styles.inlineLinkText}>{t(locale, "haveResetCode")}</Text>
                 </Pressable>
-                {showResetConfirm ? (
-                  <>
-                    <InputField
-                      label={t(locale, "resetCode")}
-                      value={resetToken}
-                      onChangeText={setResetToken}
-                      placeholder="ABC123"
-                      autoCapitalize="none"
-                    />
-                    <InputField
-                      label={t(locale, "newPassword")}
-                      value={resetNewPassword}
-                      onChangeText={setResetNewPassword}
-                      placeholder="********"
-                      secureTextEntry
-                    />
-                    <InputField
-                      label={t(locale, "confirmPassword")}
-                      value={resetConfirmPassword}
-                      onChangeText={setResetConfirmPassword}
-                      placeholder="********"
-                      secureTextEntry
-                    />
-                    {resetError ? <Text style={styles.error}>{resetError}</Text> : null}
-                    <PrimaryButton
-                      label={t(locale, "resetNow")}
-                      variant="primary"
-                      onPress={() => {
-                        if (!resetToken.trim()) {
-                          setResetError(t(locale, "resetCodeError"));
-                          return;
-                        }
-                        if (resetNewPassword.length < 8) {
-                          setResetError(t(locale, "passwordTooShort"));
-                          return;
-                        }
-                        if (resetNewPassword !== resetConfirmPassword) {
-                          setResetError(t(locale, "passwordMismatch"));
-                          return;
-                        }
-                        setResetError(null);
-                        onResetConfirm(resetToken, resetNewPassword);
-                      }}
-                    />
-                  </>
-                ) : null}
               </>
             ) : null}
 
-            {!appleProfileSetup && mode === "register" && registerStep === 1 && (
-              <View style={styles.languageRow}>
-                <Text style={styles.languageLabel}>{t(locale, "language")}</Text>
-                <View style={styles.languageButtons}>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      locale === "en" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => onChangeLocale("en")}
-                  >
-                    <View style={styles.flagUk}>
-                      <View style={styles.flagUkWhiteHorizontal} />
-                      <View style={styles.flagUkWhiteVertical} />
-                      <View style={styles.flagUkRedHorizontal} />
-                      <View style={styles.flagUkRedVertical} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        locale === "en" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "english")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      locale === "fr" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => onChangeLocale("fr")}
-                  >
-                    <View style={styles.flagFr}>
-                      <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
-                      <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
-                      <View style={[styles.flagFrStripe, styles.flagFrRed]} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        locale === "fr" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "french")}
-                    </Text>
-                  </Pressable>
+            {/* ── Password reset: confirm ── */}
+            {!appleProfileSetup && mode === "login" && showReset && resetSubMode === "confirm" ? (
+              <>
+                <InputField
+                  ref={resetTokenRef}
+                  label={t(locale, "resetCode")}
+                  value={resetToken}
+                  onChangeText={setResetToken}
+                  placeholder="ABC123"
+                  autoCapitalize="none"
+                  textContentType="oneTimeCode"
+                  returnKeyType="next"
+                  onSubmitEditing={() => resetNewPasswordRef.current?.focus()}
+                  blurOnSubmit={false}
+                  dark
+                />
+                <InputField
+                  ref={resetNewPasswordRef}
+                  label={t(locale, "newPassword")}
+                  value={resetNewPassword}
+                  onChangeText={setResetNewPassword}
+                  placeholder="Min. 8 characters"
+                  secureTextEntry
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  returnKeyType="next"
+                  onSubmitEditing={() => resetConfirmPasswordRef.current?.focus()}
+                  blurOnSubmit={false}
+                  dark
+                />
+                <InputField
+                  ref={resetConfirmPasswordRef}
+                  label={t(locale, "confirmPassword")}
+                  value={resetConfirmPassword}
+                  onChangeText={setResetConfirmPassword}
+                  placeholder="Repeat password"
+                  secureTextEntry
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  dark
+                />
+                {resetError ? (
+                  <Animated.View style={[styles.errorRow, { transform: [{ translateX: shakeAnim }] }]}>
+                    <FontAwesome name="exclamation-circle" size={14} color={theme.colors.danger} />
+                    <Text style={styles.error}>{resetError}</Text>
+                  </Animated.View>
+                ) : null}
+                <PrimaryButton
+                  label={t(locale, "resetNow")}
+                  variant="primary"
+                  onPress={() => {
+                    if (!resetToken.trim()) {
+                      setResetError(t(locale, "resetCodeError"));
+                      return;
+                    }
+                    if (resetNewPassword.length < 8) {
+                      setResetError(t(locale, "passwordTooShort"));
+                      return;
+                    }
+                    if (resetNewPassword !== resetConfirmPassword) {
+                      setResetError(t(locale, "passwordMismatch"));
+                      return;
+                    }
+                    setResetError(null);
+                    onResetConfirm(resetToken, resetNewPassword);
+                  }}
+                />
+              </>
+            ) : null}
+
+            {/* ── Register step 1: preferences ── */}
+            {!appleProfileSetup && mode === "register" && registerStep === 1 ? (
+              <Animated.View style={[styles.stepContent, stepStyle]}>
+                <LanguageSelector value={locale} onChange={onChangeLocale} />
+                <CountrySelector value={country} onChange={setCountry} />
+              </Animated.View>
+            ) : null}
+
+            {/* ── Global error ── */}
+            {!appleProfileSetup && displayedError ? (
+              <Animated.View style={[styles.errorRow, { transform: [{ translateX: shakeAnim }] }]}>
+                <FontAwesome name="exclamation-circle" size={14} color={theme.colors.danger} />
+                <Text style={styles.error}>{displayedError}</Text>
+              </Animated.View>
+            ) : null}
+
+            {/* ── Account deactivated panel ── */}
+            {!appleProfileSetup && isDeactivated ? (
+              <Animated.View style={[styles.deactivatedPanel, { transform: [{ translateX: shakeAnim }] }]}>
+                <View style={styles.deactivatedHeader}>
+                  <FontAwesome name="pause-circle" size={15} color="rgba(171, 198, 255, 0.55)" />
+                  <Text style={styles.deactivatedText}>{t(locale, "accountDeactivated")}</Text>
                 </View>
-              </View>
-            )}
+                <PrimaryButton
+                  label={t(locale, "reactivateAccount")}
+                  variant="ghost"
+                  dark
+                  onPress={() => onReactivate(email, password)}
+                  disabled={loading}
+                />
+              </Animated.View>
+            ) : null}
 
-            {!appleProfileSetup && mode === "register" && registerStep === 1 && (
-              <View style={styles.languageRow}>
-                <Text style={styles.languageLabel}>{t(locale, "country")}</Text>
-                <View style={styles.countryGrid}>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      country === "US" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => setCountry("US")}
-                  >
-                    <View style={styles.flagUs}>
-                      <View style={styles.flagUsStars} />
-                      <View style={styles.flagUsStripe} />
-                      <View style={[styles.flagUsStripe, styles.flagUsStripeAlt]} />
-                      <View style={[styles.flagUsStripe, styles.flagUsStripe3]} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        country === "US" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "countryUs")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      country === "FR" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => setCountry("FR")}
-                  >
-                    <View style={styles.flagFr}>
-                      <View style={[styles.flagFrStripe, styles.flagFrBlue]} />
-                      <View style={[styles.flagFrStripe, styles.flagFrWhite]} />
-                      <View style={[styles.flagFrStripe, styles.flagFrRed]} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        country === "FR" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "countryFr")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      country === "GB" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => setCountry("GB")}
-                  >
-                    <View style={styles.flagUk}>
-                      <View style={styles.flagUkWhiteHorizontal} />
-                      <View style={styles.flagUkWhiteVertical} />
-                      <View style={styles.flagUkRedHorizontal} />
-                      <View style={styles.flagUkRedVertical} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        country === "GB" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "countryGb")}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.languageOption,
-                      country === "CA" ? styles.languageOptionActive : styles.languageOptionIdle
-                    ]}
-                    onPress={() => setCountry("CA")}
-                  >
-                    <View style={styles.flagCa}>
-                      <View style={[styles.flagCaStripe, styles.flagCaRed]} />
-                      <View style={[styles.flagCaStripe, styles.flagCaWhite]} />
-                      <View style={[styles.flagCaStripe, styles.flagCaRed]} />
-                    </View>
-                    <Text
-                      style={[
-                        styles.languageText,
-                        country === "CA" ? styles.languageTextActive : styles.languageTextIdle
-                      ]}
-                    >
-                      {t(locale, "countryCa")}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {!appleProfileSetup && error ? <Text style={styles.error}>{error}</Text> : null}
-
+            {/* ── Submit buttons ── */}
             {!appleProfileSetup && mode === "login" && !showReset && authMethod === "email" ? (
-              <PrimaryButton
-                label={loading ? t(locale, "pleaseWait") : t(locale, "signIn")}
-                icon="sign-in"
-                iconPosition="right"
-                onPress={() => onSubmit({ email, password, displayName, locale, country })}
-                disabled={!isLoginValid || loading}
-              />
-            ) : mode === "login" && showReset ? null : registerStep === 0 && authMethod === "email" ? (
+              <>
+                <PrimaryButton
+                  label={loading ? t(locale, "pleaseWait") : t(locale, "signIn")}
+                  icon="sign-in"
+                  iconPosition="right"
+                  onPress={() => onSubmit({ email, password, displayName, locale, country })}
+                  disabled={!isLoginValid || loading}
+                />
+                {loading ? <ActivityIndicator size="small" color={theme.colors.primary} style={styles.spinner} /> : null}
+              </>
+            ) : mode === "login" && showReset ? null
+              : !appleProfileSetup && registerStep === 0 && authMethod === "email" ? (
               <PrimaryButton
                 label={t(locale, "continue")}
                 icon="arrow-right"
                 iconPosition="right"
-                onPress={() => setRegisterStep(1)}
+                onPress={advanceToStep2}
                 disabled={!isRegisterStepOneValid}
               />
-            ) : registerStep === 1 ? (
-              <PrimaryButton
-                label={loading ? t(locale, "pleaseWait") : t(locale, "createAccount")}
-                icon="user-plus"
-                iconPosition="right"
-                onPress={() => onSubmit({ email, password, displayName, locale, country })}
-                disabled={!isRegisterStepTwoValid || loading}
-              />
+            ) : !appleProfileSetup && registerStep === 1 ? (
+              <>
+                <PrimaryButton
+                  label={loading ? t(locale, "pleaseWait") : t(locale, "createAccount")}
+                  icon="user-plus"
+                  iconPosition="right"
+                  onPress={() => onSubmit({ email, password, displayName, locale, country })}
+                  disabled={loading}
+                />
+                {loading ? <ActivityIndicator size="small" color={theme.colors.primary} style={styles.spinner} /> : null}
+              </>
             ) : null}
 
+            {/* ── Toggle login / register ── */}
             {!appleProfileSetup ? (
               <Pressable onPress={onToggleMode} style={styles.switchLink}>
                 <Text style={styles.switchLinkText}>
@@ -744,89 +863,119 @@ export function AuthScreen({
                 </Text>
               </Pressable>
             ) : null}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+          </Animated.View>
+      </ScrollView>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outerPressable: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    justifyContent: "center"
+    backgroundColor: theme.colors.background
   },
-  keyboardWrapper: {
-    flex: 1
+  scrollView: {
+    backgroundColor: "transparent"
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingBottom: theme.spacing.xl
+    justifyContent: "center"
   },
+
+  // Glass card on dark background
   card: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: "rgba(10, 18, 52, 0.84)",
     borderRadius: theme.radius.xl,
     padding: theme.spacing.lg,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: "rgba(171, 198, 255, 0.13)",
     gap: theme.spacing.md,
-    shadowColor: "#1C2A4A",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 }
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 }
   },
-  backgroundOrb: {
-    position: "absolute",
-    top: -120,
-    right: -80,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: "rgba(94, 124, 255, 0.14)"
+
+  // Card header row (back button + centered logo)
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
   },
-  backgroundOrbAccent: {
-    position: "absolute",
-    bottom: -120,
-    left: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: "rgba(243, 183, 78, 0.16)"
+  cardHeaderSpacer: {
+    width: 44
   },
-  backgroundGlow: {
-    position: "absolute",
-    top: "38%",
-    alignSelf: "center",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: "rgba(255, 255, 255, 0.7)"
+  logoCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 999,
+    backgroundColor: "rgba(214, 228, 255, 0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(171, 198, 255, 0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden"
   },
-  eyebrow: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small,
-    textTransform: "uppercase",
-    letterSpacing: 1.2
+  logoImage: {
+    width: "130%",
+    height: "130%"
   },
+
+  // Typography
   title: {
-    color: theme.colors.ink,
+    color: "#F3F7FF",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.display,
     fontWeight: "700"
   },
   subtitle: {
-    color: theme.colors.muted,
+    color: "rgba(171, 198, 255, 0.65)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body
   },
-  progressLabel: {
-    color: theme.colors.muted,
-    fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+
+  // Progress dots
+  progressDots: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center"
   },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
+  },
+  progressDotActive: {
+    backgroundColor: theme.colors.primary
+  },
+  progressDotIdle: {
+    backgroundColor: "rgba(171, 198, 255, 0.22)"
+  },
+
+  stepContent: {
+    gap: theme.spacing.md
+  },
+
+  // Back to Apple methods — icon only
+  backIconButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(171, 198, 255, 0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(171, 198, 255, 0.12)"
+  },
+  backIconButtonPressed: {
+    backgroundColor: "rgba(171, 198, 255, 0.13)"
+  },
+
+  // Navigation
   backInline: {
     flexDirection: "row",
     alignItems: "center",
@@ -834,18 +983,26 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start"
   },
   backInlineText: {
-    color: theme.colors.muted,
+    color: "rgba(171, 198, 255, 0.55)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
+
+  // Errors
+  errorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
   error: {
     color: theme.colors.danger,
     fontFamily: theme.typography.fontFamily,
-    fontSize: theme.typography.small
+    fontSize: theme.typography.small,
+    flex: 1
   },
   helperText: {
-    color: theme.colors.muted,
+    color: "rgba(171, 198, 255, 0.45)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -854,6 +1011,33 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
+
+  // Deactivated panel
+  deactivatedPanel: {
+    backgroundColor: "rgba(171, 198, 255, 0.05)",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(171, 198, 255, 0.12)",
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm
+  },
+  deactivatedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs
+  },
+  deactivatedText: {
+    color: "rgba(171, 198, 255, 0.60)",
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "600"
+  },
+
+  spinner: {
+    alignSelf: "center"
+  },
+
+  // Login ↔ register toggle
   switchLink: {
     alignSelf: "center",
     paddingVertical: theme.spacing.xs
@@ -864,6 +1048,8 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
+
+  // "I have a reset code"
   inlineLink: {
     alignSelf: "flex-start",
     paddingVertical: theme.spacing.xs
@@ -874,6 +1060,8 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
+
+  // Forgot password pill
   forgotLink: {
     alignSelf: "flex-end",
     flexDirection: "row",
@@ -883,16 +1071,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(11, 14, 20, 0.08)",
-    backgroundColor: "rgba(11, 14, 20, 0.04)",
+    borderColor: "rgba(171, 198, 255, 0.14)",
+    backgroundColor: "rgba(171, 198, 255, 0.06)",
     minHeight: 32
   },
   forgotLinkText: {
-    color: theme.colors.ink,
+    color: "rgba(171, 198, 255, 0.70)",
     fontFamily: theme.typography.fontFamily,
     fontSize: 13,
     fontWeight: "600"
   },
+
+  // Password reset actions
   resetActions: {
     flexDirection: "column",
     gap: theme.spacing.sm,
@@ -904,6 +1094,8 @@ const styles = StyleSheet.create({
   resetGhostButton: {
     alignSelf: "stretch"
   },
+
+  // Apple button
   appleButton: {
     minHeight: 46,
     borderRadius: 999,
@@ -913,14 +1105,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md
+    paddingHorizontal: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.14)"
   },
   appleButtonPressed: {
-    opacity: 0.9,
+    opacity: 0.88,
     transform: [{ scale: 0.99 }]
   },
   appleButtonDisabled: {
-    opacity: 0.6
+    opacity: 0.5
   },
   appleButtonText: {
     color: "#FFFFFF",
@@ -928,11 +1122,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: "600"
   },
-  languageRow: {
+
+  // Language / country selectors
+  selectorRow: {
     gap: theme.spacing.xs
   },
-  languageLabel: {
-    color: theme.colors.muted,
+  selectorLabel: {
+    color: "rgba(171, 198, 255, 0.55)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
   },
@@ -945,35 +1141,37 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm
   },
-  languageOption: {
+  chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    minHeight: 44
+    minHeight: 40
   },
-  languageOptionActive: {
-    backgroundColor: theme.colors.ink,
-    borderColor: theme.colors.ink
+  chipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary
   },
-  languageOptionIdle: {
-    backgroundColor: "rgba(11, 14, 20, 0.06)",
-    borderColor: "rgba(11, 14, 20, 0.12)"
+  chipIdle: {
+    backgroundColor: "rgba(171, 198, 255, 0.07)",
+    borderColor: "rgba(171, 198, 255, 0.18)"
   },
-  languageText: {
+  chipText: {
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small,
     fontWeight: "600"
   },
-  languageTextActive: {
-    color: theme.colors.surface
+  chipTextActive: {
+    color: "#FFFFFF"
   },
-  languageTextIdle: {
-    color: theme.colors.ink
+  chipTextIdle: {
+    color: "rgba(171, 198, 255, 0.80)"
   },
+
+  // Flags
   flagUk: {
     width: 20,
     height: 12,

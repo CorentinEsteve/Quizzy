@@ -13,6 +13,7 @@ type Props = {
   iconPosition?: "left" | "right";
   disabled?: boolean;
   multiline?: boolean;
+  dark?: boolean;
 };
 
 export function PrimaryButton({
@@ -24,20 +25,31 @@ export function PrimaryButton({
   icon,
   iconPosition = "left",
   disabled = false,
-  multiline = false
+  multiline = false,
+  dark = false
 }: Props) {
   const isDanger = tone === "danger";
   const isGhost = variant === "ghost";
   const iconColor = isGhost
     ? isDanger
       ? theme.colors.danger
+      : dark
+      ? "rgba(171, 198, 255, 0.80)"
       : theme.colors.ink
     : theme.colors.surface;
   const variantStyle = isGhost
     ? {
-        backgroundColor: isDanger ? "rgba(235, 87, 87, 0.08)" : "rgba(11, 14, 20, 0.06)",
+        backgroundColor: isDanger
+          ? "rgba(235, 87, 87, 0.08)"
+          : dark
+          ? "rgba(171, 198, 255, 0.09)"
+          : "rgba(11, 14, 20, 0.06)",
         borderWidth: 1,
-        borderColor: isDanger ? "rgba(235, 87, 87, 0.35)" : "rgba(11, 14, 20, 0.12)"
+        borderColor: isDanger
+          ? "rgba(235, 87, 87, 0.35)"
+          : dark
+          ? "rgba(171, 198, 255, 0.22)"
+          : "rgba(11, 14, 20, 0.12)"
       }
     : {
         backgroundColor: isDanger ? theme.colors.danger : theme.colors.cta
@@ -67,6 +79,7 @@ export function PrimaryButton({
             style={[
               styles.text,
               isGhost && styles.textGhost,
+              isGhost && dark && styles.textGhostDark,
               isGhost && isDanger && styles.textGhostDanger,
               disabled && styles.textDisabled
             ]}
@@ -116,6 +129,9 @@ const styles = StyleSheet.create({
   },
   textGhost: {
     color: theme.colors.ink
+  },
+  textGhostDark: {
+    color: "rgba(171, 198, 255, 0.85)"
   },
   textGhostDanger: {
     color: theme.colors.danger

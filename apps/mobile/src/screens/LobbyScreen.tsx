@@ -1292,7 +1292,7 @@ export function LobbyScreen({
                 {
                   transform: [{ translateY: dialogTranslateY }],
                   maxHeight: dialogMaxHeight,
-                  paddingBottom: insets.bottom + theme.spacing.md
+                  paddingBottom: insets.bottom
                 }
               ]}
             >
@@ -3631,7 +3631,7 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   duelCardDisabled: {
-    opacity: 0.45
+    opacity: 1
   },
   duelCardPressed: {
     opacity: 0.82
@@ -3667,9 +3667,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary
   },
   duelCardStatusBadgeWait: {
-    backgroundColor: "rgba(57, 72, 175, 0.07)",
+    backgroundColor: "rgba(57, 72, 175, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(57, 72, 175, 0.18)"
+    borderColor: "rgba(57, 72, 175, 0.25)"
   },
   duelCardStatusText: {
     color: "#fff",
@@ -3678,7 +3678,7 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   duelCardStatusTextWait: {
-    color: "rgba(57, 72, 175, 0.55)"
+    color: "rgba(57, 72, 175, 0.75)"
   },
   duelCardCategory: {
     color: "rgba(70, 84, 130, 0.5)",
