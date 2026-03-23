@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   Easing,
-  Image,
   InteractionManager,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions
 } from "react-native";
@@ -75,6 +75,9 @@ type Props = {
   playEntryAnimation?: boolean;
   entryRevealReady?: boolean;
   onEntryAnimationEnd?: () => void;
+  onOpenHistorique?: () => void;
+  onOpenCreateRoom?: boolean;
+  onCreateRoomTriggerHandled?: () => void;
 };
 
 const ALL_CATEGORY_ID = "all";
@@ -149,7 +152,10 @@ export function LobbyScreen({
   onOpenDailyResults,
   playEntryAnimation = false,
   entryRevealReady = true,
-  onEntryAnimationEnd
+  onEntryAnimationEnd,
+  onOpenHistorique,
+  onOpenCreateRoom,
+  onCreateRoomTriggerHandled
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -164,9 +170,9 @@ export function LobbyScreen({
   const dialogOpacity = useRef(new Animated.Value(0)).current;
   const dialogScale = useRef(new Animated.Value(0.96)).current;
   const continuePulse = useRef(new Animated.Value(0)).current;
+  const invitePulse = useRef(new Animated.Value(0)).current;
   const mascotFloat = useRef(new Animated.Value(0)).current;
   const fabFloat = useRef(new Animated.Value(0)).current;
-  const invitePulse = useRef(new Animated.Value(0)).current;
   const starTwinkle = useRef(new Animated.Value(0)).current;
   const starTwinkleAlt = useRef(new Animated.Value(0)).current;
   const starDrift = useRef(new Animated.Value(0)).current;
@@ -512,35 +518,6 @@ export function LobbyScreen({
   }, [fabFloat]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setInviteNowMs(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!showInvitedCard) return;
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(invitePulse, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true
-        }),
-        Animated.timing(invitePulse, {
-          toValue: 0,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true
-        })
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [invitePulse, showInvitedCard]);
-
-  useEffect(() => {
     const drift = Animated.loop(
       Animated.sequence([
         Animated.timing(starDrift, {
@@ -599,6 +576,36 @@ export function LobbyScreen({
       twinkleAlt.stop();
     };
   }, [starDrift, starTwinkle, starTwinkleAlt]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setInviteNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!showInvitedCard) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(invitePulse, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        }),
+        Animated.timing(invitePulse, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [invitePulse, showInvitedCard]);
+
 
   useEffect(() => {
     if (!playEntryAnimation) {
@@ -714,22 +721,6 @@ export function LobbyScreen({
           )}`
         }
       : null;
-  const mascotBob = mascotFloat.interpolate({
-    inputRange: [0, 1],
-    outputRange: [4, -4]
-  });
-  const mascotGlow = mascotFloat.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.82, 1]
-  });
-  const fabLift = fabFloat.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -4]
-  });
-  const fabIdleScale = fabFloat.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.015]
-  });
   const inviteNudge = invitePulse.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -2]
@@ -746,6 +737,22 @@ export function LobbyScreen({
     inputRange: [0, 1],
     outputRange: [0.35, 0]
   });
+  const mascotBob = mascotFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [4, -4]
+  });
+  const mascotGlow = mascotFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1]
+  });
+  const fabLift = fabFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -4]
+  });
+  const fabIdleScale = fabFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.015]
+  });
   const starLayerDriftX = starDrift.interpolate({
     inputRange: [0, 1],
     outputRange: [-3, 3]
@@ -760,7 +767,7 @@ export function LobbyScreen({
   });
   const starGlowAlt = starTwinkleAlt.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.28, 0.82]
+    outputRange: [0.4, 1]
   });
   const introTaglineOpacity = introInterfaceOpacity.interpolate({
     inputRange: [0, 0.55, 1],
@@ -784,6 +791,12 @@ export function LobbyScreen({
     setCode("");
     setIsDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!onOpenCreateRoom) return;
+    openCreateDialog();
+    onCreateRoomTriggerHandled?.();
+  }, [onOpenCreateRoom]);
 
   const handleIntroContentReady = useCallback(() => {
     if (!playEntryAnimation || introHasMeasuredContentRef.current) return;
@@ -867,26 +880,27 @@ export function LobbyScreen({
         style={styles.interfaceLayer}
         pointerEvents={introActive ? "none" : "auto"}
       >
-        <LinearGradient
-          colors={["rgba(9, 16, 42, 0)", "rgba(12, 24, 58, 0.8)", "rgba(13, 28, 66, 0.95)"]}
-          style={[styles.bottomFade, { paddingBottom: insets.bottom }]}
-          pointerEvents="none"
-        />
         <ScrollView
           contentContainerStyle={[
             styles.container,
-            { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + 64 + insets.bottom }
+            { paddingTop: theme.spacing.lg + insets.top, paddingBottom: theme.spacing.lg + 60 + insets.bottom }
           ]}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={handleIntroContentReady}
         >
         <Animated.View style={s[0]}>
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.title}>
-              {t(locale, "hello")}, {userName}
+              {t(locale, "helloName", { name: userName })}
             </Text>
-            <Text style={styles.subtitle}>{t(locale, "lobbySubtitle")}</Text>
+            {myGlobalRank ? (
+              <Text style={styles.subtitle}>
+                #{myGlobalRank} {t(locale, "globalRankThisMonth")}
+              </Text>
+            ) : (
+              <Text style={styles.subtitle}>{t(locale, "lobbySubtitle")}</Text>
+            )}
           </View>
           <View style={styles.headerActions}>
             <Pressable
@@ -978,9 +992,24 @@ export function LobbyScreen({
             />
           </View>
         </GlassCard>
+        <Pressable
+          onPress={openJoinDialog}
+          style={({ pressed }) => [styles.joinCard, pressed && styles.joinCardPressed]}
+        >
+          <FontAwesome name="lock" size={15} color="rgba(255,255,255,0.55)" />
+          <Text style={styles.joinCardText}>
+            {locale === "fr" ? "Rejoindre avec un code" : "Join with a code"}
+          </Text>
+          <View style={styles.joinButton}>
+            <Text style={styles.joinButtonText}>{locale === "fr" ? "Entrer" : "Join"}</Text>
+            <FontAwesome name="arrow-right" size={11} color="#FFFFFF" />
+          </View>
+        </Pressable>
         </Animated.View>
 
         <Animated.View style={s[2]}>
+        <View style={styles.sectionBlock}>
+        <Text style={styles.sectionLabel}>{t(locale, "sectionOngoing")}</Text>
         {showInvitedCard
           ? invitedCards.map((inviteCard) => (
               <Pressable
@@ -1102,51 +1131,6 @@ export function LobbyScreen({
           </Pressable>
         ))}
 
-        <Pressable
-          onPress={onOpenPersonalLeaderboard}
-          accessibilityRole="button"
-          accessibilityLabel={t(locale, "openPersonalLeaderboard")}
-          hitSlop={6}
-        >
-          <GlassCard style={[styles.introCard, styles.recapCard]} accent={theme.colors.primary}>
-            <View style={styles.recapHeader}>
-              <View style={styles.recapHeaderText}>
-                <View style={styles.recapTitleRow}>
-                  <FontAwesome name="trophy" size={12} color={theme.colors.reward} />
-                  <Text style={styles.recapTitleText}>{t(locale, "topGlobal")}</Text>
-                </View>
-              </View>
-              <View style={styles.recapHeaderAction}>
-                <FontAwesome name="chevron-right" size={14} color="#FFFFFF" />
-              </View>
-            </View>
-            <View style={styles.recapTopList}>
-              {topGlobalPreview.map((entry, index) => (
-                <View key={entry ? `global-${entry.userId}` : `global-placeholder-${index}`} style={styles.recapTopRow}>
-                  <View style={styles.recapTopBadge}>
-                    <Text style={styles.recapTopBadgeText}>
-                      {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
-                    </Text>
-                  </View>
-                  <Text numberOfLines={1} style={styles.recapTopName}>
-                    {entry?.displayName ?? (locale === "fr" ? "À venir" : "Coming soon")}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.recapYouRow}>
-              <Text style={styles.recapYouLabel}>{locale === "fr" ? "Toi" : "You"}</Text>
-              <View style={styles.recapYouPill}>
-                <Text style={styles.recapYouRank}>
-                  {myGlobalRank ? `#${myGlobalRank}` : "—"}
-                </Text>
-              </View>
-            </View>
-          </GlassCard>
-        </Pressable>
-        </Animated.View>
-
-        <Animated.View style={s[3]}>
         {nextSession ? (
           <GlassCard style={[styles.introCard, styles.nextActionCard]}>
             <LinearGradient
@@ -1206,12 +1190,6 @@ export function LobbyScreen({
 
         {remainingSessions.length > 0 ? (
           <GlassCard style={[styles.introCard, styles.activityCardLight]}>
-            <View style={styles.sectionHeading}>
-              <View style={[styles.sectionIcon, styles.sectionIconPrimary]}>
-                <FontAwesome name="play-circle" size={18} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "ongoingMatches")}</Text>
-            </View>
             {remainingSessions
               .slice(0, 3)
               .map((session, index, array) => {
@@ -1333,91 +1311,6 @@ export function LobbyScreen({
           </GlassCard>
         ) : null}
 
-        {sessions.filter((s) => s.status === "complete" && s.rematchReady?.length && !s.rematchReady?.includes(userId)).length > 0 ? (
-          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
-            <View style={styles.sectionHeading}>
-              <View style={[styles.sectionIcon, styles.sectionIconAccent]}>
-                <FontAwesome name="refresh" size={18} color={theme.colors.reward} />
-              </View>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "rematchRequested")}</Text>
-            </View>
-            {sessions
-              .filter((s) => s.status === "complete" && s.rematchReady?.length && !s.rematchReady?.includes(userId))
-              .slice(0, 3)
-              .map((session, index, array) => {
-                const isLast = index === array.length - 1;
-                const rematchByYou = session.rematchReady?.includes(userId);
-                const rematchByOpponent = !rematchByYou;
-                const otherPlayers = session.players.filter((player) => player.id !== userId);
-                const opponentsLabel =
-                  otherPlayers.length === 0
-                    ? "-"
-                    : otherPlayers.length === 1
-                      ? otherPlayers[0].displayName
-                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
-                return (
-                  <Pressable
-                    key={session.code}
-                    onPress={() => onOpenRecap(session.code)}
-                  >
-                    <View style={[styles.sessionCard, styles.sessionCardLight, isLast && styles.sessionCardLast]}>
-                      <View style={styles.sessionHeader}>
-                        <View style={styles.sessionHeaderCopy}>
-                          <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{session.quiz.title}</Text>
-                          <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
-                            {t(locale, "withOpponent")} {opponentsLabel}
-                          </Text>
-                        </View>
-                        <View style={[styles.ctaPill, styles.ctaPrimary, styles.ctaPrimaryLight]}>
-                          <Text style={[styles.ctaText, styles.ctaTextLight]}>{t(locale, "replayLabel")}</Text>
-                          <FontAwesome name="play" size={12} color="#1F327F" />
-                        </View>
-                      </View>
-                      <View style={styles.sessionFooter}>
-                        <Text style={[styles.rematchNote, styles.sessionMetaLight]}>
-                          {rematchByOpponent ? t(locale, "rematchByOpponent") : t(locale, "rematchByYou")}
-                        </Text>
-                        <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-          </GlassCard>
-        ) : null}
-        </Animated.View>
-
-        <Animated.View style={s[4]}>
-        <GlassCard style={[styles.shareCard, styles.activityCardLight]}>
-          <LinearGradient
-            colors={["rgba(106, 143, 255, 0.16)", "rgba(243, 194, 88, 0.12)", "rgba(255, 252, 244, 0.96)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.shareCardBackdrop}
-          />
-          <View style={styles.shareRow}>
-            <View style={styles.shareTextBlock}>
-              <Text style={styles.shareTitle}>{t(locale, "shareAppTitle")}</Text>
-              <Text style={styles.shareSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
-            </View>
-            <View style={styles.shareArrowPill}>
-              <FontAwesome name="arrow-right" size={11} color={theme.colors.primary} />
-            </View>
-            <Pressable
-              style={styles.qrWrap}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setIsQrPreviewOpen(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={t(locale, "shareAppTitle")}
-              accessibilityHint={t(locale, "shareAppSubtitle")}
-            >
-              <Image source={require("../../assets/qrcode.png")} style={styles.qrImage} />
-            </Pressable>
-          </View>
-        </GlassCard>
-
         {showDailyCard ? (
           <GlassCard
             accent={theme.colors.reward}
@@ -1489,159 +1382,11 @@ export function LobbyScreen({
             )}
           </GlassCard>
         ) : null}
-
-        {sessions.filter((s) => s.status === "complete").length > 0 ? (
-          <GlassCard style={[styles.introCard, styles.activityCardLight]}>
-            <View style={styles.sectionHeading}>
-              <View style={[styles.sectionIcon, styles.sectionIconMuted]}>
-                <FontAwesome name="history" size={18} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>{t(locale, "recentMatches")}</Text>
-            </View>
-            {sessions
-              .filter((s) => s.status === "complete")
-              .slice(0, 5)
-              .map((session, index, array) => {
-                const totalQuestions = session.quiz.questions?.length ?? 0;
-                const myScore = session.scores?.[String(userId)];
-                const otherPlayers = session.players.filter((player) => player.id !== userId);
-                const opponentsLabel =
-                  otherPlayers.length === 0
-                    ? "-"
-                    : otherPlayers.length === 1
-                      ? otherPlayers[0].displayName
-                      : `${otherPlayers[0].displayName} +${otherPlayers.length - 1}`;
-                const allScores = session.players
-                  .map((player) => session.scores?.[String(player.id)])
-                  .filter((score): score is number => typeof score === "number");
-                const rematchByYou = session.rematchReady?.includes(userId);
-                const resultLabel =
-                  myScore !== undefined && allScores.length > 0
-                    ? myScore === Math.max(...allScores)
-                      ? allScores.filter((score) => score === myScore).length > 1
-                        ? t(locale, "youTied")
-                        : t(locale, "wonLabel")
-                      : t(locale, "lostLabel")
-                    : null;
-                const isLast = index === array.length - 1;
-                const resultStyle =
-                  resultLabel === t(locale, "lostLabel")
-                    ? styles.statusChipLost
-                    : resultLabel === t(locale, "wonLabel")
-                      ? styles.statusChipComplete
-                      : styles.statusChipWait;
-                const resultIcon =
-                  resultLabel === t(locale, "lostLabel")
-                    ? "times-circle"
-                    : resultLabel === t(locale, "wonLabel")
-                      ? "trophy"
-                      : "handshake-o";
-                const resultIconColor =
-                  resultLabel === t(locale, "lostLabel")
-                    ? theme.colors.danger
-                    : resultLabel === t(locale, "wonLabel")
-                      ? theme.colors.success
-                      : theme.colors.reward;
-                return (
-                  <Pressable
-                    key={session.code}
-                    onPress={() => onOpenRecap(session.code)}
-                  >
-                    <View style={[styles.sessionCard, styles.sessionCardLight, isLast && styles.sessionCardLast]}>
-                      <View style={styles.sessionHeader}>
-                        <View style={styles.sessionHeaderCopy}>
-                          <Text style={[styles.sessionTitle, styles.sessionTitleLight]}>{session.quiz.title}</Text>
-                          <Text style={[styles.sessionSubtitle, styles.sessionSubtitleLight]}>
-                            {t(locale, "withOpponent")} {opponentsLabel}
-                          </Text>
-                          <Text style={[styles.sessionMetaSubtle, styles.sessionMetaSubtleLight]}>
-                            {session.mode === "sync" ? t(locale, "syncLabel") : t(locale, "asyncLabel")} •{" "}
-                            {myScore !== undefined ? `${myScore} / ${totalQuestions}` : `0 / ${totalQuestions}`}{" "}
-                            {t(locale, "questionsLabel")}
-                          </Text>
-                        </View>
-                        {resultLabel ? (
-                          <View style={styles.badgeRow}>
-                            {rematchByYou ? (
-                              <View style={[styles.statusChip, styles.statusChipRematch, styles.statusChipRound]}>
-                                <FontAwesome name="refresh" size={10} color="#1F327F" />
-                              </View>
-                            ) : null}
-                            <View style={[styles.statusChip, styles.statusChipLight, resultStyle]}>
-                              <FontAwesome name={resultIcon} size={10} color={resultIconColor} />
-                              <Text style={[styles.statusChipText, styles.statusChipTextLight]}>{resultLabel}</Text>
-                            </View>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.sessionFooter}>
-                        <Text style={[styles.sessionMeta, styles.sessionMetaLight]}>{t(locale, "reviewMatch")}</Text>
-                        <FontAwesome name="angle-right" size={18} color={theme.colors.muted} />
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-          </GlassCard>
-        ) : null}
+        </View>
         </Animated.View>
 
         </ScrollView>
 
-      <Animated.View style={[StyleSheet.absoluteFill, s[5]]} pointerEvents="box-none">
-      <Animated.View style={[styles.fabWrap, { bottom: theme.spacing.sm + insets.bottom }]}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.fabPulse,
-            {
-              transform: [
-                { translateX: -90 },
-                { translateY: -32 },
-                {
-                  scale: continuePulse.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.9, 1.2]
-                  })
-                }
-              ],
-              opacity: continuePulse.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.4, 0]
-              })
-            }
-          ]}
-        />
-        <Animated.View
-          style={{
-            transform: [{ translateY: fabLift }, { scale: fabIdleScale }]
-          }}
-        >
-          <Pressable
-            style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-            onPress={openCreateDialog}
-          >
-            <FontAwesome name="bolt" size={14} color={theme.colors.surface} />
-            <Text style={styles.fabLabel}>{t(locale, "newMatch")}</Text>
-          </Pressable>
-        </Animated.View>
-        </Animated.View>
-        <Pressable
-          style={({ pressed }) => [
-            styles.joinFab,
-            { bottom: theme.spacing.sm + insets.bottom, right: theme.spacing.lg },
-            pressed && styles.joinFabPressed
-          ]}
-          onPress={openJoinDialog}
-          accessibilityRole="button"
-          accessibilityLabel={locale === "fr" ? "Rejoindre" : "Join"}
-          accessibilityHint={t(locale, "joinInviteHint")}
-        >
-          <FontAwesome name="plus" size={16} color={theme.colors.surface} />
-          <Text style={styles.joinFabText}>{locale === "fr" ? "Code" : "Join"}</Text>
-        </Pressable>
-      </Animated.View>
-      </Animated.View>
       {introActive && (
         <Animated.View
           pointerEvents="none"
@@ -1676,7 +1421,7 @@ export function LobbyScreen({
               ]}
             >
             {dialogStep === "pick" ? (
-              <>
+            <>
                 <Pressable
                   style={styles.dialogClose}
                   hitSlop={8}
@@ -1982,15 +1727,13 @@ export function LobbyScreen({
                     </View>
                   </View>
                 ) : null}
-              </>
+            </>
             ) : (
-              <>
+            <>
                 <Pressable
                   style={styles.dialogClose}
                   hitSlop={8}
-                  onPress={() => {
-                    setIsDialogOpen(false);
-                  }}
+                  onPress={() => setIsDialogOpen(false)}
                 >
                   <FontAwesome name="times" size={12} color={theme.colors.muted} />
                 </Pressable>
@@ -2019,46 +1762,16 @@ export function LobbyScreen({
                   label={t(locale, "back")}
                   variant="ghost"
                   icon="arrow-left"
-                  onPress={() => {
-                    setIsDialogOpen(false);
-                  }}
+                  onPress={() => setIsDialogOpen(false)}
                 />
-              </>
+            </>
             )}
             </Animated.View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      <Modal
-        transparent
-        visible={isQrPreviewOpen}
-        animationType="fade"
-        onRequestClose={() => setIsQrPreviewOpen(false)}
-      >
-        <Pressable
-          style={styles.qrOverlay}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setIsQrPreviewOpen(false);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t(locale, "close")}
-        >
-          <Pressable onPress={() => {}} style={styles.qrDialogTouch}>
-            <View style={styles.qrDialog}>
-              <Text style={styles.qrDialogTitle}>{t(locale, "shareAppTitle")}</Text>
-              <Text style={styles.qrDialogSubtitle}>{t(locale, "shareAppSubtitle")}</Text>
-              <View style={styles.qrDialogFrame}>
-                <Image
-                  source={require("../../assets/qrcode.png")}
-                  style={[styles.qrDialogImage, { width: qrPreviewSize, height: qrPreviewSize }]}
-                />
-              </View>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </Animated.View>
     </View>
   );
 }
@@ -2262,6 +1975,68 @@ const styles = StyleSheet.create({
     color: "rgba(217, 228, 255, 0.84)",
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.small
+  },
+  headerLeft: {
+    flex: 1,
+    gap: 3
+  },
+  joinCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 4,
+    marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  joinCardPressed: {
+    opacity: 0.75,
+  },
+  joinCardText: {
+    flex: 1,
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.75)",
+  },
+  joinButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.primary,
+  },
+  joinButtonText: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  sectionBlock: {
+    gap: theme.spacing.sm,
+  },
+  sectionLabel: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(217, 228, 255, 0.7)",
+    letterSpacing: 1.2,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  seeAllButton: {
+    fontFamily: theme.typography.fontFamily,
+    fontSize: theme.typography.small,
+    color: theme.colors.primary,
+    fontWeight: "500",
   },
   heroCard: {
     gap: theme.spacing.md,
@@ -3431,16 +3206,6 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontFamily: theme.typography.fontFamily,
     fontSize: theme.typography.body
-  },
-  joinButton: {
-    backgroundColor: "#B93788",
-    borderColor: "rgba(185, 55, 136, 0.38)",
-    borderWidth: 1,
-    shadowColor: "rgba(138, 35, 101, 0.42)",
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3
   },
   buttonDisabled: {
     opacity: 0.6

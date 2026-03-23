@@ -2,17 +2,14 @@ import "react-native-gesture-handler";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   AppState,
   Alert,
   Linking,
-  PanResponder,
   Platform,
   Share,
   StyleSheet,
   Text,
-  View,
-  useWindowDimensions
+  View
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -32,6 +29,9 @@ import { AuthScreen, AuthMode } from "./src/screens/AuthScreen";
 import { LobbyScreen } from "./src/screens/LobbyScreen";
 import { AccountScreen } from "./src/screens/AccountScreen";
 import { LeaderboardScreen } from "./src/screens/LeaderboardScreen";
+import { SocialScreen } from "./src/screens/SocialScreen";
+import { HistoriqueScreen } from "./src/screens/HistoriqueScreen";
+import { TabBar } from "./src/components/TabBar";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RoomLobbyScreen } from "./src/screens/RoomLobbyScreen";
 import { PlayScreen } from "./src/screens/PlayScreen";
@@ -98,7 +98,6 @@ import {
   RoomSnapshot
 } from "./src/notifications/roomNotifications";
 
-const MAIN_PANELS = ["lobby", "account"] as const;
 const AUTH_TOKEN_KEY = "dq_auth_token";
 const AUTH_USER_KEY = "dq_auth_user";
 const LOCALE_KEY = "qwizzy_locale";
@@ -249,7 +248,6 @@ function snapshotFromRoomList(room: RoomListItem): RoomSnapshot {
 }
 
 export default function App() {
-  const { width } = useWindowDimensions();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -258,7 +256,8 @@ export default function App() {
   const [restoringAuth, setRestoringAuth] = useState(true);
   const [hasPlayedLobbyEntry, setHasPlayedLobbyEntry] = useState(false);
   const [lobbyBootstrapDone, setLobbyBootstrapDone] = useState(false);
-  const [panel, setPanel] = useState<"lobby" | "account" | "leaderboard">("lobby");
+  const [panel, setPanel] = useState<"lobby" | "social" | "historique" | "leaderboard" | "account">("lobby");
+  const [triggerCreateRoom, setTriggerCreateRoom] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locale, setLocale] = useState<Locale>("en");
@@ -342,12 +341,6 @@ export default function App() {
   const roomSnapshotsRef = useRef<Map<string, RoomSnapshot>>(new Map());
   const hasLoadedRoomsRef = useRef(false);
   const closedRoomCodesRef = useRef<Set<string>>(new Set());
-  const panelIndexRef = useRef(0);
-  const swipeEnabledRef = useRef(false);
-  const widthRef = useRef(width);
-  const edgeDirectionRef = useRef<"left" | "right" | null>(null);
-  const dragStartXRef = useRef(0);
-  const panelTranslateX = useRef(new Animated.Value(0));
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -383,44 +376,8 @@ export default function App() {
     setPendingJoinCode(null);
   }, [pendingJoinCode, token, loading, room]);
 
-  const panelIndex = MAIN_PANELS.indexOf(panel);
-  const activePanelIndex = panelIndex >= 0 ? panelIndex : 0;
-  const swipeEnabled =
-    !loading && token && user && !room && !recapRoom && !dailyStage && hasSeenOnboarding;
-  const panelSwipeEnabled = swipeEnabled && panelIndex >= 0;
   const showLobby = !loading && token && user && !room && hasSeenOnboarding;
   const lobbyIsActive = showLobby && panel === "lobby" && !recapRoom && !dailyStage;
-
-  const snapToIndex = useCallback(
-    (index: number, animated = true, velocity = 0) => {
-      const target = -index * width;
-      if (!animated) {
-        panelTranslateX.current.setValue(target);
-        return;
-      }
-      Animated.spring(panelTranslateX.current, {
-        toValue: target,
-        velocity,
-        stiffness: 220,
-        damping: 24,
-        mass: 1,
-        overshootClamping: true,
-        restDisplacementThreshold: 0.5,
-        restSpeedThreshold: 0.5,
-        isInteraction: false,
-        useNativeDriver: true
-      }).start();
-    },
-    [width]
-  );
-
-  const goToLobby = useCallback(
-    (instant = false) => {
-      if (instant) snapToIndex(0, false);
-      setPanel("lobby");
-    },
-    [snapToIndex]
-  );
 
   const openMatchFromPayload = useCallback(
     (payload: RoomNotificationPayload) => {
@@ -836,7 +793,7 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone) return;
+    if (!token || !user || (panel !== "lobby" && panel !== "historique") || !hasSeenOnboarding || !lobbyBootstrapDone) return;
     refreshMyRooms();
   }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone]);
 
@@ -851,7 +808,7 @@ export default function App() {
   }, [token, user?.id, user?.country, hasSeenOnboarding, lobbyBootstrapDone]);
 
   useEffect(() => {
-    if (!token || !user || panel !== "lobby" || !hasSeenOnboarding || !lobbyBootstrapDone || room || recapRoom) return;
+    if (!token || !user || (panel !== "lobby" && panel !== "historique") || !hasSeenOnboarding || !lobbyBootstrapDone || room || recapRoom) return;
     const interval = setInterval(() => refreshMyRooms(), 15000);
     return () => clearInterval(interval);
   }, [token, user, panel, hasSeenOnboarding, lobbyBootstrapDone, room, recapRoom]);
@@ -951,82 +908,6 @@ export default function App() {
     recapRef.current = recapRoom;
   }, [recapRoom]);
 
-  useEffect(() => {
-    if (panelIndex < 0) return;
-    panelIndexRef.current = panelIndex;
-    snapToIndex(panelIndex);
-  }, [panelIndex, snapToIndex]);
-
-  useEffect(() => {
-    swipeEnabledRef.current = swipeEnabled;
-  }, [swipeEnabled]);
-
-  useEffect(() => {
-    widthRef.current = width;
-    if (panelIndex < 0) return;
-    snapToIndex(panelIndex, false);
-  }, [width, panelIndex, snapToIndex]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponderCapture: (event) => {
-        if (!swipeEnabledRef.current) return false;
-        const touchX = event.nativeEvent.locationX;
-        const edgeWidth = 36;
-        if (touchX <= edgeWidth) {
-          edgeDirectionRef.current = "left";
-          return false;
-        }
-        if (touchX >= widthRef.current - edgeWidth) {
-          edgeDirectionRef.current = "right";
-          return false;
-        }
-        edgeDirectionRef.current = null;
-        return false;
-      },
-      onMoveShouldSetPanResponder: (_event, gesture) => {
-        if (!swipeEnabledRef.current || !edgeDirectionRef.current) return false;
-        const { dx, dy } = gesture;
-        if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return false;
-        if (edgeDirectionRef.current === "left" && dx <= 0) return false;
-        if (edgeDirectionRef.current === "right" && dx >= 0) return false;
-        return true;
-      },
-      onPanResponderGrant: () => {
-        dragStartXRef.current = -panelIndexRef.current * widthRef.current;
-        panelTranslateX.current.stopAnimation();
-        panelTranslateX.current.setValue(dragStartXRef.current);
-      },
-      onPanResponderMove: (_event, gesture) => {
-        if (!edgeDirectionRef.current) return;
-        const totalWidth = widthRef.current;
-        const min = -(MAIN_PANELS.length - 1) * totalWidth;
-        let next = dragStartXRef.current + gesture.dx;
-        if (next > 0) next = next * 0.4;
-        if (next < min) next = min + (next - min) * 0.4;
-        panelTranslateX.current.setValue(next);
-      },
-      onPanResponderRelease: (_event, gesture) => {
-        edgeDirectionRef.current = null;
-        const { dx, vx } = gesture;
-        const threshold = widthRef.current * 0.25;
-        const currentIndex = panelIndexRef.current;
-        let nextIndex = currentIndex;
-        if (Math.abs(dx) > threshold || Math.abs(vx) > 0.5) {
-          if (dx < 0) nextIndex = Math.min(currentIndex + 1, MAIN_PANELS.length - 1);
-          if (dx > 0) nextIndex = Math.max(currentIndex - 1, 0);
-        }
-        if (nextIndex !== currentIndex) {
-          setPanel(MAIN_PANELS[nextIndex]);
-        }
-        snapToIndex(nextIndex, true, vx);
-      },
-      onPanResponderTerminate: () => {
-        edgeDirectionRef.current = null;
-        snapToIndex(panelIndexRef.current);
-      }
-    })
-  ).current;
 
   useEffect(() => {
     if (!token || !user) return;
@@ -1773,6 +1654,7 @@ export default function App() {
       onJoinRoom={handleJoinRoom}
       onOpenAccount={() => setPanel("account")}
       onOpenPersonalLeaderboard={() => setPanel("leaderboard")}
+      onOpenHistorique={() => setPanel("historique")}
       userName={user.displayName}
       locale={locale}
       userId={user.id}
@@ -1790,6 +1672,8 @@ export default function App() {
       playEntryAnimation={!hasPlayedLobbyEntry}
       entryRevealReady={lobbyBootstrapDone}
       onEntryAnimationEnd={() => setHasPlayedLobbyEntry(true)}
+      onOpenCreateRoom={triggerCreateRoom}
+      onCreateRoomTriggerHandled={() => setTriggerCreateRoom(false)}
     />
   ) : null;
 
@@ -1799,9 +1683,9 @@ export default function App() {
         <SafeAreaView
           style={styles.safe}
           edges={
-            panelSwipeEnabled ||
             (!token && !restoringAuth) ||
             (!loading && token && user && !room && !hasSeenOnboarding) ||
+            showLobby ||
             panel === "leaderboard" ||
             dailyStage === "quiz" ||
             dailyStage === "results" ||
@@ -1864,44 +1748,63 @@ export default function App() {
         />
       )}
 
-      {panelSwipeEnabled && (
-        <View style={styles.panelSwipeRoot} {...panResponder.panHandlers}>
-          <Animated.View
-            style={[
-              styles.panelRow,
-              {
-                width: width * MAIN_PANELS.length,
-                transform: [{ translateX: panelTranslateX.current }]
-              }
-            ]}
-          >
-            <View style={[styles.panelPage, { width }]}>
-              {lobbyScreen}
-            </View>
-            <View style={[styles.panelPage, { width }]}>
-              <AccountScreen
-                user={user}
-                onBack={() => setPanel("lobby")}
-                onLogout={handleLogout}
-                locale={locale}
-                onChangeLocale={setLocale}
-                onUpdateProfile={handleUpdateProfile}
-                notificationsEnabled={notificationsEnabled}
-                onToggleNotifications={() => setNotificationsEnabled((prev) => !prev)}
-                onOpenPrivacy={handleOpenPrivacy}
-                onOpenTerms={handleOpenTerms}
-                onDeleteAccount={handleDeleteAccount}
-                onDeactivateAccount={handleDeactivateAccount}
-                onChangePassword={handleChangePassword}
-                onChangeEmail={handleChangeEmail}
-                onExportData={handleExportData}
-                onContactSupport={handleContactSupport}
-                supportUrl={SUPPORT_URL}
-                onResendVerification={handleResendVerification}
-                emailVerified={user.emailVerified}
-              />
-            </View>
-          </Animated.View>
+      {showLobby && panel === "lobby" && !recapRoom && !dailyStage && (
+        <View style={styles.panelPage}>
+          {lobbyScreen}
+        </View>
+      )}
+
+      {showLobby && panel === "social" && !recapRoom && !dailyStage && (
+        <SocialScreen
+          sessions={myRooms}
+          userId={user?.id ?? 0}
+          locale={locale}
+          onOpenRecap={handleOpenRecap}
+          onChallenge={() => {
+            setPanel("lobby");
+            setTriggerCreateRoom(true);
+          }}
+        />
+      )}
+
+      {showLobby && panel === "historique" && !recapRoom && !dailyStage && (
+        <HistoriqueScreen
+          sessions={myRooms}
+          userId={user?.id ?? 0}
+          locale={locale}
+          onOpenRecap={handleOpenRecap}
+          onResumeRoom={handleResumeRoom}
+        />
+      )}
+
+      {showLobby && panel === "account" && (
+        <View style={styles.stackContainer}>
+          <View style={styles.stackUnderlay} pointerEvents="none">
+            {lobbyScreen}
+          </View>
+          <EdgeSwipeBack enabled onBack={() => setPanel("lobby")}>
+            <AccountScreen
+              user={user!}
+              onBack={() => setPanel("lobby")}
+              onLogout={handleLogout}
+              locale={locale}
+              onChangeLocale={setLocale}
+              onUpdateProfile={handleUpdateProfile}
+              notificationsEnabled={notificationsEnabled}
+              onToggleNotifications={() => setNotificationsEnabled((prev) => !prev)}
+              onOpenPrivacy={handleOpenPrivacy}
+              onOpenTerms={handleOpenTerms}
+              onDeleteAccount={handleDeleteAccount}
+              onDeactivateAccount={handleDeactivateAccount}
+              onChangePassword={handleChangePassword}
+              onChangeEmail={handleChangeEmail}
+              onExportData={handleExportData}
+              onContactSupport={handleContactSupport}
+              supportUrl={SUPPORT_URL}
+              onResendVerification={handleResendVerification}
+              emailVerified={user!.emailVerified}
+            />
+          </EdgeSwipeBack>
         </View>
       )}
 
@@ -1910,7 +1813,7 @@ export default function App() {
           <View style={styles.stackUnderlay} pointerEvents="none">
             {lobbyScreen}
           </View>
-          <EdgeSwipeBack enabled onBack={() => goToLobby(true)}>
+          <EdgeSwipeBack enabled onBack={() => setPanel("lobby")}>
             <LeaderboardScreen
               locale={locale}
               global={leaderboardGlobal}
@@ -1920,10 +1823,24 @@ export default function App() {
               badges={badges}
               badgesLoading={badgesLoading}
               recentReward={recentReward}
-              onBack={() => goToLobby(true)}
+              onBack={() => setPanel("lobby")}
             />
           </EdgeSwipeBack>
         </View>
+      )}
+
+      {showLobby && !room && !recapRoom && !dailyStage && panel !== "account" && hasPlayedLobbyEntry && (
+        <TabBar
+          activeTab={panel as "lobby" | "social" | "historique" | "leaderboard"}
+          onPress={(tab) => {
+            if (tab === "create") {
+              setTriggerCreateRoom(true);
+            } else {
+              setPanel(tab);
+            }
+          }}
+          locale={locale}
+        />
       )}
 
       {!loading && token && user && !room && recapRoom && recapSummary && (
@@ -2111,14 +2028,6 @@ const styles = StyleSheet.create({
   },
   gestureRoot: {
     flex: 1
-  },
-  panelSwipeRoot: {
-    flex: 1,
-    overflow: "hidden"
-  },
-  panelRow: {
-    flex: 1,
-    flexDirection: "row"
   },
   gameBackground: {
     flex: 1,

@@ -63,21 +63,12 @@ export function LeaderboardScreen({
           styles.container,
           {
             paddingTop: theme.spacing.lg + insets.top,
-            paddingBottom: theme.spacing.lg + insets.bottom
+            paddingBottom: 60 + theme.spacing.lg + insets.bottom
           }
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Pressable
-            onPress={onBack}
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel={t(locale, "back")}
-            hitSlop={8}
-          >
-            <FontAwesome name="arrow-left" size={16} color="#EAF1FF" />
-          </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>{t(locale, "leaderboards")}</Text>
             <Text style={styles.title}>Hall of Fame</Text>
