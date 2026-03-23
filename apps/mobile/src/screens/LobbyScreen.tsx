@@ -1191,10 +1191,7 @@ export function LobbyScreen({
                 : 0;
               const myPct = Math.min((myProgress / Math.max(totalQuestions, 1)) * 100, 100);
               const bestOpponentPct = Math.min((bestOpponentProgress / Math.max(totalQuestions, 1)) * 100, 100);
-              const isMultiplayer = otherPlayers.length > 1;
-              const rightLabel = isMultiplayer
-                ? (locale === "fr" ? `${otherPlayers.length} joueurs` : `${otherPlayers.length} players`)
-                : opponentsLabel;
+
               return (
                 <Pressable
                   key={session.code}
@@ -1244,11 +1241,22 @@ export function LobbyScreen({
                       </View>
                       <View style={styles.duelCardProgressLabels}>
                         <Text style={styles.duelCardProgressLabelMe}>
-                          {locale === "fr" ? "Toi" : "You"} · <Text style={styles.duelCardProgressNum}>{myProgress}</Text>/{totalQuestions}
+                          {locale === "fr" ? "Toi" : "You"} · {myProgress >= totalQuestions
+                            ? (locale === "fr" ? "Terminé" : "Done")
+                            : `${myProgress} / ${totalQuestions}`}
                         </Text>
-                        <Text style={styles.duelCardProgressLabelOpp} numberOfLines={1}>
-                          {rightLabel} · <Text style={styles.duelCardProgressNum}>{bestOpponentProgress}</Text>/{totalQuestions}
-                        </Text>
+                        <View style={styles.duelCardProgressOppLabels}>
+                          {otherPlayers.slice(0, 3).map((player, i) => {
+                            const prog = otherProgressValues[i] ?? 0;
+                            return (
+                              <Text key={player.id} style={styles.duelCardProgressLabelOpp} numberOfLines={1}>
+                                {player.displayName} · {prog >= totalQuestions
+                                  ? (locale === "fr" ? "Terminé" : "Done")
+                                  : `${prog} / ${totalQuestions}`}
+                              </Text>
+                            );
+                          })}
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -3729,11 +3737,11 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     fontSize: 12,
     fontWeight: "400",
-    maxWidth: "50%",
     textAlign: "right"
   },
-  duelCardProgressNum: {
-    fontWeight: "700",
-    color: "#111C48"
+  duelCardProgressOppLabels: {
+    alignItems: "flex-end",
+    gap: 2,
+    maxWidth: "55%"
   }
 });
